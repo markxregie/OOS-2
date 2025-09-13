@@ -1,0 +1,38 @@
+.notfound-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  width: 100vw;
+  padding-top: 80px;
+  padding-bottom: 80px;
+  padding-left: 50px;
+  padding-right: 50px;
+  box-sizing: border-box;
+  overflow: visible;
+  text-align: center;
+  margin-top: 0;
+  background-color: #f5f5f5;
+  color: #4b929d;
+  font-family: 'Poppins', sans-serif;
+}
+
+.notfound-wrapper {
+  width: 100vw;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: visible;
+  background-color: #f5f5f5;
+}
+
+.coffee-gif {
+  width: 50%;
+  max-width: 400px;
+  max-height: 80vh;
+  margin-bottom: 20px;
+  object-fit: contain;
+  transform: none !important;
+}

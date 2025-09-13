@@ -1,0 +1,120 @@
+.addProductType-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.addProductType-modal-content {
+    background: white;
+    padding: 30px;
+    border-radius: 8px;
+    width: 700px;
+    text-align: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    animation: fadeIn 0.3s ease;
+}
+
+.addProductType-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.addProductType-modal-title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.add-product-type-button {
+    padding: 6px 12px;
+    height: 40px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.add-product-type-button:hover {
+    background-color: #0050a5;
+}
+
+.close-modal-button {
+    margin-top: 20px;
+    padding: 8px 16px;
+    background-color: #4B929D;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.close-modal-button:hover {
+    background-color: #3a737c;
+}
+
+/* Nested modal overlay */
+.nested-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+}
+
+.nested-modal-content {
+    background: white;
+    padding: 2rem;
+    border-radius: 10px;
+    width: 350px;
+    max-width: 90%;
+    text-align: center;
+}
+
+.nested-modal-content input {
+    width: 80%;
+    max-width: 80%;
+    padding: 10px;
+    margin: 1.5rem auto;
+    display: block;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+.modal-add-button,
+.modal-close-button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    margin: 5px;
+}
+
+.modal-add-button {
+    background-color: #4B929D;
+    color: white;
+}
+
+.modal-close-button {
+    background-color: #ccc;
+    margin-right: 25px;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}

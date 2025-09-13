@@ -1,0 +1,36 @@
+/* Override margin and padding for main and container on riderhome page */
+.riderhome-main {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+.riderhome-container {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+.active-orders-container {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 20px;
+  justify-content: flex-start !important; 
+}
+
+.active-orders-container.two-cards {
+  gap: 8px;
+  justify-content: center !important;
+}
+
+.active-order-card {
+  padding: 20px;
+  text-align: left ;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 300px;
+  margin-bottom: 15px;
+}
+
+.active-orders-container.two-cards .active-order-card {
+  width: 45%;
+}

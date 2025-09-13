@@ -1,0 +1,255 @@
+.order-margin {
+    padding-right: 10px;  /* Reduced padding */
+    display: flex;
+    justify-content: flex-start; /* Changed to flex-start */
+  }
+
+
+  /* Table Styles */
+.orders-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background-color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.orders-table thead {
+  background-color: #4a9ba5;
+  color: white;
+}
+
+.orders-table th {
+  padding: 15px 20px;
+  text-align: left;
+  font-weight: 500;
+}
+
+.orders-table td {
+  padding: 15px 20px;
+  border-bottom: 1px solid #e9ecef;
+  vertical-align: middle;
+}
+
+.orders-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.orders-table tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+/* Status Badges */
+.status-badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  display: inline-block;
+}
+
+.status-pending {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.status-processing {
+  background-color: #cce5ff;
+  color: #004085;
+}
+
+.status-completed {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.status-cancelled {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+/* Action Buttons */
+.action-btn {
+  border: none;
+  background: none;
+  cursor: pointer;
+  margin-right: 10px;
+  padding: 5px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  background-color: #e9ecef;
+}
+
+.action-btn.view {
+  color: #4a9ba5;
+}
+
+.action-btn.edit {
+  color: #ffc107;
+}
+
+.action-btn.delete {
+  color: #dc3545;
+}
+
+/* Responsive Table */
+@media (max-width: 768px) {
+  .orders-table {
+      display: block;
+      overflow-x: auto;
+  }
+}
+
+/* Table Container */
+.table-container {
+  padding-left: 20px!important;
+  background-color: white;
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  margin-top: 20px;
+}
+
+.table-header {
+  margin-bottom: 1rem!important;
+  padding: 0;
+  width: 100%;
+}
+
+.search-input {
+  width: 100%;
+  border-radius: 20px;
+  border: 1px solid #ced4da;
+  padding: 8px 15px 8px 35px;
+}
+
+.orders-table {
+  width: 100%;
+  margin-top: 1rem;
+  background-color: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+}
+
+.orders-table thead th {
+  background-color: #f8f9fa;
+  color: #4a9ba5;
+  font-weight: 600;
+  padding: 12px 15px;
+  text-align: left;
+}
+
+.search-input:focus {
+  border-color: #4a9ba5;
+}
+
+.main-content {
+  padding-top: 35px !important;
+  margin-top: 30px !important;
+  margin-right: 20px;
+}
+
+.manage-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: -30px;
+}
+
+/* Custom modal invoice styles */
+.custom-modal-dialog {
+  max-width: 800px;
+}
+
+.custom-modal-content {
+  border-radius: 8px;
+  padding: 20px;
+  background-color: #fff;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: #212529;
+}
+
+.custom-modal-header {
+  border-bottom: 2px solid #dee2e6;
+  background-color: #f8f9fa;
+  padding: 15px 20px;
+}
+
+.custom-modal-title {
+  font-weight: 600;
+  font-size: 1.5rem;
+  color: #343a40;
+}
+
+.custom-modal-body {
+  padding: 20px;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.invoice-modal-body h5,
+.invoice-modal-body h6 {
+  font-weight: 600;
+  color: #495057;
+  border-bottom: 1px solid #dee2e6;
+  padding-bottom: 5px;
+  margin-bottom: 15px;
+}
+
+.invoice-section {
+  margin-bottom: 20px;
+}
+
+.invoice-section div,
+.invoice-section ul {
+  margin-left: 15px;
+}
+
+.invoice-section ul {
+  list-style-type: none;
+  padding-left: 0;
+}
+
+.invoice-section ul li {
+  padding: 4px 0;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.invoice-section ul li:last-child {
+  border-bottom: none;
+}
+
+.table-bordered {
+  border: 1px solid #dee2e6;
+}
+
+.table-bordered th,
+.table-bordered td {
+  border: 1px solid #dee2e6;
+  padding: 8px;
+  vertical-align: middle;
+}
+
+.text-end {
+  text-align: right;
+}
+
+.fw-bold {
+  font-weight: 700;
+}
+
+.custom-modal-footer {
+  border-top: 2px solid #dee2e6;
+  padding: 15px 20px;
+  background-color: #f8f9fa;
+  text-align: right;
+}
+
+

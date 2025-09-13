@@ -1,0 +1,14 @@
+.profilesidebar-nav-link {
+  color: black;
+  background-color: transparent;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.25rem;
+  display: block;
+  text-decoration: none;
+}
+
+.profilesidebar-nav-link.active {
+  background-color: #4B929D;
+  color: white !important;
+}
