@@ -294,27 +294,29 @@ const ProfilePage = () => {
           <div className="form-row city-province-row">
             <div className="form-group city-group">
               <label htmlFor="city" className="form-label">City <span style={{color: 'red'}}>*</span></label>
-              <input
-                type="text"
+              <select
                 id="city"
                 name="city"
-                placeholder="City"
                 className="form-input"
                 value={userData.city || ''}
                 onChange={handleInputChange}
-              />
+              >
+                <option value="">Select City</option>
+                <option value="Quezon City">Quezon City</option>
+              </select>
             </div>
             <div className="form-group province-group">
-              <label htmlFor="province" className="form-label">Province <span style={{color: 'red'}}>*</span></label>
-              <input
-                type="text"
+              <label htmlFor="province" className="form-label">Baranggay<span style={{color: 'red'}}>*</span></label>
+              <select
                 id="province"
                 name="province"
-                placeholder="Province"
                 className="form-input"
                 value={userData.province || ''}
                 onChange={handleInputChange}
-              />
+              >
+                <option value="">Select Baranggay</option>
+                <option value="Commonwealth">Commonwealth</option>
+              </select>
             </div>
           </div>
 

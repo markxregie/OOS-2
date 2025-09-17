@@ -29,6 +29,10 @@
   overflow: visible;
   height: 100%;
   max-width: 450px;
+  /* Add Flexbox to align content */
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* This will horizontally center the image and card-body */
 }
 
 .card-img-wrapper {
@@ -49,7 +53,9 @@
 }
 
 .card-body {
-  margin-top: 430px;
+  margin-top: 430px; /* Keep this for desktop for proper spacing */
+  width: 100%; /* Ensure card body takes full width for centering */
+  text-align: center; /* Center align text */
 }
 
 .card-body h3 {
@@ -99,15 +105,14 @@
   background-color: #3a7b84;
 }
 
-
 .item-card {
-  position: relative; /* Crucial for positioning the overlay */
+  position: relative;
   display: flex;
   flex-direction: column;
   background-color: #fff;
   border: 1px solid #e0e0e0;
   border-radius: 8px;
-  overflow: hidden; /* Ensures content stays within the rounded corners */
+  overflow: hidden;
   transition: box-shadow 0.3s ease;
 }
 
@@ -117,7 +122,7 @@
 
 .item-image-placeholder {
   width: 100%;
-  padding-top: 100%; /* Creates a square aspect ratio */
+  padding-top: 100%;
   position: relative;
   background-color: #f0f0f0;
 }
@@ -138,36 +143,33 @@
   color: #333;
 }
 
-/* Style the card when it's unavailable */
 .item-card.unavailable .item-image-placeholder img {
   filter: grayscale(100%) brightness(0.7);
   transition: filter 0.3s ease;
 }
 
 .item-card.unavailable .item-name-placeholder {
-  color: #999; /* Dim the text color for unavailable items */
+  color: #999;
 }
 
-/* The overlay itself */
 .unavailable-overlay {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(40, 40, 40, 0.6); /* Dark, semi-transparent background */
+  background-color: rgba(40, 40, 40, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px; /* Match your item-card's border-radius */
-  pointer-events: none; /* Important: allows hover effects on the card if any */
+  border-radius: 8px;
+  pointer-events: none;
   z-index: 1;
 }
 
-/* The text inside the overlay */
 .unavailable-overlay span {
   color: white;
-  font-size: 1.5rem; /* Adjust size as needed */
+  font-size: 1.5rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -177,7 +179,6 @@
   background-color: rgba(0, 0, 0, 0.3);
 }
 
-/* Style for the active sidebar category */
 .menu-category li {
   cursor: pointer;
   padding: 5px 10px;
@@ -187,7 +188,7 @@
 }
 
 .menu-category li:hover {
-    background-color: #f0f0f0;
+  background-color: #f0f0f0;
 }
 
 .menu-category li.active {
@@ -196,23 +197,18 @@
   color: white;
 }
 
-
-
-
+/* --- Responsive Styles --- */
 @media (max-width: 1024px) {
   .menu-title {
     font-size: 2.5rem;
   }
-
   .card {
     max-width: 350px;
   }
-
   .card-img-wrapper {
     width: 250px;
     height: 350px;
   }
-
   .card-body {
     margin-top: 370px;
   }
@@ -222,16 +218,13 @@
   .menu-title {
     font-size: 2rem;
   }
-
   .card {
     max-width: 300px;
   }
-
   .card-img-wrapper {
     width: 220px;
     height: 300px;
   }
-
   .card-body {
     margin-top: 320px;
   }
@@ -242,33 +235,26 @@
     max-width: 250px;
     padding: 1rem;
   }
-
   .card-img-wrapper {
     width: 200px;
     height: 270px;
   }
-
   .card-body {
     margin-top: 290px;
   }
-
   .menu-title {
     font-size: 1.8rem;
   }
-
   .menu-description {
     font-size: 0.9rem;
   }
-
   .card-body h3 {
     font-size: 1rem;
   }
-
   .card-info {
     font-size: 0.8rem;
     padding: 0 0.5rem;
   }
-
   .unavailable-overlay span {
     font-size: 1.2rem;
     padding: 6px 12px;
@@ -276,6 +262,7 @@
 }
 
 @media (max-width: 576px) {
+  
   .menu-section {
     margin-top: 9rem !important;
   }
@@ -286,22 +273,34 @@
     font-size: 0.85rem !important;
   }
   .card {
-    max-height: 300px !important;
+    max-height: unset !important; /* Remove fixed max-height */
     padding: 1rem !important;
   }
   .card-img-wrapper {
     height: 180px !important;
     width: 150px !important;
-    top: 10px !important;
+    position: relative !important; /* Remove absolute positioning */
+    top: unset !important;
+    left: unset !important;
+    transform: unset !important; /* Remove transform */
+    margin: 0 auto 10px auto; /* Center the image wrapper */
   }
   .card-body {
-    margin-top: 150px !important;
+    margin-top: 10px !important; /* Use a small margin instead of a large fixed one */
+    text-align: center; /* Ensure text is centered */
   }
   .card-body h3 {
     font-size: 0.85rem !important;
+    text-align: center;
   }
   .card-info {
     font-size: 0.65rem !important;
+    justify-content: center; /* Center the icons/text horizontally */
+  }
+  .card-info span {
+    flex: 1;
+    text-align: center;
+    margin: 0 5px; /* Add some space between items */
   }
   .carousel .control-dots {
     display: none !important;

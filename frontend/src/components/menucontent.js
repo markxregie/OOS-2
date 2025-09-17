@@ -9,8 +9,8 @@ import { CartContext } from '../contexts/CartContext';
 
 const MenuContent = () => {
   const [products, setProducts] = useState({});
-  const [selectedCategory, setSelectedCategory] = useState('Drinks');
-  const [selectedSubcategory, setSelectedSubcategory] = useState('');
+const [selectedCategory, setSelectedCategory] = useState('');
+const [selectedSubcategory, setSelectedSubcategory] = useState('');
   const [selectedItem, setSelectedItem] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [orderNotes, setOrderNotes] = useState('');
@@ -168,6 +168,13 @@ const MenuContent = () => {
   };
 
   const subcategories = products[selectedCategory] ? Object.keys(products[selectedCategory]) : [];
+
+  useEffect(() => {
+    if (!selectedCategory && Object.keys(products).length > 0) {
+      const firstCategory = Object.keys(products)[0];
+      setSelectedCategory(firstCategory);
+    }
+  }, [products, selectedCategory]);
 
   useEffect(() => {
     if (selectedCategory && products[selectedCategory]) {

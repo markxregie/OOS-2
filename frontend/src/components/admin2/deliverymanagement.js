@@ -355,7 +355,7 @@ function DeliveryManagement() {
               width: "100%"
             }}>
               {filteredOrders.map((order, idx) => (
-                <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "300px" }}>
+                <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "300px", height: "500px", overflowY: "auto" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
                     <h5 style={{ color: "#4b929d" }}>Order #{order.id}</h5>
                     <p style={{
@@ -426,20 +426,6 @@ function DeliveryManagement() {
                       <option value="rider4">Rider 4</option>
                       <option value="rider5">Rider 5</option>
                       <option value="rider6">Rider 6</option>
-                    </Form.Select>
-                    <label htmlFor={`orderStatus-${order.id}`} style={{ fontWeight: "600", marginBottom: "5px", display: "block", marginTop: "10px" }}>Order Status</label>
-                    <Form.Select
-                      id={`orderStatus-${order.id}`}
-                      value={order.currentStatus || ""}
-                      onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="confirmed">Confirmed</option>
-                      <option value="preparing">Preparing</option>
-                      <option value="pickedUp">Picked Up</option>
-                      <option value="inTransit">In transit</option>
-                      <option value="delivered">Delivered</option>
-                      <option value="returned">Cancelled/Returned</option>
                     </Form.Select>
                   </div>
                 </Card>

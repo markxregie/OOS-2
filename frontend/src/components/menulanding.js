@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './menulanding.css';
 import { Carousel } from 'react-responsive-carousel';
 import 'react-responsive-carousel/lib/styles/carousel.min.css';
@@ -32,6 +33,7 @@ const coffeeItems = [
 
 const Menu = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 576);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleResize = () => {
@@ -40,6 +42,10 @@ const Menu = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  const handleDiscoverMoreClick = () => {
+    navigate('/menu');
+  };
 
   return (
     <section className="menu-section">
@@ -83,7 +89,7 @@ const Menu = () => {
         </Carousel>
       </div>
 
-      <button className="discover-button">Discover More</button>
+      <button className="discover-button" onClick={handleDiscoverMoreClick}>Discover More</button>
     </section>
   );
 };

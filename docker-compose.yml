@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mssql
+    environment:
+      SA_PASSWORD: "Markregie_123!"
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "Express"
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+    restart: always
+    networks:
+      - bleu_retail
+
+  oos_ordering_service:
+    build: ./backend/Ordering_Service
+    container_name: oos_ordering_service
+    environment:
+      DB_SERVER: mssql
+      DB_NAME: OOS
+      DB_USER: sa
+      DB_PASSWORD: Markregie_123!
+    depends_on:
+      - mssql
+    ports:
+      - "7004:7004"
+    networks:
+      - bleu_retail  
+
+  oos_delivery_service:
+    build: ./backend/Delivery_Service
+    container_name: oos_delivery_service
+    environment:
+      DB_SERVER: mssql
+      DB_NAME: OOS
+      DB_USER: sa
+      DB_PASSWORD: Markregie_123!
+    depends_on:
+      - mssql
+    ports:
+      - "8002:8002"
+    networks:
+      - bleu_retail
+
+  oos_notification_service:
+    build: ./backend/Notification_Service
+    container_name: oos_notification_service
+    environment:
+      DB_SERVER: mssql
+      DB_NAME: OOS
+      DB_USER: sa
+      DB_PASSWORD: Markregie_123!
+    depends_on:
+      - mssql
+    ports:
+      - "8003:8003"
+    networks:
+      - bleu_retail
+
+  oos_payment_service:
+    build: ./backend/Payment_Service
+    container_name: oos_payment_service
+    environment:
+      DB_SERVER: mssql
+      DB_NAME: OOS
+      DB_USER: sa
+      DB_PASSWORD: Markregie_123!
+      PAYMONGO_SECRET_KEY: "sk_test_1i99in6vhkgFz8mwhsw8FVbn"
+    depends_on:
+      - mssql
+    ports:
+      - "7005:7005"
+    networks:
+      - bleu_retail
+
+  oos_user_service:
+    build: ./backend/User_Service
+    container_name: oos_user_service
+    environment:
+      DB_SERVER: mssql
+      DB_NAME: OOS
+      DB_USER: sa
+      DB_PASSWORD: Markregie_123!
+    depends_on:
+      - mssql
+    ports:
+      - "4000:4000"
+    networks:
+      - bleu_retail
+
+  oos_frontend:
+    build: ./frontend
+    container_name: oos_frontend
+    ports:
+      - "5000:5000"
+    networks:
+      - bleu_retail
+
+volumes:
+  mssql_data:
+
+networks:
+  bleu_retail:
+    external: true

@@ -1,8 +1,9 @@
 import aioodbc
+import os
 
 # database config
 server = 'DESKTOP-D84FNH8'
-database = 'retailAuth'
+database = 'OOS'
 username = 'sa'
 password = 'markregie123'
 driver = 'ODBC Driver 17 for SQL Server'

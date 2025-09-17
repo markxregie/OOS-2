@@ -1,4 +1,5 @@
 import aioodbc
+import os
 
 # database config
 server = 'DESKTOP-D84FNH8'
