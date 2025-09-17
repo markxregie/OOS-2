@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { CartContext } from '../contexts/CartContext';
 
 const CheckoutPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { clearCart } = useContext(CartContext);
   const { cartItems = [], orderType = 'Pick Up', paymentMethod = 'Cash' } = location.state || {};
 
   const [userData, setUserData] = useState({
@@ -231,6 +233,7 @@ const CheckoutPage = () => {
 
   const handleCloseSuccessModal = () => {
     setShowSuccessModal(false);
+    clearCart();
     navigate("/profile/orderhistory");
   };
 
@@ -339,9 +342,9 @@ const CheckoutPage = () => {
             <div style={{ flex: 1, color: '#4B929D', textAlign: 'left', marginBottom: '5px' }}>Last Name <span style={{ color: 'red' }}>*</span></div>
           </div>
           <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-            <input type="text" placeholder="First Name" style={{ flex: 1, padding: '8px' }} value={userData.firstName} onChange={e => handleInputChange('firstName', e.target.value)} />
-            <input type="text" placeholder="Middle Name" style={{ flex: 1, padding: '8px' }} value={userData.middleName} onChange={e => handleInputChange('middleName', e.target.value)} />
-            <input type="text" placeholder="Last Name" style={{ flex: 1, padding: '8px' }} value={userData.lastName} onChange={e => handleInputChange('lastName', e.target.value)} />
+            <input type="text" placeholder="First Name" style={{ flex: 1, padding: '8px', backgroundColor: '#d0e7f9' }} value={userData.firstName} readOnly />
+            <input type="text" placeholder="Middle Name" style={{ flex: 1, padding: '8px', backgroundColor: '#d0e7f9' }} value={userData.middleName} readOnly />
+            <input type="text" placeholder="Last Name" style={{ flex: 1, padding: '8px', backgroundColor: '#d0e7f9' }} value={userData.lastName} readOnly />
           </div>
           <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
             <div style={{ flex: 1, color: '#4B929D', textAlign: 'left', marginTop: '10px' }}>Block, Street, Subdivision <span style={{ color: 'red' }}>*</span></div>
