@@ -138,7 +138,36 @@ async def confirm_payment(payload: ConfirmPaymentRequest, token: str = Depends(o
 
     async with httpx.AsyncClient() as client:
         try:
-            # Step 1: Save delivery info
+            # Step 1: Add cart items
+            for item in payload.cart_items:
+                cart_payload = {
+                    "username": payload.username,
+                    "product_id": item.product_id,
+                    "product_name": item.product_name,
+                    "product_type": item.product_type,
+                    "product_category": item.product_category,
+                    "quantity": item.quantity,
+                    "price": item.price,
+                    "order_type": payload.order_type
+                }
+                cart_response = await client.post(
+                    "http://localhost:7004/cart/",
+                    json=cart_payload,
+                    headers={"Authorization": f"Bearer {token}"}
+                )
+                cart_response.raise_for_status()
+
+            # Step 2: Finalize order
+            finalize_response = await client.post(
+                f"http://localhost:7004/cart/finalize?username={payload.username}",
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            if finalize_response.status_code == 404:
+                logger.error(f"No pending order found for user {payload.username}")
+                raise HTTPException(status_code=404, detail=f"No pending order found for user {payload.username}")
+            finalize_response.raise_for_status()
+
+            # Step 3: Save delivery info
             if payload.delivery_info:
                 delivery_info_payload = {
                     "FirstName": payload.delivery_info.FirstName,
@@ -158,35 +187,6 @@ async def confirm_payment(payload: ConfirmPaymentRequest, token: str = Depends(o
                     headers={"Authorization": f"Bearer {token}"}
                 )
                 delivery_response.raise_for_status()
-
-            # Step 2: Add cart items
-            for item in payload.cart_items:
-                cart_payload = {
-                    "username": payload.username,
-                    "product_id": item.product_id,
-                    "product_name": item.product_name,
-                    "product_type": item.product_type,
-                    "product_category": item.product_category,
-                    "quantity": item.quantity,
-                    "price": item.price,
-                    "order_type": payload.order_type
-                }
-                cart_response = await client.post(
-                    "http://localhost:7004/cart/",
-                    json=cart_payload,
-                    headers={"Authorization": f"Bearer {token}"}
-                )
-                cart_response.raise_for_status()
-
-            # Step 3: Finalize order
-            finalize_response = await client.post(
-                f"http://localhost:7004/cart/finalize?username={payload.username}",
-                headers={"Authorization": f"Bearer {token}"}
-            )
-            if finalize_response.status_code == 404:
-                logger.error(f"No pending order found for user {payload.username}")
-                raise HTTPException(status_code=404, detail=f"No pending order found for user {payload.username}")
-            finalize_response.raise_for_status()
 
             # Step 4: Update order payment details
             update_order_payload = {

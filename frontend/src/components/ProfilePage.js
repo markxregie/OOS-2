@@ -16,7 +16,11 @@ const ProfilePage = () => {
     city: '',
     province: '',
     landmark: '',
+    birthday: '',
   });
+
+  const [profileImage, setProfileImage] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -24,6 +28,36 @@ const ProfilePage = () => {
       ...prevData,
       [name]: value,
     }));
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Preview before upload
+    setPreviewUrl(URL.createObjectURL(file));
+
+    // Upload to backend
+    const token = localStorage.getItem("authToken");
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("http://localhost:4000/users/profile/upload-photo", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json();
+      setProfileImage(data.url); // save new profile picture URL
+      toast.success("Profile picture updated!");
+    } catch (err) {
+      toast.error(err.message);
+    }
   };
 
   useEffect(() => {
@@ -56,7 +90,10 @@ const ProfilePage = () => {
           city: data.city || '',
           province: data.province || '',
           landmark: data.landmark || '',
+          birthday: data.birthday || '',
+          profileImage: data.profileImage || null,
         });
+        setProfileImage(data.profileImage || null);
       } catch (error) {
         console.error('Error fetching user profile:', error);
       }
@@ -77,7 +114,7 @@ const ProfilePage = () => {
     const landmark = form.landmark.value.trim();
     const email = form.email.value.trim();
     const phone = form.phone.value.trim();
-    // const birthday = form.birthday.value.trim();
+    const birthday = form.birthday.value.trim();
 
     // Basic sanitation already done by trim()
 
@@ -176,7 +213,7 @@ const ProfilePage = () => {
       formData.append('landmark', landmark);
       formData.append('email', email);
       formData.append('phoneNumber', phone);
-      // formData.append('birthday', birthday);
+      formData.append('birthday', birthday);
 
       const response = await fetch('http://localhost:4000/users/profile/update', {
         method: 'PUT',
@@ -205,25 +242,18 @@ const ProfilePage = () => {
         <h3>Profile Picture</h3>
         <div className="profile-image-wrapper">
           <img
-            src="https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=150&q=80"
-            alt="Coffee"
+            src={previewUrl || profileImage || "default-avatar.png"}
+            alt="Profile"
             className="profile-image"
           />
         </div>
         <p className="image-info">JPG or PNG no larger than 5 MB</p>
         <input
           type="file"
-          id="fileInput"
           accept="image/png, image/jpeg"
-          style={{ display: 'none' }}
-          onChange={(e) => {
-            const file = e.target.files[0];
-            if (file) {
-              // For now, just log the file name
-              console.log('Selected file:', file.name);
-              // You can add image preview or upload logic here
-            }
-          }}
+          style={{ display: "none" }}
+          id="fileInput"
+          onChange={handleFileChange}
         />
         <button
           className="profile-btn upload-btn"
@@ -366,8 +396,9 @@ const ProfilePage = () => {
             type="date"
             id="birthday"
             name="birthday"
-            placeholder="Birthday"
             className="form-input"
+            value={userData.birthday || ''}
+            onChange={handleInputChange}
           />
             </div>
           </div>
