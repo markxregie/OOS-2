@@ -20,8 +20,35 @@ function DeliveryManagement() {
   const [orders, setOrders] = useState([]);
 
   useEffect(() => {
-    setOrders(sampleOrders);
-  }, []);
+    if (!authToken) return;
+
+    const fetchOrders = async () => {
+      try {
+        const response = await fetch("http://localhost:7004/delivery/admin/delivery/orders", {
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log("Fetched orders:", data); // ✅ debug
+        setOrders(data);
+      } catch (error) {
+        console.error("Failed to fetch delivery orders:", error);
+      }
+    };
+
+    fetchOrders();
+
+    // Optional: auto-refresh every 30s
+    const interval = setInterval(fetchOrders, 30000);
+    return () => clearInterval(interval);
+
+  }, [authToken]);
   const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
 
   const riders = {
@@ -32,64 +59,6 @@ function DeliveryManagement() {
     rider5: { name: "Charlie Wilson", phone: "09123456783", activeOrders: 1 },
     rider6: { name: "Diana Lee", phone: "09123456784", activeOrders: 2 },
   };
-
-  const sampleOrders = [
-    {
-      id: 1,
-      currentStatus: "pending",
-      orderedAt: "2023-10-01 10:00 AM",
-      customerName: "Alice Johnson",
-      phone: "+1-1234567890",
-      address: "123 Main St, Springfield",
-      items: [
-        { quantity: 2, name: "Americano", price: 5.00 },
-        { quantity: 1, name: "Croissant", price: 3.50 }
-      ],
-      total: 13.50,
-      assignedRider: null
-    },
-    {
-      id: 2,
-      currentStatus: "confirmed",
-      orderedAt: "2023-10-01 10:30 AM",
-      customerName: "Bob Smith",
-      phone: "+1-1234567891",
-      address: "456 Elm St, Springfield",
-      items: [
-        { quantity: 1, name: "Latte", price: 6.00 },
-        { quantity: 2, name: "Muffin", price: 4.00 }
-      ],
-      total: 14.00,
-      assignedRider: "rider1"
-    },
-    {
-      id: 3,
-      currentStatus: "preparing",
-      orderedAt: "2023-10-01 11:00 AM",
-      customerName: "Charlie Brown",
-      phone: "+1-1234567892",
-      address: "789 Oak St, Springfield",
-      items: [
-        { quantity: 3, name: "Espresso", price: 4.50 }
-      ],
-      total: 13.50,
-      assignedRider: "rider2"
-    },
-    {
-      id: 4,
-      currentStatus: "pickedUp",
-      orderedAt: "2023-10-01 11:30 AM",
-      customerName: "Diana Prince",
-      phone: "+1-1234567893",
-      address: "101 Pine St, Springfield",
-      items: [
-        { quantity: 1, name: "Cappuccino", price: 5.50 },
-        { quantity: 1, name: "Bagel", price: 3.00 }
-      ],
-      total: 8.50,
-      assignedRider: "rider3"
-    }
-  ];
 
   useEffect(() => {
     const tokenFromUrl = searchParams.get('authorization');
@@ -355,7 +324,7 @@ function DeliveryManagement() {
               width: "100%"
             }}>
               {filteredOrders.map((order, idx) => (
-                <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "300px" }}>
+                <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "300px", height: "500px", overflowY: "auto" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
                     <h5 style={{ color: "#4b929d" }}>Order #{order.id}</h5>
                     <p style={{
@@ -372,18 +341,18 @@ function DeliveryManagement() {
                         pending: "Pending",
                         confirmed: "Confirmed",
                         preparing: "Preparing",
-                        readyToPickup: "Ready to Pickup",
-                        pickedUp: "Picked Up",
-                        inTransit: "In transit",
+                        readytopickup: "Ready to Pickup",
+                        pickedup: "Picked Up",
+                        intransit: "In transit",
                         delivered: "Delivered",
                         cancelled: "Cancelled",
                         returned: "Cancelled/Returned"
-                      }[order.currentStatus] || order.currentStatus}
+                      }[order.currentStatus.toLowerCase()] || order.currentStatus}
                     </p>
                   </div>
                   <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaClock color="#4b929d" /> Ordered at {order.orderedAt}</p>
                   <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "black" }}><FaUser color="#4b929d" /> {order.customerName}</p>
-                  <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "black" }}><FaPhone color="#4b929d" /> {order.phone.replace(/^\+1-/, "63")}</p>
+                  <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "black" }}><FaPhone color="#4b929d" /> {order.phone?.replace(/^\+1-/, "63") || "N/A"}</p>
                   <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "black" }}><FaMapMarkerAlt color="#4b929d" /> {order.address}</p>
                   <p style={{ fontWeight: "600", marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "black" }}><FaBox color="#4b929d" /> Items ({order.items.length})</p>
                   {order.items.map((item, i) => (
@@ -399,7 +368,7 @@ function DeliveryManagement() {
                   </p>
                   {!order.assignedRider && (
                     <p style={{ backgroundColor: "#fff3cd", padding: "8px", borderRadius: "4px", marginTop: "10px", color: "#856404", width: "100%" }}>
-                      Note: Please call when arrived
+                      {order.notes ? `Note: ${order.notes}` : "Note: Please call when arrived"}
                     </p>
                   )}
                   {order.assignedRider && (
@@ -426,20 +395,6 @@ function DeliveryManagement() {
                       <option value="rider4">Rider 4</option>
                       <option value="rider5">Rider 5</option>
                       <option value="rider6">Rider 6</option>
-                    </Form.Select>
-                    <label htmlFor={`orderStatus-${order.id}`} style={{ fontWeight: "600", marginBottom: "5px", display: "block", marginTop: "10px" }}>Order Status</label>
-                    <Form.Select
-                      id={`orderStatus-${order.id}`}
-                      value={order.currentStatus || ""}
-                      onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="confirmed">Confirmed</option>
-                      <option value="preparing">Preparing</option>
-                      <option value="pickedUp">Picked Up</option>
-                      <option value="inTransit">In transit</option>
-                      <option value="delivered">Delivered</option>
-                      <option value="returned">Cancelled/Returned</option>
                     </Form.Select>
                   </div>
                 </Card>
