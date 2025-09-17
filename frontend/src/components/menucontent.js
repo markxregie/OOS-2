@@ -58,9 +58,14 @@ const [selectedSubcategory, setSelectedSubcategory] = useState('');
             return acc;
           }, {});
 
-          const transformedProducts = apiProducts.map((product) => ({
+          // Filter products to only include those with ingredients (present in details)
+          const filteredProducts = apiProducts.filter((product) =>
+            productStatusMap.hasOwnProperty(product.ProductName)
+          );
+
+          const transformedProducts = filteredProducts.map((product) => ({
             ...product,
-            Status: productStatusMap[product.ProductName] || "Available",
+            Status: productStatusMap[product.ProductName],
           }));
 
           const grouped = {};
