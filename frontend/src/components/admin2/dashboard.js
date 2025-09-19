@@ -443,7 +443,7 @@ const Dashboard = () => {
                   </div>
                 ))}
               </div>
-              <button style={{ padding: '8px 16px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>View More</button>
+              
             </div>
             <div className="chart-box" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start', padding: '20px' }}>
               <div style={{ fontSize: '22px', fontWeight: '700', marginBottom: '5px' }}>Popular Items</div>
@@ -457,7 +457,7 @@ const Dashboard = () => {
                   </div>
                 ))}
               </div>
-              <button style={{ padding: '8px 16px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>View More</button>
+              
             </div>
           </div>
         </div>

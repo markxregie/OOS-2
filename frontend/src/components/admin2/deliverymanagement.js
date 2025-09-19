@@ -162,6 +162,8 @@ function DeliveryManagement() {
         return { color: "#6610f2", backgroundColor: "#e5dbff" };
       case "delivered":
         return { color: "#198754", backgroundColor: "#d1e7dd" };
+      case "completed":
+        return { color: "#198754", backgroundColor: "#d1e7dd" };
       case "cancelled":
         return { color: "#dc3545", backgroundColor: "#f8d7da" };
       case "returned":
@@ -315,16 +317,16 @@ function DeliveryManagement() {
             .filter(order => (riderFilter === "all" || order.assignedRider === riderFilter));
           return (
             <div style={{
-              display: "flex",
+              display: "grid",
+              gridTemplateColumns: "repeat(4, 1fr)",
               gap: "20px",
               marginTop: "20px",
-              justifyContent: filteredOrders.length === 1 ? "flex-start" : "flex-start",
-              flexWrap: "wrap",
+              justifyContent: "flex-start",
               alignItems: "flex-start",
               width: "100%"
             }}>
               {filteredOrders.map((order, idx) => (
-                <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "300px", height: "500px", overflowY: "auto" }}>
+                <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "350px", height: "500px", overflowY: "auto" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
                     <h5 style={{ color: "#4b929d" }}>Order #{order.id}</h5>
                     <p style={{
@@ -345,6 +347,7 @@ function DeliveryManagement() {
                         pickedup: "Picked Up",
                         intransit: "In transit",
                         delivered: "Delivered",
+                        completed: "Completed",
                         cancelled: "Cancelled",
                         returned: "Cancelled/Returned"
                       }[order.currentStatus.toLowerCase()] || order.currentStatus}

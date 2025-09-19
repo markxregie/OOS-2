@@ -19,7 +19,7 @@ body {
 
 /* App container */
 .App {
-  margin-top: 1.4rem !important;
+  margin-top: 0.5 !important;
   display: flex;
   flex-direction: column;
   min-height: 100vh;
