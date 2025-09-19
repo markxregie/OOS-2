@@ -162,7 +162,15 @@ const [selectedSubcategory, setSelectedSubcategory] = useState('');
 
   const handleBuyNow = () => {
     if (selectedItem) {
-      navigate('/checkout', { state: { cartItems: [{ ...selectedItem, quantity: 1 }], orderType: "Pick Up" } });
+      navigate('/checkout', { state: { cartItems: [{
+        product_id: selectedItem.ProductID,
+        ProductName: selectedItem.ProductName,
+        ProductPrice: selectedItem.ProductPrice ?? 0,
+        ProductImage: selectedItem.ProductImage,
+        ProductType: selectedItem.ProductTypeName,
+        ProductCategory: selectedItem.ProductCategory,
+        quantity: 1
+      }], orderType: "Pick Up" } });
     }
   };
 
