@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { FaChevronDown, FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaUndo, FaSignOutAlt, FaTimesCircle, FaExchangeAlt, FaBars, FaHome, FaHistory, FaCog, FaCreditCard, FaUserTie } from "react-icons/fa";
-import { Container, Card, Form, Button, Table } from "react-bootstrap";
+import { FaChevronDown, FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaUndo, FaSignOutAlt, FaTimesCircle, FaExchangeAlt, FaBars, FaHome, FaHistory, FaCog, FaCreditCard, FaUserTie, FaAngleLeft, FaAngleRight, FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa";
+import { Form, Container, Table, Card, Button } from "react-bootstrap";
 import riderImage from "../../assets/rider.jpg";
 import logoImage from "../../assets/logo.png";
 import "./riderhome.css";
 import "./riderdashboard.css";
+
 import Swal from 'sweetalert2';
 
 function RiderHistory() {
@@ -40,21 +41,16 @@ function RiderHistory() {
   }, []);
 
   const [toggle, setToggle] = useState("completed");
-  const [selectedRider, setSelectedRider] = useState("rider1");
   const [orders, setOrders] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const rowsPerPage = 10;
 
   useEffect(() => {
     setOrders(sampleOrders);
   }, []);
 
-  const riders = {
-    rider1: { name: "John Doe", phone: "09123456789", activeOrders: 2 },
-    rider2: { name: "Jane Smith", phone: "09123456780", activeOrders: 1 },
-    rider3: { name: "Mike Johnson", phone: "09123456781", activeOrders: 0 },
-    rider4: { name: "Sarah Lee", phone: "09123456782", activeOrders: 0 },
-    rider5: { name: "David Chen", phone: "09123456783", activeOrders: 0 },
-    rider6: { name: "Emily White", phone: "09123456784", activeOrders: 0 },
-  };
+
 
   const sampleOrders = [
     {
@@ -213,7 +209,6 @@ function RiderHistory() {
   };
 
   const sortedOrders = [...orders]
-    .filter(order => order.assignedRider === selectedRider)
     .filter(order => {
       if (toggle === "completed") {
         return order.currentStatus === "delivered";
@@ -250,26 +245,9 @@ function RiderHistory() {
     return '▼';
   };
 
-  const statusIcons = {
-    pending: <FaClock />,
-    confirmed: <FaCheckCircle />,
-    preparing: <FaBox />,
-    readyToPickup: <FaTruckPickup />,
-    pickedUp: <FaTruckMoving />,
-    inTransit: <FaTruckMoving />,
-    delivered: <FaCheckCircle />,
-    cancelled: <FaTimesCircle />,
-    returned: <FaUndo />,
-  };
 
-  const cardColors = {
-    "rider1": "#a3d3d8",
-    "rider2": "#ffbe9d",
-    "rider3": "#a3d8b6",
-    "rider4": "#c2a3d8",
-    "rider5": "#d8c7a3",
-    "rider6": "#a3a3d8",
-  };
+
+
 
   const navigateToDashboard = () => {
     window.location.href = "/rider/home";
@@ -283,6 +261,32 @@ function RiderHistory() {
     localStorage.removeItem("access_token");
     window.location.href = "http://localhost:4002/";
   };
+
+  // Pagination functions
+  const indexOfLastRow = currentPage * rowsPerPage;
+  const indexOfFirstRow = indexOfLastRow - rowsPerPage;
+  const currentRows = sortedOrders.slice(indexOfFirstRow, indexOfLastRow);
+  const totalPages = Math.ceil(sortedOrders.length / rowsPerPage);
+
+  const paginate = (pageNumber) => setCurrentPage(pageNumber);
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) setCurrentPage(currentPage - 1);
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+  };
+
+  const handleFirstPage = () => {
+    setCurrentPage(1);
+  };
+
+  const handleLastPage = () => {
+    setCurrentPage(totalPages);
+  };
+
+
 
   return (
     <div className="rider-dashboard-container">
@@ -342,46 +346,37 @@ function RiderHistory() {
           </div>
         </header>
 
-        <Container fluid className="dashboard-summary-container" style={{ backgroundColor: cardColors[selectedRider] || "#a3d3d8" }}>
-          <div className="rider-selector-group">
-            <div className="rider-info-display">
-              <img src={riderImage} alt={riders[selectedRider]?.name || "Rider"} className="rider-profile-pic" />
-              <span className="rider-name-text">{riders[selectedRider]?.name || "Rider"}</span>
-            </div>
-            <Form.Select
-              className="rider-select"
-              value={selectedRider}
-              onChange={(e) => setSelectedRider(e.target.value)}
-            >
-              {Object.entries(riders).map(([key, rider]) => (
-                <option key={key} value={key}>{rider.name}</option>
-              ))}
-            </Form.Select>
-          </div>
-          <div className="summary-cards-container">
-            <Card className="summary-card">
-              <FaBoxOpen size={32} color="#964b00" />
-              <span className="card-title">Total Orders</span>
-              <span className="card-value">
-                {orders.filter(order => order.assignedRider === selectedRider).length} orders
-              </span>
-            </Card>
-            <Card className="summary-card">
-              <FaCheckCircle size={32} color="#198754" />
-              <span className="card-title">Completed</span>
-              <span className="card-value">
-                {orders.filter(order => order.assignedRider === selectedRider && order.currentStatus === "delivered").length} orders
-              </span>
-            </Card>
-            <Card className="summary-card">
-              <FaDollarSign size={32} color="#fd7e14" />
-              <span className="card-title">Total Earnings</span>
-              <span className="card-value">
-                ₱{orders.filter(order => order.assignedRider === selectedRider && order.currentStatus === "delivered").reduce((sum, order) => sum + order.total, 0).toFixed(2)}
-              </span>
-            </Card>
-          </div>
-        </Container>
+        <Container fluid className="dashboard-summary-container" style={{ backgroundColor: "#a3d3d8" }}>
+                  <div className="rider-selector-group">
+                    <div className="rider-info-display">
+                      <img src={riderImage} alt="John Doe" className="rider-profile-pic" />
+                      <span className="rider-name-text">John Doe</span>
+                    </div>
+                  </div>
+                  <div className="summary-cards-container">
+                    <Card className="summary-card">
+                      <FaBoxOpen size={32} color="#964b00" />
+                      <span className="card-title">Active Orders</span>
+                      <span className="card-value">
+                        {orders.filter(order => !["delivered", "cancelled", "returned"].includes(order.currentStatus)).length} orders
+                      </span>
+                    </Card>
+                    <Card className="summary-card">
+                      <FaCheckCircle size={32} color="#198754" />
+                      <span className="card-title">Completed</span>
+                      <span className="card-value">
+                        {orders.filter(order => order.currentStatus === "delivered").length} orders
+                      </span>
+                    </Card>
+                    <Card className="summary-card">
+                      <FaDollarSign size={32} color="#fd7e14" />
+                      <span className="card-title">Earnings</span>
+                      <span className="card-value">
+                        ₱{orders.filter(order => order.currentStatus === "delivered").reduce((sum, order) => sum + order.total, 0).toFixed(2)}
+                      </span>
+                    </Card>
+                  </div>
+                </Container>
 
         <div className="toggle-buttons-container">
           <button
@@ -407,66 +402,144 @@ function RiderHistory() {
           {sortedOrders.length === 0 ? (
             <div className="no-orders-message">
               <FaBoxOpen size={50} color="#ccc" />
-              <p>No orders to show for this rider.</p>
+              <p>No orders to show.</p>
             </div>
           ) : (
-            <Table striped bordered hover responsive className="history-table">
-              <thead>
-                <tr>
-                  <th onClick={() => requestSort('id')}>
-                    Order ID {getSortIcon('id')}
-                  </th>
-                  <th onClick={() => requestSort('customerName')}>
-                    Customer Name {getSortIcon('customerName')}
-                  </th>
-                  <th onClick={() => requestSort('orderedAt')}>
-                    Date/Time {getSortIcon('orderedAt')}
-                  </th>
-                  <th onClick={() => requestSort('total')}>
-                    Total {getSortIcon('total')}
-                  </th>
-                  <th onClick={() => requestSort('currentStatus')}>
-                    Status {getSortIcon('currentStatus')}
-                  </th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedOrders.map((order) => (
-                  <tr key={order.id}>
-                    <td>#{order.id}</td>
-                    <td>{order.customerName}</td>
-                    <td>{order.orderedAt}</td>
-                    <td>₱{order.total?.toFixed(2) || "0.00"}</td>
-                    <td>
-                      <div className="status-tag" style={{ color: getStatusStyle(order.currentStatus).color, backgroundColor: getStatusStyle(order.currentStatus).backgroundColor }}>
-                        {getStatusStyle(order.currentStatus).text}
-                      </div>
-                    </td>
-                    <td>
-                      <Button variant="info" size="sm" onClick={() => Swal.fire({
-                        title: `Order #${order.id} Details`,
-                        html: `
-                          <p><strong>Customer:</strong> ${order.customerName}</p>
-                          <p><strong>Address:</strong> ${order.address}</p>
-                          <p><strong>Items:</strong></p>
-                          <ul>
-                            ${order.items.map(item => `<li>${item.quantity}x ${item.name} (₱${item.price.toFixed(2)})</li>`).join('')}
-                          </ul>
-                          <p><strong>Total:</strong> ₱${order.total.toFixed(2)}</p>
-                          <p><strong>Status:</strong> ${getStatusStyle(order.currentStatus).text}</p>
-                        `,
-                        showCloseButton: true,
-                        focusConfirm: false,
-                        confirmButtonText: 'OK',
-                      })}>
-                        View Details
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
+            <>
+
+
+              {/* Custom Table */}
+              <div className="orders-table-container">
+                <table className="orders-table">
+                  <thead>
+                    <tr>
+                      <th onClick={() => requestSort('id')} style={{ cursor: 'pointer' }}>
+                        Order ID {getSortIcon('id')}
+                      </th>
+                      <th onClick={() => requestSort('customerName')} style={{ cursor: 'pointer' }}>
+                        Customer Name {getSortIcon('customerName')}
+                      </th>
+                      <th onClick={() => requestSort('orderedAt')} style={{ cursor: 'pointer' }}>
+                        Date/Time {getSortIcon('orderedAt')}
+                      </th>
+                      <th onClick={() => requestSort('total')} style={{ cursor: 'pointer' }}>
+                        Total {getSortIcon('total')}
+                      </th>
+                      <th onClick={() => requestSort('currentStatus')} style={{ cursor: 'pointer' }}>
+                        Status {getSortIcon('currentStatus')}
+                      </th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentRows.map((order) => (
+                      <tr key={order.id}>
+                        <td>#{order.id}</td>
+                        <td>{order.customerName}</td>
+                        <td>{order.orderedAt}</td>
+                        <td>₱{order.total?.toFixed(2) || "0.00"}</td>
+                        <td>
+                          <span className={`status-badge status-${order.currentStatus.toLowerCase()}`}>
+                            {getStatusStyle(order.currentStatus).text}
+                          </span>
+                        </td>
+                        <td>
+                          <button
+                            className="action-btn view"
+                            onClick={() => Swal.fire({
+                              title: `Order #${order.id} Details`,
+                              html: `
+                                <p><strong>Customer:</strong> ${order.customerName}</p>
+                                <p><strong>Address:</strong> ${order.address}</p>
+                                <p><strong>Items:</strong></p>
+                                <ul>
+                                  ${order.items.map(item => `<li>${item.quantity}x ${item.name} (₱${item.price.toFixed(2)})</li>`).join('')}
+                                </ul>
+                                <p><strong>Total:</strong> ₱${order.total.toFixed(2)}</p>
+                                <p><strong>Status:</strong> ${getStatusStyle(order.currentStatus).text}</p>
+                              `,
+                              showCloseButton: true,
+                              focusConfirm: false,
+                              confirmButtonText: 'OK',
+                            })}
+                            title="View Details"
+                          >
+                            View Details
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="pagination-container">
+                  <div className="pagination-info">
+                    Showing {indexOfFirstRow + 1} to {Math.min(indexOfLastRow, sortedOrders.length)} of {sortedOrders.length} entries
+                  </div>
+                  <div className="pagination-controls">
+                    <button
+                      className="pagination-btn"
+                      onClick={handleFirstPage}
+                      disabled={currentPage === 1}
+                      title="First Page"
+                    >
+                      <FaAngleDoubleLeft />
+                    </button>
+                    <button
+                      className="pagination-btn"
+                      onClick={handlePrevPage}
+                      disabled={currentPage === 1}
+                      title="Previous Page"
+                    >
+                      <FaAngleLeft />
+                    </button>
+
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNumber;
+                      if (totalPages <= 5) {
+                        pageNumber = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNumber = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNumber = totalPages - 4 + i;
+                      } else {
+                        pageNumber = currentPage - 2 + i;
+                      }
+
+                      return (
+                        <button
+                          key={pageNumber}
+                          className={`pagination-btn ${currentPage === pageNumber ? 'active' : ''}`}
+                          onClick={() => paginate(pageNumber)}
+                        >
+                          {pageNumber}
+                        </button>
+                      );
+                    })}
+
+                    <button
+                      className="pagination-btn"
+                      onClick={handleNextPage}
+                      disabled={currentPage === totalPages}
+                      title="Next Page"
+                    >
+                      <FaAngleRight />
+                    </button>
+                    <button
+                      className="pagination-btn"
+                      onClick={handleLastPage}
+                      disabled={currentPage === totalPages}
+                      title="Last Page"
+                    >
+                      <FaAngleDoubleRight />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

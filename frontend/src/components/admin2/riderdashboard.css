@@ -311,8 +311,8 @@
 /* Dashboard Summary */
 .dashboard-summary-container {
   border-radius: 12px;
-  padding: 25px;
-  margin-bottom: 20px;
+  padding: 10px;
+  margin-bottom: 15px;
   transition: background-color 0.5s ease-in-out;
 }
 
@@ -320,73 +320,73 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 15px;
 }
 
 .rider-info-display {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 10px;
 }
 
 .rider-profile-pic {
-  width: 60px;
-  height: 60px;
+  width: 45px;
+  height: 45px;
   border-radius: 50%;
   object-fit: cover;
-  border: 3px solid #fff;
+  border: 2px solid #fff;
 }
 
 .rider-name-text {
   color: #2c3e50;
   font-weight: 700;
-  font-size: 1.4rem;
+  font-size: 1.1rem;
 }
 
 .rider-select {
-  height: 40px;
-  min-width: 200px;
-  font-size: 1rem;
+  height: 35px;
+  min-width: 160px;
+  font-size: 0.9rem;
   font-weight: 600;
   color: #555;
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid #ccc;
   background-color: #fff;
-  padding: 0 10px;
+  padding: 0 8px;
 }
 
 .summary-cards-container {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 15px;
 }
 
 .summary-card {
-  padding: 25px;
+  padding: 18px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   background-color: #fff;
   color: #2c3e50;
-  border-radius: 12px;
+  border-radius: 10px;
   border: none;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
   transition: transform 0.2s;
 }
 
 .summary-card:hover {
-  transform: translateY(-5px);
+  transform: translateY(-3px);
 }
 
 .card-title {
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 500;
   color: #7f8c8d;
 }
 
 .card-value {
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   font-weight: 700;
   text-align: center;
   color: #2c3e50;

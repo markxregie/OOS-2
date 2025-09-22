@@ -41,23 +41,13 @@ function RiderDashboard() {
   }, []);
 
   const [toggle, setToggle] = useState("active");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [riderFilter, setRiderFilter] = useState("all");
-  const [selectedRider, setSelectedRider] = useState("rider1");
   const [orders, setOrders] = useState([]);
 
   useEffect(() => {
     setOrders(sampleOrders);
   }, []);
 
-  const riders = {
-    rider1: { name: "John Doe", phone: "09123456789", activeOrders: 2 },
-    rider2: { name: "Jane Smith", phone: "09123456780", activeOrders: 1 },
-    rider3: { name: "Mike Johnson", phone: "09123456781", activeOrders: 0 },
-    rider4: { name: "Sarah Lee", phone: "09123456782", activeOrders: 0 },
-    rider5: { name: "David Chen", phone: "09123456783", activeOrders: 0 },
-    rider6: { name: "Emily White", phone: "09123456784", activeOrders: 0 },
-  };
+
 
   const sampleOrders = [
     {
@@ -190,7 +180,6 @@ function RiderDashboard() {
   };
 
   const filteredOrders = orders
-    .filter(order => order.assignedRider === selectedRider)
     .filter(order => {
       if (toggle === "active") {
         return !["delivered", "cancelled", "returned"].includes(order.currentStatus);
@@ -200,13 +189,7 @@ function RiderDashboard() {
       return true;
     });
 
-  const handleRiderChange = (orderId, newRider) => {
-    setOrders(prevOrders =>
-      prevOrders.map(order =>
-        order.id === orderId ? { ...order, assignedRider: newRider } : order
-      )
-    );
-  };
+
 
   const handleProgressiveStatusChange = (orderId, currentStatus) => {
     if (currentStatus === 'pickedUp' || currentStatus === 'inTransit') {
@@ -291,14 +274,7 @@ function RiderDashboard() {
     returned: <FaUndo />,
   };
 
-  const cardColors = {
-    "rider1": "#a3d3d8",
-    "rider2": "#ffbe9d",
-    "rider3": "#a3d8b6",
-    "rider4": "#c2a3d8",
-    "rider5": "#d8c7a3",
-    "rider6": "#a3a3d8",
-  };
+
 
   // Helper function to render the correct button text
   const getButtonText = (currentStatus) => {
@@ -397,42 +373,33 @@ function RiderDashboard() {
           </div>
         </header>
 
-        <Container fluid className="dashboard-summary-container" style={{ backgroundColor: cardColors[selectedRider] || "#a3d3d8" }}>
+        <Container fluid className="dashboard-summary-container" style={{ backgroundColor: "#a3d3d8" }}>
           <div className="rider-selector-group">
             <div className="rider-info-display">
-              <img src={riderImage} alt={riders[selectedRider]?.name || "Rider"} className="rider-profile-pic" />
-              <span className="rider-name-text">{riders[selectedRider]?.name || "Rider"}</span>
+              <img src={riderImage} alt="John Doe" className="rider-profile-pic" />
+              <span className="rider-name-text">John Doe</span>
             </div>
-            <Form.Select
-              className="rider-select"
-              value={selectedRider}
-              onChange={(e) => setSelectedRider(e.target.value)}
-            >
-              {Object.entries(riders).map(([key, rider]) => (
-                <option key={key} value={key}>{rider.name}</option>
-              ))}
-            </Form.Select>
           </div>
           <div className="summary-cards-container">
             <Card className="summary-card">
               <FaBoxOpen size={32} color="#964b00" />
               <span className="card-title">Active Orders</span>
               <span className="card-value">
-                {orders.filter(order => order.assignedRider === selectedRider && !["delivered", "cancelled", "returned"].includes(order.currentStatus)).length} orders
+                {orders.filter(order => !["delivered", "cancelled", "returned"].includes(order.currentStatus)).length} orders
               </span>
             </Card>
             <Card className="summary-card">
               <FaCheckCircle size={32} color="#198754" />
               <span className="card-title">Completed</span>
               <span className="card-value">
-                {orders.filter(order => order.assignedRider === selectedRider && order.currentStatus === "delivered").length} orders
+                {orders.filter(order => order.currentStatus === "delivered").length} orders
               </span>
             </Card>
             <Card className="summary-card">
               <FaDollarSign size={32} color="#fd7e14" />
               <span className="card-title">Earnings</span>
               <span className="card-value">
-                ₱{orders.filter(order => order.assignedRider === selectedRider && order.currentStatus === "delivered").reduce((sum, order) => sum + order.total, 0).toFixed(2)}
+                ₱{orders.filter(order => order.currentStatus === "delivered").reduce((sum, order) => sum + order.total, 0).toFixed(2)}
               </span>
             </Card>
           </div>
@@ -469,7 +436,7 @@ function RiderDashboard() {
           {filteredOrders.length === 0 ? (
             <div className="no-orders-message">
               <FaBoxOpen size={50} color="#ccc" />
-              <p>No orders to show for this rider.</p>
+              <p>No orders to show.</p>
             </div>
           ) : (
             filteredOrders.map((order) => (
