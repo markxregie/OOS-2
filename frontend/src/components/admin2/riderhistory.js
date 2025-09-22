@@ -1,21 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { FaChevronDown, FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaUndo, FaSignOutAlt, FaTimesCircle, FaExchangeAlt, FaBars, FaHome, FaHistory, FaCog, FaCreditCard, FaUserTie } from "react-icons/fa";
-import { Container, Card, Form, Button } from "react-bootstrap";
+import { Container, Card, Form, Button, Table } from "react-bootstrap";
 import riderImage from "../../assets/rider.jpg";
 import logoImage from "../../assets/logo.png";
 import "./riderhome.css";
 import "./riderdashboard.css";
 import Swal from 'sweetalert2';
 
-function RiderDashboard() {
+function RiderHistory() {
   const userRole = "Admin";
   const userName = "Lim Alcovendas";
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 991);
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [currentOrderToDeliver, setCurrentOrderToDeliver] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: 'orderedAt', direction: 'descending' });
 
   useEffect(() => {
     const handleResize = () => {
@@ -40,9 +39,7 @@ function RiderDashboard() {
     };
   }, []);
 
-  const [toggle, setToggle] = useState("active");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [riderFilter, setRiderFilter] = useState("all");
+  const [toggle, setToggle] = useState("completed");
   const [selectedRider, setSelectedRider] = useState("rider1");
   const [orders, setOrders] = useState([]);
 
@@ -62,7 +59,7 @@ function RiderDashboard() {
   const sampleOrders = [
     {
       id: 1,
-      currentStatus: "inTransit",
+      currentStatus: "delivered",
       orderedAt: "2023-10-01 10:00 AM",
       customerName: "Alice Johnson",
       phone: "+1-1234567890",
@@ -90,7 +87,7 @@ function RiderDashboard() {
     },
     {
       id: 3,
-      currentStatus: "pending",
+      currentStatus: "delivered",
       orderedAt: "2023-10-01 11:00 AM",
       customerName: "Charlie Brown",
       phone: "+1-1234567892",
@@ -103,7 +100,7 @@ function RiderDashboard() {
     },
     {
       id: 4,
-      currentStatus: "inTransit",
+      currentStatus: "delivered",
       orderedAt: "2023-10-01 11:30 AM",
       customerName: "Diana Prince",
       phone: "+1-1234567893",
@@ -117,7 +114,7 @@ function RiderDashboard() {
     },
     {
       id: 5,
-      currentStatus: "cancelled",
+      currentStatus: "delivered",
       orderedAt: "2023-10-01 11:45 AM",
       customerName: "Clark Kent",
       phone: "+1-1234567894",
@@ -130,7 +127,7 @@ function RiderDashboard() {
     },
     {
       id: 6,
-      currentStatus: "preparing",
+      currentStatus: "delivered",
       orderedAt: "2023-10-01 12:00 PM",
       customerName: "Bruce Wayne",
       phone: "+1-1234567895",
@@ -141,6 +138,32 @@ function RiderDashboard() {
       ],
       total: 9.00,
       assignedRider: "rider1"
+    },
+    {
+      id: 7,
+      currentStatus: "cancelled",
+      orderedAt: "2023-10-01 12:15 PM",
+      customerName: "Tony Stark",
+      phone: "+1-1234567896",
+      address: "10880 Malibu Point, Malibu",
+      items: [
+        { quantity: 1, name: "Iced Coffee", price: 7.00 }
+      ],
+      total: 7.00,
+      assignedRider: "rider1"
+    },
+    {
+      id: 8,
+      currentStatus: "returned",
+      orderedAt: "2023-10-01 12:30 PM",
+      customerName: "Steve Rogers",
+      phone: "+1-1234567897",
+      address: "569 Leaman Place, Brooklyn",
+      items: [
+        { quantity: 1, name: "Hot Tea", price: 3.00 }
+      ],
+      total: 3.00,
+      assignedRider: "rider2"
     }
   ];
 
@@ -189,94 +212,42 @@ function RiderDashboard() {
     }
   };
 
-  const filteredOrders = orders
+  const sortedOrders = [...orders]
     .filter(order => order.assignedRider === selectedRider)
     .filter(order => {
-      if (toggle === "active") {
-        return !["delivered", "cancelled", "returned"].includes(order.currentStatus);
-      } else if (toggle === "completed") {
+      if (toggle === "completed") {
         return order.currentStatus === "delivered";
+      } else if (toggle === "all") {
+        return true;
       }
-      return true;
+      return false;
+    })
+    .sort((a, b) => {
+      if (a[sortConfig.key] < b[sortConfig.key]) {
+        return sortConfig.direction === 'ascending' ? -1 : 1;
+      }
+      if (a[sortConfig.key] > b[sortConfig.key]) {
+        return sortConfig.direction === 'ascending' ? 1 : -1;
+      }
+      return 0;
     });
 
-  const handleRiderChange = (orderId, newRider) => {
-    setOrders(prevOrders =>
-      prevOrders.map(order =>
-        order.id === orderId ? { ...order, assignedRider: newRider } : order
-      )
-    );
+  const requestSort = (key) => {
+    let direction = 'ascending';
+    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
   };
 
-  const handleProgressiveStatusChange = (orderId, currentStatus) => {
-    if (currentStatus === 'pickedUp' || currentStatus === 'inTransit') {
-      // For 'Delivered' status, show the modal
-      setCurrentOrderToDeliver(orderId);
-      Swal.fire({
-        title: 'Proof of Delivery',
-        html: '<input type="file" id="delivery-photo" accept="image/*" class="swal2-file-input">',
-        showCancelButton: true,
-        confirmButtonText: 'Mark as Delivered',
-        showLoaderOnConfirm: true,
-        allowOutsideClick: () => !Swal.isLoading(),
-        preConfirm: () => {
-          const file = document.getElementById('delivery-photo').files[0];
-          if (!file) {
-            Swal.showValidationMessage('Please upload a photo.');
-            return false;
-          }
-          // Simulate an API call for file upload
-          return new Promise((resolve) => {
-            setTimeout(() => {
-              // Here you would handle the file upload to your server
-              console.log('File uploaded:', file.name);
-              resolve();
-            }, 1000);
-          });
-        }
-      }).then((result) => {
-        if (result.isConfirmed) {
-          // If a file was uploaded and confirmed, update the order status
-          setOrders(prevOrders =>
-            prevOrders.map(order =>
-              order.id === orderId ? { ...order, currentStatus: 'delivered', proofOfDelivery: 'uploaded' } : order
-            )
-          );
-          Swal.fire(
-            'Delivered!',
-            'The order has been marked as delivered.',
-            'success'
-          );
-        }
-      });
-    } else {
-      // For other statuses, use the existing confirmation dialog
-      let newStatus = 'pickedUp';
-      let confirmationText = 'Are you sure you want to mark this order as Picked Up?';
-
-      Swal.fire({
-        title: 'Confirm Status Change',
-        text: confirmationText,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
-        confirmButtonText: 'Yes, change it!'
-      }).then((result) => {
-        if (result.isConfirmed) {
-          setOrders(prevOrders =>
-            prevOrders.map(order =>
-              order.id === orderId ? { ...order, currentStatus: newStatus } : order
-            )
-          );
-          Swal.fire(
-            'Updated!',
-            'The order status has been changed.',
-            'success'
-          );
-        }
-      });
+  const getSortIcon = (key) => {
+    if (sortConfig.key !== key) {
+      return '';
     }
+    if (sortConfig.direction === 'ascending') {
+      return '▲';
+    }
+    return '▼';
   };
 
   const statusIcons = {
@@ -300,38 +271,12 @@ function RiderDashboard() {
     "rider6": "#a3a3d8",
   };
 
-  // Helper function to render the correct button text
-  const getButtonText = (currentStatus) => {
-    if (["pending", "confirmed", "preparing", "readyToPickup"].includes(currentStatus)) {
-      return 'Picked Up';
-    } else if (["pickedUp", "inTransit"].includes(currentStatus)) {
-      return 'Delivered';
-    } else {
-      return ''; // For other statuses like 'delivered' or 'cancelled'
-    }
-  };
-
-  // Helper function to determine if the button should be rendered at all
-  const shouldRenderButton = (currentStatus) => {
-    return ["readyToPickup", "pickedUp", "inTransit", "preparing", "confirmed", "pending"].includes(currentStatus);
-  };
-
-  // Helper function to determine the button's class name
-  const getButtonClass = (currentStatus) => {
-    if (currentStatus === 'pickedUp' || currentStatus === 'inTransit') {
-      return 'delivered';
-    } else if (currentStatus === 'readyToPickup' || currentStatus === 'pending' || currentStatus === 'confirmed' || currentStatus === 'preparing') {
-      return 'pickedUp';
-    }
-    return '';
-  };
-
   const navigateToDashboard = () => {
     window.location.href = "/rider/home";
   };
 
   const navigateToHistory = () => {
-    window.location.href = "/rider/riderhistory";
+    window.location.href = "/rider/history";
   };
 
   const handleLogout = () => {
@@ -350,7 +295,7 @@ function RiderDashboard() {
             <FaHome />
             {isSidebarOpen && <span>Dashboard</span>}
           </li>
-          <li onClick={navigateToHistory} style={{ cursor: 'pointer' }}>
+          <li className="active" onClick={navigateToHistory} style={{ cursor: 'pointer' }}>
             <FaHistory />
             {isSidebarOpen && <span>History</span>}
           </li>
@@ -367,7 +312,7 @@ function RiderDashboard() {
             <button className="menu-toggle" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
               <FaBars />
             </button>
-            <h2 className="page-title">Rider Dashboard</h2>
+            <h2 className="page-title">Rider History</h2>
           </div>
           <div className="header-right">
             <div className="header-date">{currentDateFormatted}</div>
@@ -386,7 +331,7 @@ function RiderDashboard() {
                       <li onClick={() => window.location.reload()}>
                         <FaUndo /> Refresh
                       </li>
-                      <li onClick={() => { localStorage.removeItem("access_token"); window.location.href = "http://localhost:4002/"; }}>
+                      <li onClick={handleLogout}>
                         <FaSignOutAlt /> Logout
                       </li>
                     </ul>
@@ -416,9 +361,9 @@ function RiderDashboard() {
           <div className="summary-cards-container">
             <Card className="summary-card">
               <FaBoxOpen size={32} color="#964b00" />
-              <span className="card-title">Active Orders</span>
+              <span className="card-title">Total Orders</span>
               <span className="card-value">
-                {orders.filter(order => order.assignedRider === selectedRider && !["delivered", "cancelled", "returned"].includes(order.currentStatus)).length} orders
+                {orders.filter(order => order.assignedRider === selectedRider).length} orders
               </span>
             </Card>
             <Card className="summary-card">
@@ -430,7 +375,7 @@ function RiderDashboard() {
             </Card>
             <Card className="summary-card">
               <FaDollarSign size={32} color="#fd7e14" />
-              <span className="card-title">Earnings</span>
+              <span className="card-title">Total Earnings</span>
               <span className="card-value">
                 ₱{orders.filter(order => order.assignedRider === selectedRider && order.currentStatus === "delivered").reduce((sum, order) => sum + order.total, 0).toFixed(2)}
               </span>
@@ -440,10 +385,10 @@ function RiderDashboard() {
 
         <div className="toggle-buttons-container">
           <button
-            className={`toggle-button ${toggle === "active" ? "active" : ""}`}
-            onClick={() => setToggle("active")}
+            className={`toggle-button ${toggle === "completed" ? "active" : ""}`}
+            onClick={() => setToggle("completed")}
           >
-            Active Orders
+            Completed Orders
           </button>
           <button
             className={`toggle-button ${toggle === "all" ? "active" : ""}`}
@@ -451,70 +396,77 @@ function RiderDashboard() {
           >
             All Orders
           </button>
-          <button
-            className={`toggle-button ${toggle === "completed" ? "active" : ""}`}
-            onClick={() => setToggle("completed")}
-          >
-            Completed
-          </button>
         </div>
 
         <div className="order-list-heading">
-          {toggle === "active" && <div>Showing Active Orders</div>}
-          {toggle === "all" && <div>Showing All Orders</div>}
           {toggle === "completed" && <div>Showing Completed Orders</div>}
+          {toggle === "all" && <div>Showing All Orders</div>}
         </div>
-
-        <div className="order-cards-container">
-          {filteredOrders.length === 0 ? (
+        
+        <div className="table-responsive-container">
+          {sortedOrders.length === 0 ? (
             <div className="no-orders-message">
               <FaBoxOpen size={50} color="#ccc" />
               <p>No orders to show for this rider.</p>
             </div>
           ) : (
-            filteredOrders.map((order) => (
-              <Card key={order.id} className="order-card">
-                <div className="order-header">
-                  <h5 className="order-id">Order #{order.id}</h5>
-                  <div className="status-tag" style={{ color: getStatusStyle(order.currentStatus).color, backgroundColor: getStatusStyle(order.currentStatus).backgroundColor }}>
-                    {statusIcons[order.currentStatus]} {getStatusStyle(order.currentStatus).text}
-                  </div>
-                </div>
-                <div className="order-details">
-                  <p className="detail-item"><FaClock color="#4b929d" /> Ordered at: <span className="detail-value">{order.orderedAt}</span></p>
-                  <p className="detail-item"><FaUser color="#4b929d" /> Customer: <span className="detail-value">{order.customerName}</span></p>
-                  <p className="detail-item"><FaPhone color="#4b929d" /> Phone: <span className="detail-value">{order.phone.replace(/^\+1-/, "+63 ")}</span></p>
-                  <p className="detail-item"><FaMapMarkerAlt color="#4b929d" /> Address: <span className="detail-value">{order.address}</span></p>
-                </div>
-                <div className="order-items-section">
-                  <h6><FaBox color="#4b929d" /> Items ({order.items?.length || 0})</h6>
-                  <ul className="item-list">
-                    {order.items?.map((item, i) => (
-                      <li key={i} className="item-row">
-                        <span>{item.quantity}x {item.name}</span>
-                        <span>₱{item.price.toFixed(2)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <hr className="divider" />
-                <div className="order-total-section">
-                  <span className="total-label">Total:</span>
-                  <span className="total-value">₱{order.total?.toFixed(2) || "0.00"}</span>
-                </div>
-                <div className="order-actions">
-                  {shouldRenderButton(order.currentStatus) && (
-                    <Button
-                        variant="primary"
-                        className={`status-change-button ${getButtonClass(order.currentStatus)}`}
-                        onClick={() => handleProgressiveStatusChange(order.id, order.currentStatus)}
-                    >
-                        {getButtonText(order.currentStatus)}
-                    </Button>
-                  )}
-                </div>
-              </Card>
-            ))
+            <Table striped bordered hover responsive className="history-table">
+              <thead>
+                <tr>
+                  <th onClick={() => requestSort('id')}>
+                    Order ID {getSortIcon('id')}
+                  </th>
+                  <th onClick={() => requestSort('customerName')}>
+                    Customer Name {getSortIcon('customerName')}
+                  </th>
+                  <th onClick={() => requestSort('orderedAt')}>
+                    Date/Time {getSortIcon('orderedAt')}
+                  </th>
+                  <th onClick={() => requestSort('total')}>
+                    Total {getSortIcon('total')}
+                  </th>
+                  <th onClick={() => requestSort('currentStatus')}>
+                    Status {getSortIcon('currentStatus')}
+                  </th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedOrders.map((order) => (
+                  <tr key={order.id}>
+                    <td>#{order.id}</td>
+                    <td>{order.customerName}</td>
+                    <td>{order.orderedAt}</td>
+                    <td>₱{order.total?.toFixed(2) || "0.00"}</td>
+                    <td>
+                      <div className="status-tag" style={{ color: getStatusStyle(order.currentStatus).color, backgroundColor: getStatusStyle(order.currentStatus).backgroundColor }}>
+                        {getStatusStyle(order.currentStatus).text}
+                      </div>
+                    </td>
+                    <td>
+                      <Button variant="info" size="sm" onClick={() => Swal.fire({
+                        title: `Order #${order.id} Details`,
+                        html: `
+                          <p><strong>Customer:</strong> ${order.customerName}</p>
+                          <p><strong>Address:</strong> ${order.address}</p>
+                          <p><strong>Items:</strong></p>
+                          <ul>
+                            ${order.items.map(item => `<li>${item.quantity}x ${item.name} (₱${item.price.toFixed(2)})</li>`).join('')}
+                          </ul>
+                          <p><strong>Total:</strong> ₱${order.total.toFixed(2)}</p>
+                          <p><strong>Status:</strong> ${getStatusStyle(order.currentStatus).text}</p>
+                        `,
+                        showCloseButton: true,
+                        focusConfirm: false,
+                        confirmButtonText: 'OK',
+                      })}>
+                        View Details
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
           )}
         </div>
       </div>
@@ -522,4 +474,4 @@ function RiderDashboard() {
   );
 }
 
-export default RiderDashboard;
+export default RiderHistory;  
