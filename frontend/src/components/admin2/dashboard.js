@@ -33,23 +33,10 @@ const userRole = "Admin";
 const initialData = [ { title: "Today's Sales", current: 0, previous: 0, format: "currency", icon: faMoneyBillWave, type: "sales" }, { title: "Total Orders", current: 0, previous: 0, format: "number", icon: faChartLine, type: "revenue" }, { title: "Today's Orders", current: 0, previous: 0, format: "number", icon: faShoppingCart, type: "orders" }, { title: "Pending Orders", current: 0, previous: 0, format: "number", icon: faClock, type: "pendings" }, { title: "Delivered Orders", current: 0, previous: 0, format: "number", icon: faCheckCircle, type: "deliveredOrders" }, { title: "In Preparation", current: 0, previous: 0, format: "number", icon: faCog, type: "inPreparation" }, { title: "Confirmed Orders", current: 0, previous: 0, format: "number", icon: faClipboardCheck, type: "confirmedOrders" } ];
 const formatValue = (value, format) => { return format === "currency" ? `₱${value.toLocaleString()}` : value.toLocaleString(); };
 
-// Sample data for Recent Orders
-const recentOrders = [
-  { id: 'ORD001', customer: 'John Doe', date: '2023-10-01', status: 'Delivered', amount: 150 },
-  { id: 'ORD002', customer: 'Jane Smith', date: '2023-10-02', status: 'Pending', amount: 200 },
-  { id: 'ORD003', customer: 'Alice Johnson', date: '2023-10-03', status: 'In Preparation', amount: 120 },
-  { id: 'ORD004', customer: 'Bob Brown', date: '2023-10-04', status: 'Confirmed', amount: 180 },
-  { id: 'ORD005', customer: 'Charlie Wilson', date: '2023-10-05', status: 'Delivered', amount: 250 },
-];
+// Recent Orders state will be populated from API
 
-// Sample data for Popular Items
-const popularItems = [
-  { name: 'Americano', sold: 120, revenue: 2400 },
-  { name: 'Latte', sold: 95, revenue: 2850 },
-  { name: 'Cappuccino', sold: 80, revenue: 2400 },
-  { name: 'Espresso', sold: 70, revenue: 1400 },
-  { name: 'Mocha', sold: 60, revenue: 2100 },
-];
+// Compute daily total orders from recentOrders - moved inside component
+
 // --- End of static data ---
 
 const Dashboard = () => {
@@ -60,7 +47,7 @@ const Dashboard = () => {
   const [authToken, setAuthToken] = useState(null);
   const [userName, setUserName] = useState("Loading...");
 
-  const [revenueFilter, setRevenueFilter] = useState("Monthly");
+  const [revenueFilter, setRevenueFilter] = useState("Weekly");
   const [salesFilter, setSalesFilter] = useState("Monthly");
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const [dashboardData, setDashboardData] = useState({
@@ -68,6 +55,7 @@ const Dashboard = () => {
     pendingOrders: 0,
     todaysOrders: 0,
   });
+  const [recentOrders, setRecentOrders] = useState([]);
 
   // 4. This useEffect runs once to read the parameters from the URL
   useEffect(() => {
@@ -179,9 +167,83 @@ const Dashboard = () => {
       .catch((err) => console.error("Failed to fetch today's orders:", err));
   }, [authToken]);
 
+  useEffect(() => {
+    if (!authToken) {
+      return;
+    }
+
+    fetch("http://localhost:7004/cart/admin/orders/manage", {
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+      },
+    })
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        return res.json();
+      })
+      .then((data) => {
+        console.log("Fetched recent orders:", data);
+        const transformedOrders = data.map(order => ({
+          customer: order.customer_name,
+          items: order.items,
+          date: order.order_date,
+          status: order.order_status,
+          amount: order.total_amount,
+        })).slice(0, 10); // Limit to 10 recent orders
+        setRecentOrders(transformedOrders);
+      })
+      .catch((err) => console.error("Failed to fetch recent orders:", err));
+  }, [authToken]);
+
   const toggleDropdown = () => {
     setDropdownOpen(!isDropdownOpen);
   };
+
+  // Compute daily total orders from recentOrders
+  const dailyOrdersData = recentOrders.reduce((acc, order) => {
+    const date = order.date;
+    if (!acc[date]) {
+      acc[date] = 0;
+    }
+    acc[date]++;
+    return acc;
+  }, {});
+
+  // Prepare ordersData based on revenueFilter
+  let ordersData = [];
+  if (revenueFilter === "Weekly") {
+    // Show Sunday to Saturday
+    const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    // Aggregate orders by weekday name
+    const weekdayOrders = { Sun: 0, Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0 };
+    recentOrders.forEach(order => {
+      const orderDate = new Date(order.date);
+      const dayName = orderDate.toLocaleDateString('en-US', { weekday: 'short' });
+      if (weekDays.includes(dayName)) {
+        weekdayOrders[dayName] = (weekdayOrders[dayName] || 0) + 1;
+      }
+    });
+    ordersData = weekDays.map(day => ({ name: day, orders: weekdayOrders[day] }));
+  } else if (revenueFilter === "Monthly") {
+    // Show all months
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    // Aggregate orders by month name
+    const monthOrders = {};
+    months.forEach(m => monthOrders[m] = 0);
+    recentOrders.forEach(order => {
+      const orderDate = new Date(order.date);
+      const monthName = orderDate.toLocaleDateString('en-US', { month: 'short' });
+      if (months.includes(monthName)) {
+        monthOrders[monthName] = (monthOrders[monthName] || 0) + 1;
+      }
+    });
+    ordersData = months.map(month => ({ name: month, orders: monthOrders[month] }));
+  } else {
+    // Default to daily aggregation
+    ordersData = Object.entries(dailyOrdersData).map(([date, count]) => ({ name: date, orders: count }));
+  }
 
   const data = initialData.map((card) => {
     if (card.title === "Total Orders") {
@@ -204,6 +266,26 @@ const Dashboard = () => {
     }
     return card;
   });
+
+  const popularItems = React.useMemo(() => {
+    const itemAgg = {};
+    recentOrders.forEach(order => {
+      const numItems = order.items.length;
+      const amountPerItem = order.amount / numItems;
+      order.items.forEach(item => {
+        if (!itemAgg[item.name]) {
+          itemAgg[item.name] = { sold: 0, revenue: 0 };
+        }
+        itemAgg[item.name].sold += item.quantity;
+        itemAgg[item.name].revenue += amountPerItem;
+      });
+    });
+    return Object.entries(itemAgg).map(([name, data]) => ({
+      name,
+      sold: data.sold,
+      revenue: Math.round(data.revenue)
+    })).sort((a, b) => b.sold - a.sold).slice(0, 5);
+  }, [recentOrders]);
 
   return (
     <div className="dashboard">
@@ -294,14 +376,19 @@ const Dashboard = () => {
               <div className="chart-header">
                 <span>Total Orders</span>
                 <select className="chart-dropdown" value={revenueFilter} onChange={(e) => setRevenueFilter(e.target.value)}>
-                  <option value="Daily">Daily</option>
                   <option value="Weekly">Weekly</option>
                   <option value="Monthly">Monthly</option>
-                  <option value="Yearly">Yearly</option>
                 </select>
               </div>
               <ResponsiveContainer width="100%" height={350}>
-                <LineChart data={revenueData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis /><Tooltip /><Legend /><Line type="monotone" dataKey="income" stroke="#00b4d8" /><Line type="monotone" dataKey="expense" stroke="#ff4d6d" /></LineChart>
+                <LineChart data={ordersData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="orders" stroke="#00b4d8" name="Orders" />
+                </LineChart>
               </ResponsiveContainer>
             </div>
             <div className="chart-box">
@@ -326,15 +413,37 @@ const Dashboard = () => {
               <div style={{ width: '100%', maxHeight: '200px', overflowY: 'auto', marginBottom: '10px' }}>
                 {recentOrders.map((order, index) => (
                   <div key={index} style={{ display: 'flex', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #eee' }}>
-                    <div style={{ fontSize: '14px', fontWeight: '500', flex: 1, textAlign: 'left' }}>{order.id}</div>
-                    <div style={{ fontSize: '12px', color: '#666', flex: 1, textAlign: 'center' }}>{order.customer}</div>
+                    <div style={{ fontSize: '14px', fontWeight: '500', flex: 1, textAlign: 'left' }}>{order.customer}</div>
+                    <div style={{ fontSize: '12px', color: '#666', flex: 1, textAlign: 'center' }}>{order.items.map(i => `${i.name} x${i.quantity}`).join(', ')}</div>
                     <div style={{ fontSize: '12px', color: '#666', flex: 1, textAlign: 'center' }}>{order.date}</div>
-                    <div style={{ fontSize: '12px', color: order.status === 'Delivered' ? 'green' : order.status === 'Pending' ? 'orange' : 'blue', flex: 1, textAlign: 'center' }}>{order.status}</div>
-                    <div style={{ fontSize: '14px', fontWeight: '500', flex: 1, textAlign: 'right' }}>₱{order.amount}</div>
+                    <div style={{
+                      padding: '2px 6px',
+                      borderRadius: '20px',
+                      fontSize: '0.75rem',
+                      fontWeight: '500',
+                      display: 'inline-block',
+                      backgroundColor: order.status.toLowerCase() === 'pending' ? '#fff3cd' :
+                                       order.status.toLowerCase() === 'processing' ? '#cce5ff' :
+                                       order.status.toLowerCase() === 'completed' ? '#d4edda' :
+                                       order.status.toLowerCase() === 'cancelled' ? '#f8d7da' : '#e9ecef',
+                      color: order.status.toLowerCase() === 'pending' ? '#856404' :
+                             order.status.toLowerCase() === 'processing' ? '#004085' :
+                             order.status.toLowerCase() === 'completed' ? '#155724' :
+                             order.status.toLowerCase() === 'cancelled' ? '#721c24' : '#495057',
+                      flex: 1,
+                      textAlign: 'center',
+                      marginLeft: 'auto',
+                      marginRight: 'auto',
+                      width: 'fit-content',
+                      minWidth: '80px',
+                      lineHeight: '1.5',
+                      verticalAlign: 'middle',
+                    }}>{order.status}</div>
+                    <div style={{ fontSize: '14px', fontWeight: '500', flex: 0, textAlign: 'left', marginLeft: '10px', minWidth: '90px' }}>₱{order.amount}</div>
                   </div>
                 ))}
               </div>
-              <button style={{ padding: '8px 16px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>View More</button>
+              
             </div>
             <div className="chart-box" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start', padding: '20px' }}>
               <div style={{ fontSize: '22px', fontWeight: '700', marginBottom: '5px' }}>Popular Items</div>
@@ -348,7 +457,7 @@ const Dashboard = () => {
                   </div>
                 ))}
               </div>
-              <button style={{ padding: '8px 16px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>View More</button>
+              
             </div>
           </div>
         </div>

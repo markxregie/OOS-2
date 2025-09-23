@@ -10,6 +10,7 @@ import bellIcon from '../assets/bell.svg';
 import './header.css';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import Swal from 'sweetalert2';
 
 export default function AppHeader() {
   const location = useLocation();
@@ -19,7 +20,6 @@ export default function AppHeader() {
 
   // Remove AuthContext usage, use local state for login detection
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   // Check URL query params for authorization token and store in localStorage
   useEffect(() => {
@@ -134,19 +134,23 @@ export default function AppHeader() {
   }, [location.pathname]);
 
   const handleLogoutClick = () => {
-    setShowLogoutModal(true);
-  };
-
-  const confirmLogout = () => {
-    setShowLogoutModal(false);
-    localStorage.removeItem('authToken');
-    setIsLoggedIn(false);
-    // Redirect to login page on frontend-auth at localhost:4002
-    window.location.href = 'http://localhost:4002/';
-  };
-
-  const cancelLogout = () => {
-    setShowLogoutModal(false);
+    Swal.fire({
+      title: 'Confirm Logout',
+      text: 'Are you sure you want to logout?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Logout',
+      cancelButtonText: 'Cancel'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        localStorage.removeItem('authToken');
+        setIsLoggedIn(false);
+        // Redirect to login page on frontend-auth at localhost:4002
+        window.location.href = 'http://localhost:4002/';
+      }
+    });
   };
 
   // State to control notification dropdown visibility on hover
@@ -396,20 +400,7 @@ export default function AppHeader() {
         </Container>
       </Navbar>
 
-      <Modal show={showLogoutModal} onHide={cancelLogout} centered>
-        <Modal.Header closeButton>
-          <Modal.Title>Confirm Logout</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>Are you sure you want to logout?</Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={cancelLogout}>
-            Cancel
-          </Button>
-          <Button variant="danger" onClick={confirmLogout}>
-            Logout
-          </Button>
-        </Modal.Footer>
-      </Modal>
+
     </>
   );
 }

@@ -3,6 +3,7 @@ import { Container } from "react-bootstrap";
 import { FaChevronDown, FaBell, FaSignOutAlt, FaBoxOpen, FaCheckCircle, FaSpinner, FaTruck, FaFilter, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTimesCircle, FaTruckPickup, FaTruckMoving, FaUndo } from "react-icons/fa";
 import { Card, Form } from "react-bootstrap";
 import riderImage from "../../assets/rider.jpg";
+import Swal from "sweetalert2";
 import "./deliverymanagement.css";
 
 function DeliveryManagement() {
@@ -18,6 +19,29 @@ function DeliveryManagement() {
   const [riderFilter, setRiderFilter] = useState("all");
 
   const [orders, setOrders] = useState([]);
+  const [showRiderDropdown, setShowRiderDropdown] = useState({});
+  const [showChangeRiderDropdown, setShowChangeRiderDropdown] = useState({});
+
+  // Helper functions for localStorage persistence
+  const saveRiderAssignments = (updatedOrders) => {
+    const assignments = {};
+    updatedOrders.forEach(order => {
+      if (order.assignedRider) {
+        assignments[order.id] = order.assignedRider;
+      }
+    });
+    localStorage.setItem("riderAssignments", JSON.stringify(assignments));
+  };
+
+  const loadRiderAssignments = () => {
+    try {
+      const saved = localStorage.getItem("riderAssignments");
+      return saved ? JSON.parse(saved) : {};
+    } catch (error) {
+      console.error("Failed to load rider assignments:", error);
+      return {};
+    }
+  };
 
   useEffect(() => {
     if (!authToken) return;
@@ -36,7 +60,15 @@ function DeliveryManagement() {
 
         const data = await response.json();
         console.log("Fetched orders:", data); // ✅ debug
-        setOrders(data);
+
+        // Merge saved rider assignments with fetched orders
+        const savedAssignments = loadRiderAssignments();
+        const ordersWithAssignments = data.map(order => ({
+          ...order,
+          assignedRider: savedAssignments[order.id] || order.assignedRider || null
+        }));
+
+        setOrders(ordersWithAssignments);
       } catch (error) {
         console.error("Failed to fetch delivery orders:", error);
       }
@@ -131,11 +163,75 @@ function DeliveryManagement() {
   });
 
   const handleRiderChange = (orderId, newRider) => {
-    setOrders(prevOrders =>
-      prevOrders.map(order =>
+    setOrders(prevOrders => {
+      const updatedOrders = prevOrders.map(order =>
         order.id === orderId ? { ...order, assignedRider: newRider } : order
-      )
-    );
+      );
+      // Save to localStorage whenever a rider is assigned
+      saveRiderAssignments(updatedOrders);
+      return updatedOrders;
+    });
+  };
+
+  const handleRiderSelection = (orderId, riderId) => {
+    if (!riderId) return; // Don't show modal if no rider selected
+
+    const rider = riders[riderId];
+    if (!rider) return;
+
+    Swal.fire({
+      title: 'Confirm Rider Assignment',
+      html: `
+        <div style="text-align: left;">
+          <p><strong>Rider:</strong> ${rider.name}</p>
+          <p><strong>Phone:</strong> ${rider.phone}</p>
+          <p><strong>Active Orders:</strong> ${rider.activeOrders}</p>
+        </div>
+        <p style="margin-top: 15px; font-size: 14px; color: #666;">
+          Are you sure you want to assign this rider to this order?
+        </p>
+      `,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#4b929d',
+      cancelButtonColor: '#dc3545',
+      confirmButtonText: 'Yes, Assign Rider',
+      cancelButtonText: 'Cancel',
+      customClass: {
+        popup: 'swal-wide'
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        handleRiderAssignment(orderId, riderId);
+      }
+    });
+  };
+
+  const handleRiderAssignment = (orderId, riderId) => {
+    // Assign the rider
+    handleRiderChange(orderId, riderId);
+
+    // Hide the change rider dropdown after assignment
+    setShowChangeRiderDropdown(prev => ({
+      ...prev,
+      [orderId]: false
+    }));
+
+    // Show success message
+    Swal.fire({
+      title: 'Rider Assigned Successfully!',
+      text: 'The rider has been assigned to this order.',
+      icon: 'success',
+      confirmButtonColor: '#198754',
+      confirmButtonText: 'OK'
+    });
+  };
+
+  const handleChangeRiderClick = (orderId) => {
+    setShowChangeRiderDropdown(prev => ({
+      ...prev,
+      [orderId]: !prev[orderId]
+    }));
   };
 
   const handleStatusChange = (orderId, newStatus) => {
@@ -161,6 +257,8 @@ function DeliveryManagement() {
       case "inTransit":
         return { color: "#6610f2", backgroundColor: "#e5dbff" };
       case "delivered":
+        return { color: "#198754", backgroundColor: "#d1e7dd" };
+      case "completed":
         return { color: "#198754", backgroundColor: "#d1e7dd" };
       case "cancelled":
         return { color: "#dc3545", backgroundColor: "#f8d7da" };
@@ -315,18 +413,18 @@ function DeliveryManagement() {
             .filter(order => (riderFilter === "all" || order.assignedRider === riderFilter));
           return (
             <div style={{
-              display: "flex",
+              display: "grid",
+              gridTemplateColumns: "repeat(4, 1fr)",
               gap: "20px",
               marginTop: "20px",
-              justifyContent: filteredOrders.length === 1 ? "flex-start" : "flex-start",
-              flexWrap: "wrap",
+              justifyContent: "flex-start",
               alignItems: "flex-start",
               width: "100%"
             }}>
               {filteredOrders.map((order, idx) => (
-                <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "300px", height: "500px", overflowY: "auto" }}>
+                <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "350px", height: "500px", overflowY: "auto" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
-                    <h5 style={{ color: "#4b929d" }}>Order #{order.id}</h5>
+                    <h5 style={{ color: "#2c3e50", fontWeight: "700" }}>Order #{order.id}</h5>
                     <p style={{
                       fontWeight: "600",
                       marginBottom: "5px",
@@ -345,16 +443,17 @@ function DeliveryManagement() {
                         pickedup: "Picked Up",
                         intransit: "In transit",
                         delivered: "Delivered",
+                        completed: "Completed",
                         cancelled: "Cancelled",
                         returned: "Cancelled/Returned"
                       }[order.currentStatus.toLowerCase()] || order.currentStatus}
                     </p>
                   </div>
-                  <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaClock color="#4b929d" /> Ordered at {order.orderedAt}</p>
-                  <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "black" }}><FaUser color="#4b929d" /> {order.customerName}</p>
-                  <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "black" }}><FaPhone color="#4b929d" /> {order.phone?.replace(/^\+1-/, "63") || "N/A"}</p>
-                  <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "black" }}><FaMapMarkerAlt color="#4b929d" /> {order.address}</p>
-                  <p style={{ fontWeight: "600", marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "black" }}><FaBox color="#4b929d" /> Items ({order.items.length})</p>
+                  <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaClock color="#4b929d" /> Ordered at <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.orderedAt}</span></p>
+                  <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaUser color="#4b929d" /> Customer: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.customerName}</span></p>
+                  <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaPhone color="#4b929d" /> Phone: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.phone?.replace(/^\+1-/, "63") || "N/A"}</span></p>
+                  <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaMapMarkerAlt color="#4b929d" /> Address: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.address}</span></p>
+                  <p style={{ fontWeight: "600", marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaBox color="#4b929d" /> Items ({order.items.length})</p>
                   {order.items.map((item, i) => (
                     <p key={i} style={{ marginBottom: "3px", alignSelf: "flex-start", color: "black", display: "flex", justifyContent: "space-between", width: "100%" }}>
                       <span>{item.quantity}x {item.name}</span>
@@ -368,7 +467,7 @@ function DeliveryManagement() {
                   </p>
                   {!order.assignedRider && (
                     <p style={{ backgroundColor: "#fff3cd", padding: "8px", borderRadius: "4px", marginTop: "10px", color: "#856404", width: "100%" }}>
-                      {order.notes ? `Note: ${order.notes}` : "Note: Please call when arrived"}
+                      {order.notes ? `Note: ${order.notes}` : "Note: Awaiting rider assignment"}
                     </p>
                   )}
                   {order.assignedRider && (
@@ -382,20 +481,59 @@ function DeliveryManagement() {
                     </div>
                   )}
                   <div style={{ marginTop: "10px", width: "100%" }}>
-                    <label htmlFor={`assignRider-${order.id}`} style={{ fontWeight: "600", marginBottom: "5px", display: "block" }}>Assign Rider</label>
-                    <Form.Select
-                      id={`assignRider-${order.id}`}
-                      value={order.assignedRider || ""}
-                      onChange={(e) => handleRiderChange(order.id, e.target.value)}
-                    >
-                      <option value="">Select Rider</option>
-                      <option value="rider1">Rider 1</option>
-                      <option value="rider2">Rider 2</option>
-                      <option value="rider3">Rider 3</option>
-                      <option value="rider4">Rider 4</option>
-                      <option value="rider5">Rider 5</option>
-                      <option value="rider6">Rider 6</option>
-                    </Form.Select>
+                    {!order.assignedRider ? (
+                      <>
+                        <label htmlFor={`assignRider-${order.id}`} style={{ fontWeight: "600", marginBottom: "5px", display: "block" }}>Assign Rider</label>
+                        <Form.Select
+                          id={`assignRider-${order.id}`}
+                          value={order.assignedRider || ""}
+                          onChange={(e) => handleRiderSelection(order.id, e.target.value)}
+                        >
+                          <option value="">Select Rider</option>
+                          <option value="rider1">{riders.rider1.name}</option>
+                          <option value="rider2">{riders.rider2.name}</option>
+                          <option value="rider3">{riders.rider3.name}</option>
+                          <option value="rider4">{riders.rider4.name}</option>
+                          <option value="rider5">{riders.rider5.name}</option>
+                          <option value="rider6">{riders.rider6.name}</option>
+                        </Form.Select>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleChangeRiderClick(order.id)}
+                          style={{
+                            backgroundColor: "#4b929d",
+                            color: "white",
+                            border: "none",
+                            padding: "8px 16px",
+                            borderRadius: "4px",
+                            cursor: "pointer",
+                            fontWeight: "600",
+                            width: "100%"
+                          }}
+                        >
+                          Change Rider
+                        </button>
+                        {showChangeRiderDropdown[order.id] && (
+                          <div style={{ marginTop: "10px", width: "100%" }}>
+                            <Form.Select
+                              id={`changeRider-${order.id}`}
+                              value={order.assignedRider || ""}
+                              onChange={(e) => handleRiderSelection(order.id, e.target.value)}
+                            >
+                              <option value="">Select Rider</option>
+                              <option value="rider1">{riders.rider1.name}</option>
+                              <option value="rider2">{riders.rider2.name}</option>
+                              <option value="rider3">{riders.rider3.name}</option>
+                              <option value="rider4">{riders.rider4.name}</option>
+                              <option value="rider5">{riders.rider5.name}</option>
+                              <option value="rider6">{riders.rider6.name}</option>
+                            </Form.Select>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 </Card>
               ))}

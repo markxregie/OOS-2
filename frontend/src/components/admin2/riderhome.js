@@ -1,450 +1,492 @@
 import React, { useState, useEffect } from 'react';
-import { FaSyncAlt, FaSignOutAlt, FaChevronDown } from "react-icons/fa";
-import { FaBoxOpen, FaCheckCircle, FaDollarSign, FaBell, FaBars, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox } from "react-icons/fa";
-import { Container, Card, Tabs, Tab, Form } from "react-bootstrap";
+import { FaChevronDown, FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaUndo, FaSignOutAlt, FaTimesCircle, FaExchangeAlt, FaBars, FaHome, FaHistory, FaCog, FaCreditCard, FaUserTie } from "react-icons/fa";
+import { Container, Card, Form, Button } from "react-bootstrap";
 import riderImage from "../../assets/rider.jpg";
-import "../admin2/manageorder.css";
+import logoImage from "../../assets/logo.png";
 import "./riderhome.css";
+import "./riderdashboard.css";
+import Swal from 'sweetalert2';
 
-const riders = {
-  rider1: {
-    name: "Rider 1",
-    phone: "+1-555-1111",
-    activeOrders: 3,
-    imageUrl: "https://via.placeholder.com/50"
-  },
-  rider2: {
-    name: "Rider 2",
-    phone: "+1-555-2222",
-    activeOrders: 2,
-    imageUrl: "https://via.placeholder.com/50"
-  },
-  rider3: {
-    name: "Rider 3",
-    phone: "+1-555-3333",
-    activeOrders: 1,
-    imageUrl: "https://via.placeholder.com/50"
-  },
-  rider4: {
-    name: "Rider 4",
-    phone: "+1-555-4444",
-    activeOrders: 0,
-    imageUrl: "https://via.placeholder.com/50"
-  },
-  rider5: {
-    name: "Rider 5",
-    phone: "+1-555-5555",
-    activeOrders: 0,
-    imageUrl: "https://via.placeholder.com/50"
-  },
-  rider6: {
-    name: "Rider 6",
-    phone: "+1-555-6666",
-    activeOrders: 0,
-    imageUrl: "https://via.placeholder.com/50"
-  }
-};
+function RiderDashboard() {
+  const userRole = "Admin";
+  const userName = "Lim Alcovendas";
 
-function RiderHome() {
-  const [orders, setOrders] = useState([]);
-  const [tabKey, setTabKey] = useState('active');
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [riderFilter, setRiderFilter] = useState("all");
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 991);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [currentOrderToDeliver, setCurrentOrderToDeliver] = useState(null);
 
-  // For testing: log orders to verify data
   useEffect(() => {
-    console.log("Orders loaded:", orders);
-  }, [orders]);
+    const handleResize = () => {
+      setIsSidebarOpen(window.innerWidth > 991);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      const dropdown = document.querySelector('.dropdown-icon');
+      if (dropdown && !dropdown.contains(event.target)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const [toggle, setToggle] = useState("active");
+  const [orders, setOrders] = useState([]);
+
+  useEffect(() => {
+    setOrders(sampleOrders);
+  }, []);
+
+
+
+  const sampleOrders = [
+    {
+      id: 1,
+      currentStatus: "inTransit",
+      orderedAt: "2023-10-01 10:00 AM",
+      customerName: "Alice Johnson",
+      phone: "+1-1234567890",
+      address: "123 Main St, Springfield",
+      items: [
+        { quantity: 2, name: "Americano", price: 5.00 },
+        { quantity: 1, name: "Croissant", price: 3.50 }
+      ],
+      total: 13.50,
+      assignedRider: "rider1"
+    },
+    {
+      id: 2,
+      currentStatus: "delivered",
+      orderedAt: "2023-10-01 10:30 AM",
+      customerName: "Bob Smith",
+      phone: "+1-1234567891",
+      address: "456 Elm St, Springfield",
+      items: [
+        { quantity: 1, name: "Latte", price: 6.00 },
+        { quantity: 2, name: "Muffin", price: 4.00 }
+      ],
+      total: 14.00,
+      assignedRider: "rider1"
+    },
+    {
+      id: 3,
+      currentStatus: "pending",
+      orderedAt: "2023-10-01 11:00 AM",
+      customerName: "Charlie Brown",
+      phone: "+1-1234567892",
+      address: "789 Oak Ave, Springfield",
+      items: [
+        { quantity: 3, name: "Espresso", price: 4.00 }
+      ],
+      total: 12.00,
+      assignedRider: "rider2"
+    },
+    {
+      id: 4,
+      currentStatus: "inTransit",
+      orderedAt: "2023-10-01 11:30 AM",
+      customerName: "Diana Prince",
+      phone: "+1-1234567893",
+      address: "101 Justice Ln, Metropolis",
+      items: [
+        { quantity: 1, name: "Cappuccino", price: 6.50 },
+        { quantity: 1, name: "Danish", price: 4.50 }
+      ],
+      total: 11.00,
+      assignedRider: "rider2"
+    },
+    {
+      id: 5,
+      currentStatus: "cancelled",
+      orderedAt: "2023-10-01 11:45 AM",
+      customerName: "Clark Kent",
+      phone: "+1-1234567894",
+      address: "300 Krypton Dr, Smallville",
+      items: [
+        { quantity: 2, name: "Hot Chocolate", price: 5.50 }
+      ],
+      total: 11.00,
+      assignedRider: "rider1"
+    },
+    {
+      id: 6,
+      currentStatus: "preparing",
+      orderedAt: "2023-10-01 12:00 PM",
+      customerName: "Bruce Wayne",
+      phone: "+1-1234567895",
+      address: "1007 Mountain Ln, Gotham",
+      items: [
+        { quantity: 1, name: "Americano", price: 5.00 },
+        { quantity: 1, name: "Muffin", price: 4.00 }
+      ],
+      total: 9.00,
+      assignedRider: "rider1"
+    }
+  ];
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentDate(new Date());
+    }, 60000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  const getGreeting = () => {
+    const hour = currentDate.getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+    return "Good evening";
+  };
+
+  const currentDateFormatted = currentDate.toLocaleString("en-US", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
+    hour: "numeric", minute: "numeric",
+  });
 
   const getStatusStyle = (status) => {
     switch (status) {
       case "pending":
-        return { color: "#d39e00", backgroundColor: "#fff3cd" };
+        return { color: "#d39e00", backgroundColor: "#fff3cd", text: "Pending" };
       case "confirmed":
-        return { color: "#198754", backgroundColor: "#d1e7dd" };
+        return { color: "#198754", backgroundColor: "#d1e7dd", text: "Confirmed" };
       case "preparing":
-        return { color: "#2980b9", backgroundColor: "#cfe2ff" };
+        return { color: "#2980b9", backgroundColor: "#cfe2ff", text: "Preparing" };
       case "readyToPickup":
-        return { color: "#8e44ad", backgroundColor: "#e5dbff" };
+        return { color: "#8e44ad", backgroundColor: "#e5dbff", text: "Ready to Pickup" };
       case "pickedUp":
-        return { color: "#0d6efd", backgroundColor: "#cfe2ff" };
+        return { color: "#0d6efd", backgroundColor: "#cfe2ff", text: "Picked Up" };
       case "inTransit":
-        return { color: "#6610f2", backgroundColor: "#e5dbff" };
+        return { color: "#6610f2", backgroundColor: "#e5dbff", text: "In Transit" };
       case "delivered":
-        return { color: "#198754", backgroundColor: "#d1e7dd" };
+        return { color: "#198754", backgroundColor: "#d1e7dd", text: "Delivered" };
       case "cancelled":
-        return { color: "#dc3545", backgroundColor: "#f8d7da" };
+        return { color: "#dc3545", backgroundColor: "#f8d7da", text: "Cancelled" };
       case "returned":
-        return { color: "#fd7e14", backgroundColor: "#ffe5d0" };
+        return { color: "#fd7e14", backgroundColor: "#ffe5d0", text: "Cancelled/Returned" };
       default:
-        return { color: "black", backgroundColor: "transparent" };
+        return { color: "black", backgroundColor: "transparent", text: status };
     }
   };
 
-  const handleStatusChange = (orderId, newStatus) => {
-    const updatedOrders = orders.map(order =>
-      order.id === orderId ? { ...order, currentStatus: newStatus } : order
-    );
-    setOrders(updatedOrders);
-    localStorage.setItem('deliveryOrders', JSON.stringify(updatedOrders));
-  };
+  const filteredOrders = orders
+    .filter(order => {
+      if (toggle === "active") {
+        return !["delivered", "cancelled", "returned"].includes(order.currentStatus);
+      } else if (toggle === "completed") {
+        return order.currentStatus === "delivered";
+      }
+      return true;
+    });
 
-  const handleRiderChange = (orderId, newRider) => {
-    const updatedOrders = orders.map(order =>
-      order.id === orderId ? { ...order, assignedRider: newRider } : order
-    );
-    setOrders(updatedOrders);
-    localStorage.setItem('deliveryOrders', JSON.stringify(updatedOrders));
-  };
 
-  useEffect(() => {
-    const loadOrdersFromStorage = () => {
-      const savedOrders = localStorage.getItem('deliveryOrders');
-      if (savedOrders) {
-        setOrders(JSON.parse(savedOrders));
-      } else {
-        // Fallback sample orders for testing
-        setOrders([
-          {
-            id: "ORD001",
-            currentStatus: "pending",
-            orderedAt: "10:22 PM",
-            customerName: "John Smith",
-            phone: "+1-555-1001",
-            address: "123 Main St, Downtown, City 12345",
-            items: [
-              { name: "Cappuccino (Large)", quantity: 2, price: 11.00 },
-              { name: "Blueberry Muffin", quantity: 1, price: 3.25 }
-            ],
-            total: 14.25,
-            assignedRider: "rider1"
-          },
-          {
-            id: "ORD002",
-            currentStatus: "preparing",
-            orderedAt: "11:15 AM",
-            customerName: "Jane Doe",
-            phone: "+1-555-2002",
-            address: "456 Oak St, Uptown, City 67890",
-            items: [
-              { name: "Latte (Medium)", quantity: 1, price: 4.50 },
-              { name: "Chocolate Croissant", quantity: 2, price: 5.00 }
-            ],
-            total: 9.50,
-            assignedRider: "rider1"
-          },
-          {
-            id: "ORD003",
-            currentStatus: "delivered",
-            orderedAt: "9:45 AM",
-            customerName: "Alice Johnson",
-            phone: "+1-555-3003",
-            address: "789 Pine St, Midtown, City 54321",
-            items: [
-              { name: "Espresso", quantity: 3, price: 9.00 },
-              { name: "Blueberry Scone", quantity: 1, price: 3.00 }
-            ],
-            total: 12.00,
-            assignedRider: "rider1"
+
+  const handleProgressiveStatusChange = (orderId, currentStatus) => {
+    if (currentStatus === 'pickedUp' || currentStatus === 'inTransit') {
+      // For 'Delivered' status, show the modal
+      setCurrentOrderToDeliver(orderId);
+      Swal.fire({
+        title: 'Proof of Delivery',
+        html: '<input type="file" id="delivery-photo" accept="image/*" class="swal2-file-input">',
+        showCancelButton: true,
+        confirmButtonText: 'Mark as Delivered',
+        showLoaderOnConfirm: true,
+        allowOutsideClick: () => !Swal.isLoading(),
+        preConfirm: () => {
+          const file = document.getElementById('delivery-photo').files[0];
+          if (!file) {
+            Swal.showValidationMessage('Please upload a photo.');
+            return false;
           }
-        ]);
-      }
-    };
+          // Simulate an API call for file upload
+          return new Promise((resolve) => {
+            setTimeout(() => {
+              // Here you would handle the file upload to your server
+              console.log('File uploaded:', file.name);
+              resolve();
+            }, 1000);
+          });
+        }
+      }).then((result) => {
+        if (result.isConfirmed) {
+          // If a file was uploaded and confirmed, update the order status
+          setOrders(prevOrders =>
+            prevOrders.map(order =>
+              order.id === orderId ? { ...order, currentStatus: 'delivered', proofOfDelivery: 'uploaded' } : order
+            )
+          );
+          Swal.fire(
+            'Delivered!',
+            'The order has been marked as delivered.',
+            'success'
+          );
+        }
+      });
+    } else {
+      // For other statuses, use the existing confirmation dialog
+      let newStatus = 'pickedUp';
+      let confirmationText = 'Are you sure you want to mark this order as Picked Up?';
 
-    loadOrdersFromStorage();
+      Swal.fire({
+        title: 'Confirm Status Change',
+        text: confirmationText,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Yes, change it!'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          setOrders(prevOrders =>
+            prevOrders.map(order =>
+              order.id === orderId ? { ...order, currentStatus: newStatus } : order
+            )
+          );
+          Swal.fire(
+            'Updated!',
+            'The order status has been changed.',
+            'success'
+          );
+        }
+      });
+    }
+  };
 
-    const handleStorageChange = (e) => {
-      if (e.key === 'deliveryOrders') {
-        loadOrdersFromStorage();
-      }
-    };
+  const statusIcons = {
+    pending: <FaClock />,
+    confirmed: <FaCheckCircle />,
+    preparing: <FaBox />,
+    readyToPickup: <FaTruckPickup />,
+    pickedUp: <FaTruckMoving />,
+    inTransit: <FaTruckMoving />,
+    delivered: <FaCheckCircle />,
+    cancelled: <FaTimesCircle />,
+    returned: <FaUndo />,
+  };
 
-    window.addEventListener('storage', handleStorageChange);
 
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, []);
+
+  // Helper function to render the correct button text
+  const getButtonText = (currentStatus) => {
+    if (["pending", "confirmed", "preparing", "readyToPickup"].includes(currentStatus)) {
+      return 'Picked Up';
+    } else if (["pickedUp", "inTransit"].includes(currentStatus)) {
+      return 'Delivered';
+    } else {
+      return ''; // For other statuses like 'delivered' or 'cancelled'
+    }
+  };
+
+  // Helper function to determine if the button should be rendered at all
+  const shouldRenderButton = (currentStatus) => {
+    return ["readyToPickup", "pickedUp", "inTransit", "preparing", "confirmed", "pending"].includes(currentStatus);
+  };
+
+  // Helper function to determine the button's class name
+  const getButtonClass = (currentStatus) => {
+    if (currentStatus === 'pickedUp' || currentStatus === 'inTransit') {
+      return 'delivered';
+    } else if (currentStatus === 'readyToPickup' || currentStatus === 'pending' || currentStatus === 'confirmed' || currentStatus === 'preparing') {
+      return 'pickedUp';
+    }
+    return '';
+  };
+
+  const navigateToDashboard = () => {
+    window.location.href = "/rider/home";
+  };
+
+  const navigateToHistory = () => {
+    window.location.href = "/rider/riderhistory";
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("access_token");
+    window.location.href = "http://localhost:4002/";
+  };
 
   return (
-    <>
-      <Container fluid className="riderhome-container" style={{ backgroundColor: "#a3d3d8", borderRadius: "8px", padding: "20px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "15px", marginBottom: "15px", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-            <img src={riderImage} alt="Rider" style={{ width: "60px", height: "60px", borderRadius: "50%", marginTop: "1.5rem" }} />
-            <span style={{ color: "#4b929d", fontWeight: "600", fontSize: "1.2rem", marginTop: "1.5rem" }}>Rider 1</span>
-          </div>
-
-
-          <div style={{ position: "relative", display: "flex", alignItems: "center", gap: "20px", fontSize: "24px", color: "white", cursor: "pointer" }}>
-            <FaBell color="white" />
-            <div style={{ position: "relative" }}>
-              <div onClick={() => setDropdownOpen(!dropdownOpen)} style={{ color: "white", display: "flex", alignItems: "center", cursor: "pointer" }}>
-                <FaBars color="white" />
-                <FaChevronDown style={{ marginLeft: "4px" }} />
-              </div>
-{dropdownOpen && (
-  <div style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "white", border: "1px solid #ccc", borderRadius: "4px", boxShadow: "0 2px 8px rgba(0,0,0,0.15)", zIndex: 1000, minWidth: "90px" }}>
-    <ul style={{ listStyle: "none", margin: 0, padding: "4px 0" }}>
-      <li
-        onClick={() => window.location.reload()}
-        style={{ cursor: "pointer", padding: "4px 8px", display: "flex", alignItems: "center", gap: "4px", color: "#4b929d", fontSize: "1rem" }}
-        onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f0f0f0"}
-        onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
-      >
-        <FaSyncAlt size={14} /> Refresh
-      </li>
-      <li
-        onClick={() => alert('Logout clicked')}
-        style={{ cursor: "pointer", padding: "2px 8px", display: "flex", alignItems: "center", gap: "4px", color: "#dc3545", fontSize: "1rem" }}
-        onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8d7da"}
-        onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
-      >
-        <FaSignOutAlt size={14} /> Logout
-      </li>
-    </ul>
-  </div>
-)}
-            </div>
-          </div>
+    <div className="rider-dashboard-container">
+      <div className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
+        <div className="sidebar-header">
+          <img src={logoImage} alt="Logo" className="logo" />
         </div>
-        <div style={{ display: "flex", justifyContent: "space-around", gap: "20px", flexWrap: "wrap" }}>
-          <Card style={{ flex: "1", minWidth: "150px", padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", backgroundColor: "white", color: "#4b929d", borderRadius: "8px" }}>
-            <FaBoxOpen size={32} color="#964b00" />
-            <span style={{ fontSize: "1rem", fontWeight: "400" }}>Active Orders</span>
-            <span style={{ fontSize: "1.2rem", fontWeight: "700", textAlign: "center" }}>
-              {orders.filter(order => order.assignedRider === "rider1" &&
-                !["delivered", "cancelled", "returned"].includes(order.currentStatus)).length} orders
-            </span>
-          </Card>
-          <Card style={{ flex: "1", minWidth: "150px", padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", backgroundColor: "white", color: "#4b929d", borderRadius: "8px" }}>
-            <FaCheckCircle size={32} color="#198754" />
-            <span style={{ fontSize: "1rem", fontWeight: "400" }}>Completed</span>
-            <span style={{ fontSize: "1.2rem", fontWeight: "700", textAlign: "center" }}>
-              {orders.filter(order => order.assignedRider === "rider1" && order.currentStatus === "delivered").length} orders
-            </span>
-          </Card>
-          <Card style={{ flex: "1", minWidth: "150px", padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", backgroundColor: "white", color: "#4b929d", borderRadius: "8px" }}>
-            <FaDollarSign size={32} color="#fd7e14" />
-            <span style={{ fontSize: "1rem", fontWeight: "400" }}>Earnings</span>
-            <span style={{ fontSize: "1.2rem", fontWeight: "700", textAlign: "center" }}>
-              ₱{orders.filter(order => order.assignedRider === "rider1" && order.currentStatus === "delivered")
-                .reduce((sum, order) => sum + (order.total || 0), 0).toFixed(2)}
-            </span>
-          </Card>
-        </div>
-      </Container>
-      <div style={{ marginTop: "1px" }}>
-        <Tabs
-          id="order-tabs"
-          activeKey={tabKey}
-          onSelect={(k) => setTabKey(k)}
-          className="mb-3"
-          style={{ backgroundColor: "white", borderRadius: "8px", padding: "10px" }}
-        >
-          <Tab eventKey="active" title="Active Orders">
-            <div className={`active-orders-container ${orders.filter(order => order.assignedRider === "rider1" && !["delivered", "cancelled", "returned"].includes(order.currentStatus)).length === 2 ? "two-cards" : ""}`}>
-              {orders.filter(order => order.assignedRider === "rider1" &&
-                !["delivered", "cancelled", "returned"].includes(order.currentStatus)).length === 0 ? (
-                <p>No active orders.</p>
-              ) : (
-                orders.filter(order => order.assignedRider === "rider1" &&
-                  !["delivered", "cancelled", "returned"].includes(order.currentStatus)).map(order => (
-                  <Card key={order.id} className="active-order-card" style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "300px", marginBottom: "15px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
-                      <h5 style={{ color: "#4b929d" }}>Order #{order.id}</h5>
-                      <p style={{
-                        fontWeight: "600",
-                        marginBottom: "5px",
-                        color: getStatusStyle(order.currentStatus).color,
-                        backgroundColor: getStatusStyle(order.currentStatus).backgroundColor,
-                        padding: "4px 8px",
-                        borderRadius: "4px",
-                        minWidth: "110px",
-                        textAlign: "center"
-                      }}>
-                        {{
-                          pending: "Pending",
-                          confirmed: "Confirmed",
-                          preparing: "Preparing",
-                          readyToPickup: "Ready to Pickup",
-                          pickedUp: "Picked Up",
-                          inTransit: "In transit",
-                          delivered: "Delivered",
-                          cancelled: "Cancelled",
-                          returned: "Cancelled/Returned"
-                        }[order.currentStatus] || order.currentStatus}
-                      </p>
-                    </div>
-                    <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaClock color="#4b929d" /> Ordered at {order.orderedAt}</p>
-                    <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "black" }}><FaUser color="#4b929d" /> {order.customerName}</p>
-                    <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "black" }}><FaPhone color="#4b929d" /> {order.phone.replace(/^\+1-/, "63")}</p>
-                    <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "black" }}><FaMapMarkerAlt color="#4b929d" /> {order.address}</p>
-                    <p style={{ fontWeight: "600", marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "black" }}><FaBox color="#4b929d" /> Items ({order.items.length})</p>
-                    {order.items.map((item, i) => (
-                      <p key={i} style={{ marginBottom: "3px", alignSelf: "flex-start", color: "black", display: "flex", justifyContent: "space-between", width: "100%" }}>
-                        <span>{item.quantity}x {item.name}</span>
-                        <span style={{ marginLeft: "auto" }}>₱{item.price.toFixed(2)}</span>
-                      </p>
-                    ))}
-                    <hr style={{ alignSelf: "stretch" }} />
-                    <p style={{ fontWeight: "600", marginBottom: "0", alignSelf: "flex-start", color: "black", display: "flex", justifyContent: "space-between", width: "100%" }}>
-                      <span>Total</span>
-                      <span style={{ marginLeft: "auto" }}>₱{order.total.toFixed(2)}</span>
-                    </p>
-                    {!order.assignedRider && (
-                      <p style={{ backgroundColor: "#fff3cd", padding: "8px", borderRadius: "4px", marginTop: "10px", color: "#856404", width: "100%" }}>
-                        Note: Please call when arrived
-                      </p>
-                    )}
-                    {order.assignedRider && (
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "10px", width: "100%", backgroundColor: "#f0f0f0", padding: "10px", borderRadius: "6px" }}>
-                        <img src={riderImage} alt={order.assignedRider} style={{ width: "50px", height: "50px", borderRadius: "50%" }} />
-                        <div>
-                          <div style={{ fontWeight: "600" }}>{order.assignedRider}</div>
-                          <div>{riders[order.assignedRider]?.phone}</div>
-                          <div>Active Orders: {riders[order.assignedRider]?.activeOrders}</div>
-                        </div>
-                      </div>
-                    )}
-                    <div style={{ marginTop: "10px", width: "100%" }}>
-                      <label htmlFor={`assignRider-${order.id}`} style={{ fontWeight: "600", marginBottom: "5px", display: "block" }}>Assign Rider</label>
-                      <Form.Select
-                        id={`assignRider-${order.id}`}
-                        value={order.assignedRider || ""}
-                        onChange={(e) => handleRiderChange(order.id, e.target.value)}
-                      >
-                        <option value="">Select Rider</option>
-                        <option value="rider1">Rider 1</option>
-                        <option value="rider2">Rider 2</option>
-                        <option value="rider3">Rider 3</option>
-                        <option value="rider4">Rider 4</option>
-                        <option value="rider5">Rider 5</option>
-                        <option value="rider6">Rider 6</option>
-                      </Form.Select>
-                      <label htmlFor={`orderStatus-${order.id}`} style={{ fontWeight: "600", marginBottom: "5px", display: "block", marginTop: "10px" }}>Order Status</label>
-                      <Form.Select
-                        id={`orderStatus-${order.id}`}
-                        value={order.currentStatus || ""}
-                        onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="confirmed">Confirmed</option>
-                        <option value="preparing">Preparing</option>
-                        <option value="pickedUp">Picked Up</option>
-                        <option value="inTransit">In transit</option>
-                        <option value="delivered">Delivered</option>
-                        <option value="returned">Cancelled/Returned</option>
-                      </Form.Select>
-                    </div>
-                  </Card>
-                ))
-              )}
-            </div>
-          </Tab>
-          <Tab eventKey="completed" title="Completed">
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", justifyContent: "flex-start" }}>
-              {orders.filter(order => order.assignedRider === "rider1" && order.currentStatus === "delivered").length === 0 ? (
-                <p>No completed orders.</p>
-              ) : (
-                orders.filter(order => order.assignedRider === "rider1" && order.currentStatus === "delivered").map(order => (
-                  <Card key={order.id} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "300px", marginBottom: "15px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
-                      <h5 style={{ color: "#4b929d" }}>Order #{order.id}</h5>
-                      <p style={{
-                        fontWeight: "600",
-                        marginBottom: "5px",
-                        color: getStatusStyle(order.currentStatus).color,
-                        backgroundColor: getStatusStyle(order.currentStatus).backgroundColor,
-                        padding: "4px 8px",
-                        borderRadius: "4px",
-                        minWidth: "110px",
-                        textAlign: "center"
-                      }}>
-                        {{
-                          pending: "Pending",
-                          confirmed: "Confirmed",
-                          preparing: "Preparing",
-                          readyToPickup: "Ready to Pickup",
-                          pickedUp: "Picked Up",
-                          inTransit: "In transit",
-                          delivered: "Delivered",
-                          cancelled: "Cancelled",
-                          returned: "Cancelled/Returned"
-                        }[order.currentStatus] || order.currentStatus}
-                      </p>
-                    </div>
-                    <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaClock color="#4b929d" /> Ordered at {order.orderedAt}</p>
-                    <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "black" }}><FaUser color="#4b929d" /> {order.customerName}</p>
-                    <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "black" }}><FaPhone color="#4b929d" /> {order.phone.replace(/^\+1-/, "63")}</p>
-                    <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "black" }}><FaMapMarkerAlt color="#4b929d" /> {order.address}</p>
-                    <p style={{ fontWeight: "600", marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "black" }}><FaBox color="#4b929d" /> Items ({order.items.length})</p>
-                    {order.items.map((item, i) => (
-                      <p key={i} style={{ marginBottom: "3px", alignSelf: "flex-start", color: "black", display: "flex", justifyContent: "space-between", width: "100%" }}>
-                        <span>{item.quantity}x {item.name}</span>
-                        <span style={{ marginLeft: "auto" }}>₱{item.price.toFixed(2)}</span>
-                      </p>
-                    ))}
-                    <hr style={{ alignSelf: "stretch" }} />
-                    <p style={{ fontWeight: "600", marginBottom: "0", alignSelf: "flex-start", color: "black", display: "flex", justifyContent: "space-between", width: "100%" }}>
-                      <span>Total</span>
-                      <span style={{ marginLeft: "auto" }}>₱{order.total.toFixed(2)}</span>
-                    </p>
-                    {!order.assignedRider && (
-                      <p style={{ backgroundColor: "#fff3cd", padding: "8px", borderRadius: "4px", marginTop: "10px", color: "#856404", width: "100%" }}>
-                        Note: Please call when arrived
-                      </p>
-                    )}
-                    {order.assignedRider && (
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "10px", width: "100%", backgroundColor: "#f0f0f0", padding: "10px", borderRadius: "6px" }}>
-                        <img src={riderImage} alt={order.assignedRider} style={{ width: "50px", height: "50px", borderRadius: "50%" }} />
-                        <div>
-                          <div style={{ fontWeight: "600" }}>{order.assignedRider}</div>
-                          <div>{riders[order.assignedRider]?.phone}</div>
-                          <div>Active Orders: {riders[order.assignedRider]?.activeOrders}</div>
-                        </div>
-                      </div>
-                    )}
-                    <div style={{ marginTop: "10px", width: "100%" }}>
-                      <label htmlFor={`assignRider-${order.id}`} style={{ fontWeight: "600", marginBottom: "5px", display: "block" }}>Assign Rider</label>
-                      <Form.Select
-                        id={`assignRider-${order.id}`}
-                        value={order.assignedRider || ""}
-                        onChange={(e) => handleRiderChange(order.id, e.target.value)}
-                      >
-                        <option value="">Select Rider</option>
-                        <option value="rider1">Rider 1</option>
-                        <option value="rider2">Rider 2</option>
-                        <option value="rider3">Rider 3</option>
-                        <option value="rider4">Rider 4</option>
-                        <option value="rider5">Rider 5</option>
-                        <option value="rider6">Rider 6</option>
-                      </Form.Select>
-                      <label htmlFor={`orderStatus-${order.id}`} style={{ fontWeight: "600", marginBottom: "5px", display: "block", marginTop: "10px" }}>Order Status</label>
-                      <Form.Select
-                        id={`orderStatus-${order.id}`}
-                        value={order.currentStatus || ""}
-                        onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="confirmed">Confirmed</option>
-                        <option value="preparing">Preparing</option>
-                        <option value="pickedUp">Picked Up</option>
-                        <option value="inTransit">In transit</option>
-                        <option value="delivered">Delivered</option>
-                        <option value="returned">Cancelled/Returned</option>
-                      </Form.Select>
-                    </div>
-                  </Card>
-                ))
-              )}
-            </div>
-          </Tab>
-        </Tabs>
+        <ul className="sidebar-menu">
+          <li onClick={navigateToDashboard} style={{ cursor: 'pointer' }}>
+            <FaHome />
+            {isSidebarOpen && <span>Dashboard</span>}
+          </li>
+          <li onClick={navigateToHistory} style={{ cursor: 'pointer' }}>
+            <FaHistory />
+            {isSidebarOpen && <span>History</span>}
+          </li>
+          <li onClick={handleLogout} style={{ cursor: 'pointer' }}>
+            <FaCog />
+            {isSidebarOpen && <span>Logout</span>}
+          </li>
+        </ul>
       </div>
-    </>
+
+      <div className="main-content">
+        <header className="manage-header">
+          <div className="header-left">
+            <button className="menu-toggle" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
+              <FaBars />
+            </button>
+            <h2 className="page-title">Rider Dashboard</h2>
+          </div>
+          <div className="header-right">
+            <div className="header-date">{currentDateFormatted}</div>
+            <div className="header-profile">
+              <div className="bell-icon"><FaBell className="bell-outline" /></div>
+              <div className="profile-pic" style={{ backgroundImage: `url(${riderImage})` }}></div>
+              <div className="profile-info">
+                <div className="profile-role">{getGreeting()}! I'm {userRole}</div>
+                <div className="profile-name">{userName}</div>
+              </div>
+              <div className="dropdown-icon" onClick={() => setDropdownOpen(!dropdownOpen)}>
+                <FaChevronDown className={dropdownOpen ? "icon-rotated" : ""} />
+                {dropdownOpen && (
+                  <div className="profile-dropdown">
+                    <ul className="dropdown-menu-list">
+                      <li onClick={() => window.location.reload()}>
+                        <FaUndo /> Refresh
+                      </li>
+                      <li onClick={() => { localStorage.removeItem("access_token"); window.location.href = "http://localhost:4002/"; }}>
+                        <FaSignOutAlt /> Logout
+                      </li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <Container fluid className="dashboard-summary-container" style={{ backgroundColor: "#a3d3d8" }}>
+          <div className="rider-selector-group">
+            <div className="rider-info-display">
+              <img src={riderImage} alt="John Doe" className="rider-profile-pic" />
+              <span className="rider-name-text">John Doe</span>
+            </div>
+          </div>
+          <div className="summary-cards-container">
+            <Card className="summary-card">
+              <FaBoxOpen size={32} color="#964b00" />
+              <span className="card-title">Active Orders</span>
+              <span className="card-value">
+                {orders.filter(order => !["delivered", "cancelled", "returned"].includes(order.currentStatus)).length} orders
+              </span>
+            </Card>
+            <Card className="summary-card">
+              <FaCheckCircle size={32} color="#198754" />
+              <span className="card-title">Completed</span>
+              <span className="card-value">
+                {orders.filter(order => order.currentStatus === "delivered").length} orders
+              </span>
+            </Card>
+            <Card className="summary-card">
+              <FaDollarSign size={32} color="#fd7e14" />
+              <span className="card-title">Earnings</span>
+              <span className="card-value">
+                ₱{orders.filter(order => order.currentStatus === "delivered").reduce((sum, order) => sum + order.total, 0).toFixed(2)}
+              </span>
+            </Card>
+          </div>
+        </Container>
+
+        <div className="toggle-buttons-container">
+          <button
+            className={`toggle-button ${toggle === "active" ? "active" : ""}`}
+            onClick={() => setToggle("active")}
+          >
+            Active Orders
+          </button>
+          <button
+            className={`toggle-button ${toggle === "all" ? "active" : ""}`}
+            onClick={() => setToggle("all")}
+          >
+            All Orders
+          </button>
+          <button
+            className={`toggle-button ${toggle === "completed" ? "active" : ""}`}
+            onClick={() => setToggle("completed")}
+          >
+            Completed
+          </button>
+        </div>
+
+        <div className="order-list-heading">
+          {toggle === "active" && <div>Showing Active Orders</div>}
+          {toggle === "all" && <div>Showing All Orders</div>}
+          {toggle === "completed" && <div>Showing Completed Orders</div>}
+        </div>
+
+        <div className="order-cards-container">
+          {filteredOrders.length === 0 ? (
+            <div className="no-orders-message">
+              <FaBoxOpen size={50} color="#ccc" />
+              <p>No orders to show.</p>
+            </div>
+          ) : (
+            filteredOrders.map((order) => (
+              <Card key={order.id} className="order-card">
+                <div className="order-header">
+                  <h5 className="order-id">Order #{order.id}</h5>
+                  <div className="status-tag" style={{ color: getStatusStyle(order.currentStatus).color, backgroundColor: getStatusStyle(order.currentStatus).backgroundColor }}>
+                    {statusIcons[order.currentStatus]} {getStatusStyle(order.currentStatus).text}
+                  </div>
+                </div>
+                <div className="order-details">
+                  <p className="detail-item"><FaClock color="#4b929d" /> Ordered at: <span className="detail-value">{order.orderedAt}</span></p>
+                  <p className="detail-item"><FaUser color="#4b929d" /> Customer: <span className="detail-value">{order.customerName}</span></p>
+                  <p className="detail-item"><FaPhone color="#4b929d" /> Phone: <span className="detail-value">{order.phone.replace(/^\+1-/, "+63 ")}</span></p>
+                  <p className="detail-item"><FaMapMarkerAlt color="#4b929d" /> Address: <span className="detail-value">{order.address}</span></p>
+                </div>
+                <div className="order-items-section">
+                  <h6><FaBox color="#4b929d" /> Items ({order.items?.length || 0})</h6>
+                  <ul className="item-list">
+                    {order.items?.map((item, i) => (
+                      <li key={i} className="item-row">
+                        <span>{item.quantity}x {item.name}</span>
+                        <span>₱{item.price.toFixed(2)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <hr className="divider" />
+                <div className="order-total-section">
+                  <span className="total-label">Total:</span>
+                  <span className="total-value">₱{order.total?.toFixed(2) || "0.00"}</span>
+                </div>
+                <div className="order-actions">
+                  {shouldRenderButton(order.currentStatus) && (
+                    <Button
+                        variant="primary"
+                        className={`status-change-button ${getButtonClass(order.currentStatus)}`}
+                        onClick={() => handleProgressiveStatusChange(order.id, order.currentStatus)}
+                    >
+                        {getButtonText(order.currentStatus)}
+                    </Button>
+                  )}
+                </div>
+              </Card>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
-export default RiderHome;
+export default RiderDashboard;

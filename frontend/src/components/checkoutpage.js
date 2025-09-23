@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { CartContext } from '../contexts/CartContext';
+import Swal from 'sweetalert2';
 
 const CheckoutPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { clearCart } = useContext(CartContext);
   const { cartItems = [], orderType = 'Pick Up', paymentMethod = 'Cash' } = location.state || {};
 
   const [userData, setUserData] = useState({
@@ -18,11 +21,6 @@ const CheckoutPage = () => {
     province: '',
     landmark: '',
   });
-
-  // Modal states
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [showErrorModal, setShowErrorModal] = useState(false);
-  const [modalMessage, setModalMessage] = useState('');
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -79,8 +77,11 @@ const CheckoutPage = () => {
       localStorage.removeItem("pendingOrderData");
       confirmPayment(JSON.parse(savedData));
     } else if (status === "fail") {
-      setModalMessage("Payment was unsuccessful. Please try again.");
-      setShowErrorModal(true);
+      Swal.fire({
+        icon: 'error',
+        title: 'Payment Failed',
+        text: 'Payment was unsuccessful. Please try again.',
+      });
     }
   }, []);
 
@@ -144,8 +145,14 @@ const CheckoutPage = () => {
       const result = await response.json();
 
       if (response.ok) {
-        setModalMessage("Order placed successfully!");
-        setShowSuccessModal(true);
+        Swal.fire({
+          icon: 'success',
+          title: 'Success',
+          text: 'Order placed successfully!',
+        }).then(() => {
+          clearCart();
+          navigate("/profile/orderhistory");
+        });
         localStorage.removeItem("pendingOrderData");
       } else {
         console.error("❌ Backend Validation Error:");
@@ -158,17 +165,39 @@ const CheckoutPage = () => {
           console.error("❌ Server Error:", result.detail);
         }
 
-        setModalMessage("Failed to confirm order. Please try again.");
-        setShowErrorModal(true);
+        Swal.fire({
+          icon: 'error',
+          title: 'Order Failed',
+          text: 'Failed to confirm order. Please try again.',
+        });
       }
     } catch (error) {
       console.error("Payment confirmation error:", error);
-      setModalMessage("An error occurred while processing your payment.");
-      setShowErrorModal(true);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'An error occurred while processing your payment.',
+      });
     }
   };
 
   const handlePlaceOrder = async () => {
+    Swal.fire({
+      title: 'Confirm Checkout',
+      text: 'Are you sure you want to place the order?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, place order',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true,
+    }).then((result) => {
+      if (result.isConfirmed) {
+        proceedPlaceOrder();
+      }
+    });
+  };
+
+  const proceedPlaceOrder = async () => {
     const token = localStorage.getItem("authToken");
     if (!token) return;
 
@@ -183,8 +212,11 @@ const CheckoutPage = () => {
       const missingFields = requiredFields.filter(field => !userData[field]);
       
       if (missingFields.length > 0) {
-        setModalMessage(`Please fill in all required fields: ${missingFields.join(', ')}`);
-        setShowErrorModal(true);
+        Swal.fire({
+          icon: 'error',
+          title: 'Missing Fields',
+          text: `Please fill in all required fields: ${missingFields.join(', ')}`,
+        });
         return;
       }
     }
@@ -219,71 +251,24 @@ const CheckoutPage = () => {
       if (data.checkout_url) {
         window.location.href = data.checkout_url;
       } else {
-        setModalMessage("Failed to initiate payment");
-        setShowErrorModal(true);
+        Swal.fire({
+          icon: 'error',
+          title: 'Payment Failed',
+          text: 'Failed to initiate payment',
+        });
       }
     } catch (error) {
       console.error("Error:", error);
-      setModalMessage("An error occurred during payment processing");
-      setShowErrorModal(true);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'An error occurred during payment processing',
+      });
     }
-  };
-
-  const handleCloseSuccessModal = () => {
-    setShowSuccessModal(false);
-    navigate("/profile/orderhistory");
-  };
-
-  const handleCloseErrorModal = () => {
-    setShowErrorModal(false);
   };
 
   return (
     <div className="container py-5" style={{ minHeight: '100vh', marginTop: '100px' }}>
-      {/* Success Modal */}
-      <div className={`modal fade ${showSuccessModal ? 'show' : ''}`} style={{ display: showSuccessModal ? 'block' : 'none' }} id="successModal" tabIndex="-1" aria-labelledby="successModalLabel" aria-hidden="true">
-        <div className="modal-dialog modal-dialog-centered">
-          <div className="modal-content">
-            <div className="modal-header bg-success">
-              <h5 className="modal-title" id="successModalLabel" style={{ color: 'black' }}>Success!</h5>
-              <button type="button" className="btn-close" onClick={handleCloseSuccessModal} aria-label="Close"></button>
-            </div>
-            <div className="modal-body">
-              <div className="text-center">
-                <i className="bi bi-check-circle-fill text-success" style={{ fontSize: '3rem' }}></i>
-                <p className="mt-3" style={{ color: 'black' }}>{modalMessage}</p>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="btn btn-success" onClick={handleCloseSuccessModal}>Continue</button>
-            </div>
-          </div>
-        </div>
-      </div>
-      {showSuccessModal && <div className="modal-backdrop fade show"></div>}
-
-      {/* Error Modal */}
-      <div className={`modal fade ${showErrorModal ? 'show' : ''}`} style={{ display: showErrorModal ? 'block' : 'none' }} id="errorModal" tabIndex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
-        <div className="modal-dialog modal-dialog-centered">
-          <div className="modal-content">
-            <div className="modal-header bg-danger">
-              <h5 className="modal-title" id="errorModalLabel" style={{ color: 'black' }}>Error</h5>
-              <button type="button" className="btn-close" onClick={handleCloseErrorModal} aria-label="Close"></button>
-            </div>
-            <div className="modal-body">
-              <div className="text-center">
-                <i className="bi bi-exclamation-triangle-fill text-danger" style={{ fontSize: '3rem' }}></i>
-                <p className="mt-3" style={{ color: 'black' }}>{modalMessage}</p>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="btn btn-danger" onClick={handleCloseErrorModal}>Close</button>
-            </div>
-          </div>
-        </div>
-      </div>
-      {showErrorModal && <div className="modal-backdrop fade show"></div>}
-
       <div className="bg-white p-4 rounded">
         <h2 className="mb-4" style={{ color: '#4B929D', textAlign: 'left' }}>Checkout</h2>
         <table className="table">
@@ -339,14 +324,14 @@ const CheckoutPage = () => {
             <div style={{ flex: 1, color: '#4B929D', textAlign: 'left', marginBottom: '5px' }}>Last Name <span style={{ color: 'red' }}>*</span></div>
           </div>
           <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-            <input type="text" placeholder="First Name" style={{ flex: 1, padding: '8px' }} value={userData.firstName} onChange={e => handleInputChange('firstName', e.target.value)} />
-            <input type="text" placeholder="Middle Name" style={{ flex: 1, padding: '8px' }} value={userData.middleName} onChange={e => handleInputChange('middleName', e.target.value)} />
-            <input type="text" placeholder="Last Name" style={{ flex: 1, padding: '8px' }} value={userData.lastName} onChange={e => handleInputChange('lastName', e.target.value)} />
+            <input type="text" placeholder="First Name" style={{ flex: 1, padding: '8px', backgroundColor: '#d0e7f9' }} value={userData.firstName} readOnly />
+            <input type="text" placeholder="Middle Name" style={{ flex: 1, padding: '8px', backgroundColor: '#d0e7f9' }} value={userData.middleName} readOnly />
+            <input type="text" placeholder="Last Name" style={{ flex: 1, padding: '8px', backgroundColor: '#d0e7f9' }} value={userData.lastName} readOnly />
           </div>
           <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
             <div style={{ flex: 1, color: '#4B929D', textAlign: 'left', marginTop: '10px' }}>Block, Street, Subdivision <span style={{ color: 'red' }}>*</span></div>
             <div style={{ flex: 1, color: '#4B929D', textAlign: 'left', marginTop: '10px' }}>City <span style={{ color: 'red' }}>*</span></div>
-            <div style={{ flex: 1, color: '#4B929D', textAlign: 'left', marginTop: '10px' }}>Province <span style={{ color: 'red' }}>*</span></div>
+            <div style={{ flex: 1, color: '#4B929D', textAlign: 'left', marginTop: '10px' }}>Baranggay <span style={{ color: 'red' }}>*</span></div>
           </div>
           <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
             <input type="text" placeholder="Block, Street, Subdivision" style={{ flex: 1, padding: '8px' }} value={userData.blockStreetSubdivision} onChange={e => handleInputChange('blockStreetSubdivision', e.target.value)} />
