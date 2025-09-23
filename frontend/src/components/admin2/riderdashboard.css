@@ -1,0 +1,605 @@
+/* General Layout */
+.rider-dashboard-container {
+  display: flex;
+  min-height: 100vh;
+  background-color: #f0f2f5;
+  font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  color: #333;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 250px;
+  background-color: #fff;
+  color: #666;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.3s ease-in-out, background-color 0.3s ease, transform 0.3s ease;
+  position: sticky;
+  top: 0;
+  left: 0;
+  height: auto;
+  z-index: 1000;
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* Collapsed Sidebar State */
+.sidebar:not(.open) {
+  width: 80px; /* Adjust this value for how collapsed you want it to be */
+}
+
+/* Sidebar hover effect */
+.sidebar:hover {
+  background-color: #f8f9fa !important;
+}
+
+/* Sidebar active/open state */
+.sidebar.open {
+  width: 250px;
+}
+
+/* Show sidebar by default on desktop */
+@media (min-width: 992px) {
+  .sidebar {
+    width: 250px;
+    transform: translateX(0); /* Show sidebar by default on desktop */
+  }
+
+  .sidebar:not(.open) {
+    width: 80px;
+  }
+}
+
+/* Hide sidebar on mobile by default */
+@media (max-width: 991px) {
+  .sidebar {
+    position: fixed;
+    height: 100%;
+    transform: translateX(-100%);
+    width: 250px;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+}
+
+/* -- BEGIN: NEW LOGO AND ICON STYLES -- */
+
+/* Adjust logo size based on sidebar state */
+.sidebar .logo {
+  height: 110px;
+  transition: height 0.3s ease;
+}
+
+.sidebar:not(.open) .logo {
+  height: 40px; /* Smaller logo height when collapsed */
+  align-items: center;
+}
+
+
+/* Adjust icon size when sidebar is collapsed */
+.sidebar:not(.open) .sidebar-menu li svg {
+  font-size: 2rem; /* Bigger icon size */
+  width: 2rem; /* Make the SVG element's width match the font-size */
+  height: 2rem; /* Make the SVG element's height match the font-size */
+}
+
+/* Adjust list item padding when sidebar is collapsed to center the icon */
+.sidebar:not(.open) .sidebar-menu li {
+  justify-content: center; /* Horizontally center the icon */
+  padding: 15px; /* Adjust padding to make items taller and centered */
+}
+
+/* -- END: NEW LOGO AND ICON STYLES -- */
+
+.logo-wrapper {
+  text-align: center;
+  margin: 20px 0;
+}
+
+.logo-wrapper.collapsed .logo {
+  height: 50px;
+  margin-bottom: 50px;
+  margin-top: 50px;
+}
+
+.logo {
+  height: 110px;
+  width: auto;
+  display: block;
+  margin: 0 auto;
+  transition: height 0.3s ease;
+}
+
+.sidebar-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #3c546a;
+}
+
+.sidebar-menu {
+  list-style: none;
+  padding: 0;
+  margin: 20px 0;
+  flex-grow: 1;
+}
+
+.sidebar-menu li {
+  padding: 12px 15px;
+  margin-bottom: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: background-color 0.2s, transform 0.2s;
+}
+
+.sidebar-menu li:hover {
+  background-color: #bfc5ca !important;
+  color: #4b929d !important;
+  transform: translateX(5px);
+}
+
+.menu-toggle {
+  background: transparent;
+  border: none;
+  color: #4b929d;
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.menu-toggle:hover {
+  background-color: #f8f9fa;
+  color: #007b99;
+}
+
+/* Show menu toggle on all screen sizes */
+
+/* Main Content */
+.main-content {
+  flex-grow: 1;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.page-title {
+  color: #2c3e50;
+  font-weight: 700;
+  margin: 0;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.header-date {
+  color: #7f8c8d;
+  font-size: 0.9rem;
+}
+
+.header-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+}
+
+.profile-pic {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
+  border: 2px solid #4b929d;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+}
+
+.profile-info {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.profile-role {
+  color: #7f8c8d;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.profile-name {
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+.bell-icon {
+  font-size: 1.2rem;
+  color: #7f8c8d;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.bell-icon:hover {
+  color: #4b929d;
+}
+
+.dropdown-icon {
+  cursor: pointer;
+  transition: transform 0.3s;
+}
+
+.dropdown-icon .icon-rotated {
+  transform: rotate(180deg);
+}
+
+.profile-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background-color: #fff;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  min-width: 150px;
+  padding: 8px 0;
+  margin-top: 10px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dropdown-menu-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.dropdown-menu-list li {
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  color: #555;
+}
+
+.dropdown-menu-list li:hover {
+  background-color: #f8f9fa;
+}
+
+.dropdown-menu-list li:last-child:hover {
+  background-color: #f8d7da;
+}
+
+.dropdown-menu-list li svg {
+  color: #4b929d;
+}
+
+.dropdown-menu-list li:last-child svg {
+  color: #dc3545;
+}
+
+/* Dashboard Summary */
+.dashboard-summary-container {
+  border-radius: 12px;
+  padding: 10px;
+  margin-bottom: 15px;
+  transition: background-color 0.5s ease-in-out;
+}
+
+.rider-selector-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 15px;
+}
+
+.rider-info-display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rider-profile-pic {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #fff;
+}
+
+.rider-name-text {
+  color: #2c3e50;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.rider-select {
+  height: 35px;
+  min-width: 160px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #555;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background-color: #fff;
+  padding: 0 8px;
+}
+
+.summary-cards-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 15px;
+}
+
+.summary-card {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background-color: #fff;
+  color: #2c3e50;
+  border-radius: 10px;
+  border: none;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s;
+}
+
+.summary-card:hover {
+  transform: translateY(-3px);
+}
+
+.card-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #7f8c8d;
+}
+
+.card-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  text-align: center;
+  color: #2c3e50;
+}
+
+/* Toggle Buttons */
+.toggle-buttons-container {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 20px;
+  margin-bottom: 20px;
+  background-color: #fff;
+  border-radius: 25px;
+  padding: 5px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.toggle-button {
+  padding: 10px 20px;
+  border: none;
+  cursor: pointer;
+  background-color: transparent;
+  color: #7f8c8d;
+  font-weight: 600;
+  transition: background-color 0.3s, color 0.3s;
+  border-radius: 20px;
+}
+
+.toggle-button.active {
+  background-color: #4b929d;
+  color: #fff;
+}
+
+.order-list-heading {
+  font-weight: 600;
+  color: #7f8c8d;
+  margin-bottom: 20px;
+  font-size: 1.1rem;
+}
+
+/* Order Cards */
+.order-cards-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 25px;
+}
+
+.order-card {
+  padding: 20px;
+  text-align: left;
+  background-color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e0e0e0;
+  display: flex;
+  flex-direction: column;
+}
+
+.order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  width: 100%;
+}
+
+.order-id {
+  color: #2c3e50;
+  font-weight: 700;
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.status-tag {
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 20px;
+  min-width: 120px;
+  text-align: center;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.order-details,
+.order-items-section {
+  margin-bottom: 15px;
+}
+
+.detail-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  color: #555;
+  font-size: 0.95rem;
+}
+
+.detail-value {
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+.order-items-section {
+  margin-bottom: 15px;
+}
+
+.order-items-section .detail-item {
+  margin-bottom: 8px;
+}
+
+.item-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.item-row {
+  margin-bottom: 5px;
+  font-size: 0.9rem;
+  color: #777;
+}
+
+.divider {
+  background-color: #333!important;
+  margin: 15px 0;
+  opacity: 1;
+  border: none;
+  height: 1px;
+  width: 100%;
+}
+
+.order-total-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 700;
+  font-size: 1.2rem;
+  margin-bottom: 20px;
+}
+
+.total-label {
+  color: #555;
+}
+
+.total-value {
+  color: #2c3e50;
+}
+
+.order-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.status-select,
+.rider-reassign-select {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 0.95rem;
+  font-weight: 500;
+  background-color: #f8f9fa;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.status-select:focus,
+.rider-reassign-select:focus {
+  outline: none;
+  border-color: #4b929d;
+  box-shadow: 0 0 0 2px rgba(75, 146, 157, 0.25);
+}
+
+.no-orders-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 50px;
+  color: #b0b0b0;
+  font-size: 1.2rem;
+  font-weight: 500;
+  text-align: center;
+  width: 100%;
+  grid-column: 1 / -1;
+  margin: 0 auto;
+}
+
+/* in riderdashboard.css */
+
+.order-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center; /* This centers the button vertically if needed */
+  flex-direction: column; /* To stack the dropdown and button if the dropdown is still present */
+}
+
+.status-change-button {
+  width: 300%;
+  max-width: 300px; /* Optional: This prevents the button from becoming too wide on large screens */
+  border-radius: 5px; 
+}
+.status-change-button.pickedUp {
+  background-color: #0d6efd; /* Blue */
+  border-color: #0d6efd;
+}
+
+.status-change-button.delivered {
+  background-color: #198754; /* Green */
+  border-color: #198754;
+}
