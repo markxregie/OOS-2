@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Form, Modal, Button } from 'react-bootstrap';
+import { Table, Form, Button } from 'react-bootstrap';
 import { EyeFill, XCircle } from 'react-bootstrap-icons';
-import './OrderHistory.css'; 
+import Swal from 'sweetalert2';
+import './OrderHistory.css';
 
 const OrderHistory = () => {
   const [activeTab, setActiveTab] = useState('active'); 
@@ -11,10 +12,7 @@ const OrderHistory = () => {
     completed: [],
     cancelled: [],
   });
-  const [showCancelModal, setShowCancelModal] = useState(false);
-  const [orderToCancel, setOrderToCancel] = useState(null);
-  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
-  const [orderToView, setOrderToView] = useState(null);
+
 
   const token = localStorage.getItem('authToken');
 
@@ -112,16 +110,28 @@ const OrderHistory = () => {
     return <span className={className}>{capitalizedStatus}</span>;
   };
 
-  const handleCancelClick = (order) => {
-    setOrderToCancel(order);
-    setShowCancelModal(true);
+  const handleCancelClick = async (order) => {
+    const result = await Swal.fire({
+      title: 'Confirm Cancel Order',
+      text: `Are you sure you want to cancel order #${order.id}? This action cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, Cancel Order',
+      cancelButtonText: 'No',
+    });
+
+    if (result.isConfirmed) {
+      await handleConfirmCancel(order);
+    }
   };
-  
-  const handleConfirmCancel = async () => {
-    if (!orderToCancel || !token) return;
+
+  const handleConfirmCancel = async (order) => {
+    if (!order || !token) return;
 
     try {
-      const response = await fetch(`http://localhost:7004/cart/admin/orders/${orderToCancel.id}/status`, {
+      const response = await fetch(`http://localhost:7004/cart/admin/orders/${order.id}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -136,24 +146,20 @@ const OrderHistory = () => {
 
       // Refresh data locally for immediate UI update
       setOrdersData((prevData) => {
-        const newActive = prevData.active.filter((o) => o.id !== orderToCancel.id);
-        const newCancelled = [...prevData.cancelled, { ...orderToCancel, status: 'cancelled' }];
+        const newActive = prevData.active.filter((o) => o.id !== order.id);
+        const newCancelled = [...prevData.cancelled, { ...order, status: 'cancelled' }];
         return { ...prevData, active: newActive, cancelled: newCancelled };
       });
 
+      Swal.fire('Success', 'Order cancelled successfully!', 'success');
+
     } catch (error) {
       console.error('Error cancelling order:', error);
-      alert('There was an error cancelling the order. Please try again.');
-    } finally {
-      setShowCancelModal(false);
-      setOrderToCancel(null);
+      Swal.fire('Error', 'There was an error cancelling the order. Please try again.', 'error');
     }
   };
 
-  const handleCloseModal = () => {
-    setShowCancelModal(false);
-    setOrderToCancel(null);
-  };
+
 
   const renderTable = (orders) => {
     if (orders.length === 0) {
@@ -186,8 +192,39 @@ const OrderHistory = () => {
               <td>{getStatusBadge(order.status)}</td>
               <td>
                 <button className="action-btn view" title="View Invoice" onClick={() => {
-                  setOrderToView(order);
-                  setShowInvoiceModal(true);
+                  const invoiceHtml = `
+                    <div>
+                      <p><strong>Date:</strong> ${new Date(order.date).toLocaleString()}</p>
+                      <p><strong>Order Type:</strong> ${order.orderType}</p>
+                      <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                          <tr style="background-color: #f2f2f2;">
+                            <th style="border: 1px solid #ddd; padding: 8px;">Product</th>
+                            <th style="border: 1px solid #ddd; padding: 8px;">Quantity</th>
+                            <th style="border: 1px solid #ddd; padding: 8px;">Price (₱)</th>
+                            <th style="border: 1px solid #ddd; padding: 8px;">Subtotal (₱)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          ${order.products.map(p => `
+                            <tr>
+                              <td style="border: 1px solid #ddd; padding: 8px;">${p.name}</td>
+                              <td style="border: 1px solid #ddd; padding: 8px;">${p.quantity}</td>
+                              <td style="border: 1px solid #ddd; padding: 8px;">${p.price.toFixed(2)}</td>
+                              <td style="border: 1px solid #ddd; padding: 8px;">${(p.price * p.quantity).toFixed(2)}</td>
+                            </tr>
+                          `).join('')}
+                        </tbody>
+                      </table>
+                      <h5 style="text-align: right; margin-top: 10px;">Total: ₱${order.total.toFixed(2)}</h5>
+                    </div>
+                  `;
+                  Swal.fire({
+                    title: `Invoice for Order #${order.id}`,
+                    html: invoiceHtml,
+                    showConfirmButton: true,
+                    confirmButtonText: 'Close',
+                  });
                 }}>
                   <EyeFill />
                 </button>
@@ -256,65 +293,6 @@ const OrderHistory = () => {
         {activeTab === 'completed' && renderTable(ordersData.completed)}
         {activeTab === 'cancelled' && renderTable(ordersData.cancelled)}
       </div>
-
-      <Modal show={showCancelModal} onHide={handleCloseModal} centered>
-        <Modal.Header closeButton>
-          <Modal.Title>Confirm Cancel Order</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          Are you sure you want to cancel order #{orderToCancel ? orderToCancel.id : ''}? This action cannot be undone.
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={handleCloseModal}>
-            No
-          </Button>
-          <Button variant="danger" onClick={handleConfirmCancel}>
-            Yes, Cancel Order
-          </Button>
-        </Modal.Footer>
-      </Modal>
-
-      <Modal show={showInvoiceModal} onHide={() => setShowInvoiceModal(false)} size="lg" centered>
-        <Modal.Header closeButton>
-          <Modal.Title>Invoice for Order #{orderToView ? orderToView.id : ''}</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {orderToView ? (
-            <div>
-              <p><strong>Date:</strong> {new Date(orderToView.date).toLocaleString()}</p>
-              <p><strong>Order Type:</strong> {orderToView.orderType}</p>
-              <Table striped bordered hover>
-                <thead>
-                  <tr>
-                    <th>Product</th>
-                    <th>Quantity</th>
-                    <th>Price (₱)</th>
-                    <th>Subtotal (₱)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orderToView.products.map((product, index) => (
-                    <tr key={`${product.id}-${index}`}>
-                      <td>{product.name}</td>
-                      <td>{product.quantity}</td>
-                      <td>{product.price.toFixed(2)}</td>
-                      <td>{(product.price * product.quantity).toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
-              <h5 className="text-end">Total: ₱{orderToView.total.toFixed(2)}</h5>
-            </div>
-          ) : (
-            <p>No order selected.</p>
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowInvoiceModal(false)}>
-            Close
-          </Button>
-        </Modal.Footer>
-      </Modal>
     </div>
   );
 };
