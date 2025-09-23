@@ -95,16 +95,16 @@ const [selectedSubcategory, setSelectedSubcategory] = useState('');
           const publicProducts = await publicResponse.json();
 
           const grouped = {};
-          publicProducts.forEach((product) => {
-            const typeName = product.ProductTypeName || "Other";
-            const category = product.ProductCategory || "Other";
-            if (!grouped[typeName]) grouped[typeName] = {};
-            if (!grouped[typeName][category]) grouped[typeName][category] = [];
-            grouped[typeName][category].push({
-              ...product,
-              Status: "Available",
-            });
-          });
+publicProducts.forEach((product) => {
+  const typeName = product.ProductTypeName || "Other";
+  const category = product.ProductCategory || "Other";
+  if (!grouped[typeName]) grouped[typeName] = {};
+  if (!grouped[typeName][category]) grouped[typeName][category] = [];
+  grouped[typeName][category].push({
+    ...product,
+    Status: product.Status || "Available", // ✅ use backend Status, fallback to "Available"
+  });
+});
 
           setProducts(grouped);
 
