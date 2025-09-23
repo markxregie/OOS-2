@@ -48,7 +48,7 @@ const CheckoutPage = () => {
           middleName: data.middleName || '',
           lastName: data.lastName || '',
           email: data.email || '',
-          phone: data.phone || '',
+          phone: data.phoneNumber || data.phone || '',
           blockStreetSubdivision: (data.block || '') + ' ' + (data.street || '') + ' ' + (data.subdivision || ''),
           city: data.city || '',
           province: data.province || '',
