@@ -105,7 +105,7 @@ const Report = () => {
   const [orders, setOrders] = useState([]);
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const rowsPerPage = 5;
+  const rowsPerPage = 10;
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [dashboardData, setDashboardData] = useState(data);
