@@ -31,8 +31,8 @@ async def validate_token_and_roles(token: str, allowed_roles: List[str]):
     user_data = response.json()
     if user_data.get("userRole") not in allowed_roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
-    
-    return user_data.get("username")
+
+    return user_data
 
 @router.get("/admin/orders/total")
 async def get_total_orders(token: str = Depends(oauth2_scheme)):
@@ -97,6 +97,7 @@ class UpdatePaymentDetails(BaseModel):
     delivery_fee: float
     total_amount: float
     delivery_notes: Optional[str] = None
+    reference_number: Optional[str] = None
 
 class UpdateStatusRequest(BaseModel):
     new_status: str
@@ -110,7 +111,7 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
 
     try:
         await cursor.execute("""
-            SELECT 
+            SELECT
                 o.OrderID,
                 o.UserName,
                 o.OrderDate,
@@ -119,6 +120,7 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
                 o.TotalAmount,
                 o.DeliveryNotes,
                 o.Status,
+                o.ReferenceNumber,
 
                 di.EmailAddress,
                 di.PhoneNumber,
@@ -128,7 +130,11 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
                 di.Landmark
 
             FROM Orders o
-                LEFT JOIN DeliveryInfo di ON di.FirstName = o.UserName
+                LEFT JOIN (
+                    SELECT FirstName, EmailAddress, PhoneNumber, Address, City, Province, Landmark,
+                           ROW_NUMBER() OVER (PARTITION BY FirstName ORDER BY (SELECT NULL)) as rn
+                    FROM DeliveryInfo
+                ) di ON di.FirstName = o.UserName AND di.rn = 1
             ORDER BY o.OrderDate DESC
         """)
 
@@ -154,7 +160,7 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
                     "price": float(item[2])
                 })
 
-            delivery_address = ", ".join(filter(None, [row[10], row[11], row[12], row[13]]))
+            delivery_address = ", ".join(filter(None, [row[11], row[12], row[13], row[14]]))
 
             orders.append({
                 "order_id": row[0],
@@ -165,8 +171,9 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
                 "total_amount": float(row[5]),
                 "deliveryNotes": row[6],
                 "order_status": row[7],
-                "emailAddress": row[8],
-                "phoneNumber": row[9],
+                "reference_number": row[8],
+                "emailAddress": row[9],
+                "phoneNumber": row[10],
                 "deliveryAddress": delivery_address,
                 "items": item_list
             })
@@ -263,7 +270,8 @@ async def get_pending_orders_count(token: str = Depends(oauth2_scheme)):
 
 @router.get("/orders/history")
 async def get_user_orders(token: str = Depends(oauth2_scheme)):
-    username = await validate_token_and_roles(token, ["user"])
+    user_data = await validate_token_and_roles(token, ["user"])
+    username = user_data.get("username")
     conn = await get_db_connection()
     cursor = await conn.cursor()
 
@@ -321,7 +329,7 @@ async def update_payment_details(payload: UpdatePaymentDetails, token: str = Dep
 
         await cursor.execute("""
             UPDATE Orders
-            SET PaymentMethod = ?, Subtotal = ?, DeliveryFee = ?, TotalAmount = ?, DeliveryNotes = ?
+            SET PaymentMethod = ?, Subtotal = ?, DeliveryFee = ?, TotalAmount = ?, DeliveryNotes = ?, ReferenceNumber = ?
             WHERE OrderID = ?
         """, (
             payload.payment_method,
@@ -329,6 +337,7 @@ async def update_payment_details(payload: UpdatePaymentDetails, token: str = Dep
             payload.delivery_fee,
             payload.total_amount,
             payload.delivery_notes or '',
+            payload.reference_number,
             order_id
         ))
 
@@ -578,24 +587,32 @@ async def update_order_status(order_id: int, request: UpdateStatusRequest, token
     """
     Updates the status of a specific online order.
     """
-    await validate_token_and_roles(token, ["admin", "staff", "cashier"])
-    
+    user_data = await validate_token_and_roles(token, ["admin", "staff", "cashier", "user"])
+    username = user_data.get("username")
+    user_role = user_data.get("userRole")
+
     conn = await get_db_connection()
     cursor = await conn.cursor()
     try:
-        # Check if the order exists first
-        await cursor.execute("SELECT OrderID FROM Orders WHERE OrderID = ?", (order_id,))
+        # Check if the order exists and get the owner
+        await cursor.execute("SELECT OrderID, UserName FROM Orders WHERE OrderID = ?", (order_id,))
         order = await cursor.fetchone()
         if not order:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
-            
+
+        order_owner = order[1]
+
+        # If user is not admin/staff/cashier, check ownership
+        if user_role == "user" and order_owner != username:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only update your own orders")
+
         # Update the status
         await cursor.execute(
             "UPDATE Orders SET Status = ? WHERE OrderID = ?",
             (request.new_status, order_id)
         )
         await conn.commit()
-        
+
         logger.info(f"Updated status for order {order_id} to {request.new_status}")
         return {"message": f"Order status successfully updated to {request.new_status}"}
 

@@ -78,6 +78,7 @@ class ConfirmPaymentRequest(BaseModel):
     notes: Optional[str] = None
     cart_items: List[CartItem]
     delivery_info: Optional[DeliveryInfo] = None
+    reference_number: Optional[str] = None
 
 # ---- CHECKOUT ENDPOINT ----
 @router.post("/create-checkout")
@@ -170,7 +171,7 @@ async def confirm_payment(payload: ConfirmPaymentRequest, token: str = Depends(o
             # Step 3: Save delivery info
             if payload.delivery_info:
                 delivery_info_payload = {
-                    "FirstName": payload.delivery_info.FirstName,
+                    "FirstName": payload.username,
                     "MiddleName": payload.delivery_info.MiddleName,
                     "LastName": payload.delivery_info.LastName,
                     "Address": payload.delivery_info.Address,
@@ -195,7 +196,8 @@ async def confirm_payment(payload: ConfirmPaymentRequest, token: str = Depends(o
                 "subtotal": payload.subtotal,
                 "delivery_fee": payload.delivery_fee,
                 "total_amount": payload.total,
-                "delivery_notes": payload.notes or (payload.delivery_info.Notes if payload.delivery_info else "")
+                "delivery_notes": payload.notes or (payload.delivery_info.Notes if payload.delivery_info else ""),
+                "reference_number": payload.reference_number
             }
             update_order_response = await client.put(
                 "http://localhost:7004/cart/update-payment",
