@@ -85,6 +85,46 @@ async def get_delivery_info(order_id: int, token: str = Depends(oauth2_scheme)):
         await cursor.close()
         await conn.close()
 
+@router.put("/orders/{order_id}/assign-rider")
+async def assign_rider(order_id: int, rider_id: int, token: str = Depends(oauth2_scheme)):
+    await validate_token_and_roles(token, ["admin", "staff"])  
+
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+    try:
+        # update Orders table
+        await cursor.execute("""
+            UPDATE Orders
+            SET AssignedRiderID = ?
+            WHERE OrderID = ?
+        """, (rider_id, order_id))
+
+        # update RiderOrders table (insert if not exists)
+        await cursor.execute("""
+            SELECT RiderOrderID FROM RiderOrders WHERE OrderID = ?
+        """, (order_id,))
+        existing = await cursor.fetchone()
+
+        if existing:
+            await cursor.execute("""
+                UPDATE RiderOrders
+                SET RiderID = ?, OrderStatus = 'Assigned'
+                WHERE OrderID = ?
+            """, (rider_id, order_id))
+        else:
+            await cursor.execute("""
+                INSERT INTO RiderOrders (RiderID, OrderID, OrderStatus, CompletedOrders, Earnings)
+                VALUES (?, ?, 'Assigned', 0, 0)
+            """, (rider_id, order_id))
+
+        await conn.commit()
+        return {"message": "Rider assigned successfully", "order_id": order_id, "rider_id": rider_id}
+
+    finally:
+        await cursor.close()
+        await conn.close()
+
+
 @router.post("/info", status_code=status.HTTP_201_CREATED)
 async def add_delivery_info(delivery_info: DeliveryInfoRequest, token: str = Depends(oauth2_scheme)):
     username = await validate_token_and_roles(token, ["user", "admin", "staff"])
@@ -145,6 +185,87 @@ async def add_delivery_info(delivery_info: DeliveryInfoRequest, token: str = Dep
 
     return {"message": "Delivery info added successfully", "order_id": order_id}
 
+@router.get("/rider/{rider_id}/orders")
+async def get_rider_orders(rider_id: int, token: str = Depends(oauth2_scheme)):
+    await validate_token_and_roles(token, ["rider","admin"])  # only riders
+
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+    try:
+        await cursor.execute("""
+            SELECT
+                o.OrderID, o.UserName, o.OrderDate, o.Status, o.PaymentMethod,
+                o.TotalAmount, di.FirstName, di.MiddleName, di.LastName,
+                di.PhoneNumber, di.Address, di.City, di.Province, di.Notes, di.Landmark
+            FROM Orders o
+            LEFT JOIN DeliveryInfo di ON o.OrderID = di.OrderID
+            WHERE o.AssignedRiderID = ?
+            ORDER BY o.OrderDate DESC
+        """, (rider_id,))
+        rows = await cursor.fetchall()
+
+        orders = []
+        for row in rows:
+            order_id = row[0]
+            username = row[1]
+
+            await cursor.execute("""
+                SELECT ProductName, Quantity, Price
+                FROM OrderItems
+                WHERE OrderID = ?
+            """, (order_id,))
+            items = await cursor.fetchall()
+
+            item_list = [
+                {"name": i[0], "quantity": i[1], "price": float(i[2])}
+                for i in items
+            ]
+
+            # Compute customer details with fallback to user service if DeliveryInfo missing
+            first_name = row[6]
+            middle_name = row[7]
+            last_name = row[8]
+            phone = row[9]
+            address = ", ".join(filter(None, [row[10], row[11], row[12]]))
+
+            if not first_name:
+                # Fetch from user service
+                try:
+                    async with httpx.AsyncClient() as client:
+                        response = await client.get(f"http://localhost:4000/users/{username}")
+                        if response.status_code == 200:
+                            user_data = response.json()
+                            first_name = user_data.get("firstName") or ""
+                            middle_name = user_data.get("middleName") or ""
+                            last_name = user_data.get("lastName") or ""
+                            phone = user_data.get("phone") or phone
+                            address = user_data.get("address") or address
+                except Exception as e:
+                    logger.warning(f"Failed to fetch user info for {username}: {e}")
+
+            customer_name = f"{first_name or ''} {middle_name or ''} {last_name or ''}".strip() or "Unknown Customer"
+            phone = phone or ""
+            address = address or "Address not available"
+
+            orders.append({
+                "id": order_id,
+                "customerName": customer_name,
+                "phone": phone,
+                "address": address,
+                "orderedAt": row[2].strftime("%Y-%m-%d %H:%M:%S"),
+                "currentStatus": row[3].lower().replace(" ", ""),
+                "paymentMethod": row[4],
+                "total": float(row[5]) if row[5] else 0,
+                "notes": row[13],
+                "items": item_list,
+            })
+
+        return orders
+
+    finally:
+        await cursor.close()
+        await conn.close()
+
 # --- GET Delivery Orders with Items + Delivery Info ---
 @router.get("/admin/delivery/orders")
 async def get_delivery_orders(token: str = Depends(oauth2_scheme)):
@@ -158,7 +279,8 @@ async def get_delivery_orders(token: str = Depends(oauth2_scheme)):
             SELECT 
                 o.OrderID, o.UserName, o.OrderDate, o.Status, o.PaymentMethod, 
                 o.TotalAmount, di.FirstName, di.MiddleName, di.LastName,
-                di.PhoneNumber, di.Address, di.City, di.Province, di.Notes, di.Landmark
+                di.PhoneNumber, di.Address, di.City, di.Province, di.Notes, di.Landmark,
+                             o.AssignedRiderID
             FROM Orders o
             LEFT JOIN DeliveryInfo di ON o.OrderID = di.OrderID
             ORDER BY o.OrderDate DESC
@@ -168,6 +290,7 @@ async def get_delivery_orders(token: str = Depends(oauth2_scheme)):
         orders = []
         for row in rows:
             order_id = row[0]
+            assigned_rider_id = row[15]   # ✅ make sure to define it here
 
             # Fetch items
             await cursor.execute("""
@@ -182,18 +305,48 @@ async def get_delivery_orders(token: str = Depends(oauth2_scheme)):
                 for i in items
             ]
 
+            rider_info = None
+            if assigned_rider_id:
+                # call Auth service para kunin rider details
+                try:
+                    async with httpx.AsyncClient() as client:
+                        r = await client.get(f"http://localhost:4000/users/riders/{assigned_rider_id}")
+                        if r.status_code == 200:
+                            rider_info = r.json()
+                except Exception as e:
+                    logger.warning(f"Failed to fetch rider info for {assigned_rider_id}: {e}")
+
+            # Handle None values for customer name
+            first_name = row[6] or ""
+            middle_name = row[7] or ""
+            last_name = row[8] or ""
+            customer_name = f"{first_name} {middle_name} {last_name}".strip()
+
+            # Handle phone number
+            phone_number = row[9] if row[9] else None
+
+            # Handle address with fallback
+            address_parts = [row[10], row[11], row[12]]
+            address = ", ".join(filter(None, address_parts))
+            if not address:
+                address = "Address not available"
+
             orders.append({
                 "id": order_id,
-                "customerName": f"{row[6]} {row[7] or ''} {row[8]}".strip(),
-                "phone": row[9],
-                "address": ", ".join(filter(None, [row[10], row[11], row[12]])),
+                "customerName": customer_name,
+                "phone": phone_number,
+                "address": address,
                 "orderedAt": row[2].strftime("%Y-%m-%d %H:%M:%S"),
                 "currentStatus": row[3].lower().replace(" ", ""),  # e.g. Pending -> pending
                 "paymentMethod": row[4],
                 "total": float(row[5]) if row[5] else 0,
                 "notes": row[13],
                 "items": item_list,
-                "assignedRider": None  # later i-link sa RiderOrders
+                "assignedRider": {
+                    "id": assigned_rider_id,
+                    "fullName": rider_info["FullName"] if rider_info else None,
+                    "phone": rider_info["Phone"] if rider_info else None
+                } if assigned_rider_id else None
             })
 
         return orders

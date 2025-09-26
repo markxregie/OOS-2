@@ -20,7 +20,10 @@ function DeliveryManagement() {
 
   const [orders, setOrders] = useState([]);
   const [showRiderDropdown, setShowRiderDropdown] = useState({});
+  const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
   const [showChangeRiderDropdown, setShowChangeRiderDropdown] = useState({});
+
+  const [riders, setRiders] = useState([]);
 
   // Helper functions for localStorage persistence
   const saveRiderAssignments = (updatedOrders) => {
@@ -81,16 +84,6 @@ function DeliveryManagement() {
     return () => clearInterval(interval);
 
   }, [authToken]);
-  const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
-
-  const riders = {
-    rider1: { name: "John Doe", phone: "09123456789", activeOrders: 2 },
-    rider2: { name: "Jane Smith", phone: "09123456780", activeOrders: 1 },
-    rider3: { name: "Bob Johnson", phone: "09123456781", activeOrders: 3 },
-    rider4: { name: "Alice Brown", phone: "09123456782", activeOrders: 0 },
-    rider5: { name: "Charlie Wilson", phone: "09123456783", activeOrders: 1 },
-    rider6: { name: "Diana Lee", phone: "09123456784", activeOrders: 2 },
-  };
 
   useEffect(() => {
     const tokenFromUrl = searchParams.get('authorization');
@@ -118,6 +111,33 @@ function DeliveryManagement() {
       }
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!authToken) return;
+
+    const fetchRiders = async () => {
+      try {
+        const response = await fetch("http://localhost:7001/delivery/riders", {
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log("Fetched riders:", data);
+        setRiders(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error("Failed to fetch riders:", error);
+        setRiders([]);
+      }
+    };
+
+    fetchRiders();
+  }, [authToken]);
 
   useEffect(() => {
     if (!authToken) return;
@@ -176,16 +196,15 @@ function DeliveryManagement() {
   const handleRiderSelection = (orderId, riderId) => {
     if (!riderId) return; // Don't show modal if no rider selected
 
-    const rider = riders[riderId];
+    const rider = riders.find(r => r.UserID.toString() === riderId);
     if (!rider) return;
 
     Swal.fire({
       title: 'Confirm Rider Assignment',
       html: `
         <div style="text-align: left;">
-          <p><strong>Rider:</strong> ${rider.name}</p>
-          <p><strong>Phone:</strong> ${rider.phone}</p>
-          <p><strong>Active Orders:</strong> ${rider.activeOrders}</p>
+          <p><strong>Rider:</strong> ${rider.FullName}</p>
+          <p><strong>Phone:</strong> ${rider.Phone}</p>
         </div>
         <p style="margin-top: 15px; font-size: 14px; color: #666;">
           Are you sure you want to assign this rider to this order?
@@ -207,24 +226,52 @@ function DeliveryManagement() {
     });
   };
 
-  const handleRiderAssignment = (orderId, riderId) => {
-    // Assign the rider
-    handleRiderChange(orderId, riderId);
+  const handleRiderAssignment = async (orderId, riderId) => {
+    try {
+      const response = await fetch(
+        `http://localhost:7004/delivery/orders/${orderId}/assign-rider?rider_id=${riderId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Authorization": `Bearer ${authToken}`,
+            "Content-Type": "application/json"
+          }
+        }
+      );
 
-    // Hide the change rider dropdown after assignment
-    setShowChangeRiderDropdown(prev => ({
-      ...prev,
-      [orderId]: false
-    }));
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
-    // Show success message
-    Swal.fire({
-      title: 'Rider Assigned Successfully!',
-      text: 'The rider has been assigned to this order.',
-      icon: 'success',
-      confirmButtonColor: '#198754',
-      confirmButtonText: 'OK'
-    });
+      const result = await response.json();
+      console.log("Assign rider response:", result);
+
+      // ✅ Update frontend state with selected rider
+      handleRiderChange(orderId, riderId);
+
+      // Hide dropdown after assignment
+      setShowChangeRiderDropdown(prev => ({
+        ...prev,
+        [orderId]: false
+      }));
+
+      Swal.fire({
+        title: "Rider Assigned Successfully!",
+        text: "The rider has been assigned to this order.",
+        icon: "success",
+        confirmButtonColor: "#198754",
+        confirmButtonText: "OK"
+      });
+
+    } catch (error) {
+      console.error("Failed to assign rider:", error);
+      Swal.fire({
+        title: "Error",
+        text: "Failed to assign rider. Please try again.",
+        icon: "error",
+        confirmButtonColor: "#dc3545"
+      });
+    }
   };
 
   const handleChangeRiderClick = (orderId) => {
@@ -398,12 +445,11 @@ function DeliveryManagement() {
               style={{ width: "300px", marginLeft: "8px" }}
             >
               <option value="all">All Riders</option>
-              <option value="rider1">Rider 1</option>
-              <option value="rider2">Rider 2</option>
-              <option value="rider3">Rider 3</option>
-              <option value="rider4">Rider 4</option>
-              <option value="rider5">Rider 5</option>
-              <option value="rider6">Rider 6</option>
+              {riders.map((rider) => (
+                <option key={rider.UserID} value={rider.UserID.toString()}>
+                  {rider.FullName}
+                </option>
+              ))}
             </Form.Select>
           </div>
         </div>
@@ -471,14 +517,18 @@ function DeliveryManagement() {
                     </p>
                   )}
                   {order.assignedRider && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "10px", width: "100%", backgroundColor: "#f0f0f0", padding: "10px", borderRadius: "6px" }}>
-                      <img src={riderImage} alt={riders[order.assignedRider].name} style={{ width: "50px", height: "50px", borderRadius: "50%" }} />
-                      <div>
-                        <div style={{ fontWeight: "600" }}>{riders[order.assignedRider].name}</div>
-                        <div>{riders[order.assignedRider].phone}</div>
-                        <div>Active Orders: {riders[order.assignedRider].activeOrders}</div>
-                      </div>
-                    </div>
+                    (() => {
+                      const assignedRider = riders.find(r => r.UserID.toString() === order.assignedRider);
+                      return assignedRider ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "10px", width: "100%", backgroundColor: "#f0f0f0", padding: "10px", borderRadius: "6px" }}>
+                          <img src={riderImage} alt={assignedRider.FullName} style={{ width: "50px", height: "50px", borderRadius: "50%" }} />
+                          <div>
+                            <div style={{ fontWeight: "600" }}>{assignedRider.FullName}</div>
+                            <div>{assignedRider.Phone}</div>
+                          </div>
+                        </div>
+                      ) : null;
+                    })()
                   )}
                   <div style={{ marginTop: "10px", width: "100%" }}>
                     {!order.assignedRider ? (
@@ -490,12 +540,11 @@ function DeliveryManagement() {
                           onChange={(e) => handleRiderSelection(order.id, e.target.value)}
                         >
                           <option value="">Select Rider</option>
-                          <option value="rider1">{riders.rider1.name}</option>
-                          <option value="rider2">{riders.rider2.name}</option>
-                          <option value="rider3">{riders.rider3.name}</option>
-                          <option value="rider4">{riders.rider4.name}</option>
-                          <option value="rider5">{riders.rider5.name}</option>
-                          <option value="rider6">{riders.rider6.name}</option>
+                          {riders.map((rider) => (
+                            <option key={rider.UserID} value={rider.UserID.toString()}>
+                              {rider.FullName}
+                            </option>
+                          ))}
                         </Form.Select>
                       </>
                     ) : (
@@ -523,12 +572,11 @@ function DeliveryManagement() {
                               onChange={(e) => handleRiderSelection(order.id, e.target.value)}
                             >
                               <option value="">Select Rider</option>
-                              <option value="rider1">{riders.rider1.name}</option>
-                              <option value="rider2">{riders.rider2.name}</option>
-                              <option value="rider3">{riders.rider3.name}</option>
-                              <option value="rider4">{riders.rider4.name}</option>
-                              <option value="rider5">{riders.rider5.name}</option>
-                              <option value="rider6">{riders.rider6.name}</option>
+                              {riders.map((rider) => (
+                                <option key={rider.UserID} value={rider.UserID.toString()}>
+                                  {rider.FullName}
+                                </option>
+                              ))}
                             </Form.Select>
                           </div>
                         )}

@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware# router module
-from database import get_db_connection  # connection checker (optional)
+from database import get_db_connection  
+from routers import rider # connection checker (optional)
 
 app = FastAPI(title="Ordering Service")
 
@@ -24,6 +25,8 @@ app.add_middleware(
 )
 
 # Include cart routes
+
+app.include_router(rider.router, prefix="/delivery", tags=["riders"])
 
 
 # Health check (optional)

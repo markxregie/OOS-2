@@ -12,107 +12,77 @@ function RiderDashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [toggle, setToggle] = useState("active");
 
-
-  const [selectedRider, setSelectedRider] = useState("rider1");
+  const [riders, setRiders] = useState([]);
+  const [selectedRider, setSelectedRider] = useState(null);
   const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const authToken = localStorage.getItem('authToken');
 
   useEffect(() => {
-    setOrders(sampleOrders);
+    fetchRiders();
   }, []);
 
-  const riders = {
-    rider1: { name: "John Doe", phone: "09123456789", activeOrders: 2 },
-    rider2: { name: "Jane Smith", phone: "09123456780", activeOrders: 1 },
-    rider3: { name: "Mike Johnson", phone: "09123456781", activeOrders: 0 },
-    rider4: { name: "Sarah Lee", phone: "09123456782", activeOrders: 0 },
-    rider5: { name: "David Chen", phone: "09123456783", activeOrders: 0 },
-    rider6: { name: "Emily White", phone: "09123456784", activeOrders: 0 },
+  useEffect(() => {
+    if (selectedRider) {
+      fetchOrders(selectedRider);
+    }
+  }, [selectedRider]);
+
+  const fetchRiders = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('http://localhost:7001/delivery/riders', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch riders');
+      }
+      const data = await response.json();
+      const normalizedRiders = data.map(r => ({
+        id: r.UserID,
+        name: r.FullName,
+        phone: r.Phone
+      }));
+      setRiders(normalizedRiders);
+      if (normalizedRiders.length > 0) {
+        setSelectedRider(normalizedRiders[0].id);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const sampleOrders = [
-    {
-      id: 1,
-      currentStatus: "inTransit",
-      orderedAt: "2023-10-01 10:00 AM",
-      customerName: "Alice Johnson",
-      phone: "+1-1234567890",
-      address: "123 Main St, Springfield",
-      items: [
-        { quantity: 2, name: "Americano", price: 5.00 },
-        { quantity: 1, name: "Croissant", price: 3.50 }
-      ],
-      total: 13.50,
-      assignedRider: "rider1"
-    },
-    {
-      id: 2,
-      currentStatus: "delivered",
-      orderedAt: "2023-10-01 10:30 AM",
-      customerName: "Bob Smith",
-      phone: "+1-1234567891",
-      address: "456 Elm St, Springfield",
-      items: [
-        { quantity: 1, name: "Latte", price: 6.00 },
-        { quantity: 2, name: "Muffin", price: 4.00 }
-      ],
-      total: 14.00,
-      assignedRider: "rider1"
-    },
-    {
-      id: 3,
-      currentStatus: "pending",
-      orderedAt: "2023-10-01 11:00 AM",
-      customerName: "Charlie Brown",
-      phone: "+1-1234567892",
-      address: "789 Oak Ave, Springfield",
-      items: [
-        { quantity: 3, name: "Espresso", price: 4.00 }
-      ],
-      total: 12.00,
-      assignedRider: "rider2"
-    },
-    {
-      id: 4,
-      currentStatus: "inTransit",
-      orderedAt: "2023-10-01 11:30 AM",
-      customerName: "Diana Prince",
-      phone: "+1-1234567893",
-      address: "101 Justice Ln, Metropolis",
-      items: [
-        { quantity: 1, name: "Cappuccino", price: 6.50 },
-        { quantity: 1, name: "Danish", price: 4.50 }
-      ],
-      total: 11.00,
-      assignedRider: "rider2"
-    },
-    {
-      id: 5,
-      currentStatus: "cancelled",
-      orderedAt: "2023-10-01 11:45 AM",
-      customerName: "Clark Kent",
-      phone: "+1-1234567894",
-      address: "300 Krypton Dr, Smallville",
-      items: [
-        { quantity: 2, name: "Hot Chocolate", price: 5.50 }
-      ],
-      total: 11.00,
-      assignedRider: "rider1"
-    },
-    {
-      id: 6,
-      currentStatus: "preparing",
-      orderedAt: "2023-10-01 12:00 PM",
-      customerName: "Bruce Wayne",
-      phone: "+1-1234567895",
-      address: "1007 Mountain Ln, Gotham",
-      items: [
-        { quantity: 1, name: "Americano", price: 5.00 },
-        { quantity: 1, name: "Muffin", price: 4.00 }
-      ],
-      total: 9.00,
-      assignedRider: "rider1"
+  const fetchOrders = async (riderId) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`http://localhost:7004/delivery/rider/${riderId}/orders`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch orders');
+      }
+      const data = await response.json();
+      setOrders(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -159,43 +129,45 @@ function RiderDashboard() {
     }
   };
 
-  const filteredOrders = orders
-    .filter(order => order.assignedRider === selectedRider)
-    .filter(order => {
-      if (toggle === "active") {
-        return !["delivered", "cancelled", "returned"].includes(order.currentStatus);
-      } else if (toggle === "completed") {
-        return order.currentStatus === "delivered";
-      }
-      return true;
-    });
+  const filteredOrders = orders.filter(order => {
+    if (toggle === "active") {
+      return !["delivered", "cancelled", "returned"].includes(order.currentStatus);
+    } else if (toggle === "completed") {
+      return order.currentStatus === "delivered";
+    }
+    return true;
+  });
 
+  const selectedRiderObj = riders.find(r => r.id === selectedRider);
 
-  
+  const activeOrdersCount = orders.filter(order => !["delivered", "cancelled", "returned"].includes(order.currentStatus)).length;
+  const completedOrdersCount = orders.filter(order => order.currentStatus === "delivered").length;
+  const earnings = orders.filter(order => order.currentStatus === "delivered").reduce((sum, order) => sum + (order.total || 0), 0).toFixed(2);
+
   const statusIcons = {
     pending: <FaClock />,
     confirmed: <FaCheckCircle />,
     preparing: <FaBox />,
     readyToPickup: <FaTruckPickup />,
     pickedUp: <FaTruckMoving />,
+    pickedup: <FaTruckMoving />,
     inTransit: <FaTruckMoving />,
     delivered: <FaCheckCircle />,
     cancelled: <FaTimesCircle />,
   };
 
-  const cardColors = {
-    "rider1": "#a3d3d8",
-    "rider2": "#ffbe9d",
-    "rider3": "#a3d8b6",
-    "rider4": "#c2a3d8",
-    "rider5": "#d8c7a3",
-    "rider6": "#a3a3d8",
-  };
+  const cardColors = "#a3d3d8"; // Fixed color since riders are dynamic
+
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
+  }
 
   return (
     <div className="rider-dashboard-container">
-      
-
       <div className="main-content">
         <header className="manage-header">
           <div className="header-left">
@@ -213,24 +185,23 @@ function RiderDashboard() {
                 <div className="profile-role">{getGreeting()}! I'm {userRole}</div>
                 <div className="profile-name">{userName}</div>
               </div>
-
             </div>
           </div>
         </header>
 
-        <Container fluid className="dashboard-summary-container" style={{ backgroundColor: cardColors[selectedRider] || "#a3d3d8" }}>
+        <Container fluid className="dashboard-summary-container" style={{ backgroundColor: cardColors }}>
           <div className="rider-selector-group">
             <div className="rider-info-display">
-              <img src={riderImage} alt={riders[selectedRider]?.name || "Rider"} className="rider-profile-pic" />
-              <span className="rider-name-text">{riders[selectedRider]?.name || "Rider"}</span>
+              <img src={riderImage} alt={selectedRiderObj?.name || "Rider"} className="rider-profile-pic" />
+              <span className="rider-name-text">{selectedRiderObj?.name || "Rider"}</span>
             </div>
             <Form.Select
               className="rider-select"
-              value={selectedRider}
-              onChange={(e) => setSelectedRider(e.target.value)}
+              value={selectedRider || ""}
+              onChange={(e) => setSelectedRider(Number(e.target.value))}
             >
-              {Object.entries(riders).map(([key, rider]) => (
-                <option key={key} value={key}>{rider.name}</option>
+              {riders.map((rider) => (
+                <option key={rider.id} value={rider.id}>{rider.name}</option>
               ))}
             </Form.Select>
           </div>
@@ -238,27 +209,21 @@ function RiderDashboard() {
             <Card className="summary-card">
               <FaBoxOpen size={32} color="#964b00" />
               <span className="card-title">Active Orders</span>
-              <span className="card-value">
-                {orders.filter(order => order.assignedRider === selectedRider && !["delivered", "cancelled", "returned"].includes(order.currentStatus)).length} orders
-              </span>
+              <span className="card-value">{activeOrdersCount} orders</span>
             </Card>
             <Card className="summary-card">
               <FaCheckCircle size={32} color="#198754" />
               <span className="card-title">Completed</span>
-              <span className="card-value">
-                {orders.filter(order => order.assignedRider === selectedRider && order.currentStatus === "delivered").length} orders
-              </span>
+              <span className="card-value">{completedOrdersCount} orders</span>
             </Card>
             <Card className="summary-card">
               <FaDollarSign size={32} color="#fd7e14" />
               <span className="card-title">Earnings</span>
-              <span className="card-value">
-                ₱{orders.filter(order => order.assignedRider === selectedRider && order.currentStatus === "delivered").reduce((sum, order) => sum + order.total, 0).toFixed(2)}
-              </span>
+              <span className="card-value">₱{earnings}</span>
             </Card>
           </div>
         </Container>
-        
+
         <div className="toggle-buttons-container">
           <button
             className={`toggle-button ${toggle === "active" ? "active" : ""}`}
@@ -285,7 +250,7 @@ function RiderDashboard() {
           {toggle === "all" && <div>Showing All Orders</div>}
           {toggle === "completed" && <div>Showing Completed Orders</div>}
         </div>
-        
+
         <div className="order-cards-container">
           {filteredOrders.length === 0 ? (
             <div className="no-orders-message">
@@ -304,7 +269,7 @@ function RiderDashboard() {
                 <div className="order-details">
                   <p className="detail-item"><FaClock color="#4b929d" /> Ordered at: <span className="detail-value">{order.orderedAt}</span></p>
                   <p className="detail-item"><FaUser color="#4b929d" /> Customer: <span className="detail-value">{order.customerName}</span></p>
-                  <p className="detail-item"><FaPhone color="#4b929d" /> Phone: <span className="detail-value">{order.phone.replace(/^\+1-/, "+63 ")}</span></p>
+                  <p className="detail-item"><FaPhone color="#4b929d" /> Phone: <span className="detail-value">{order.phone}</span></p>
                   <p className="detail-item"><FaMapMarkerAlt color="#4b929d" /> Address: <span className="detail-value">{order.address}</span></p>
                 </div>
                 <div className="order-items-section">
@@ -312,7 +277,7 @@ function RiderDashboard() {
                   <ul className="item-list">
                     {order.items?.map((item, i) => (
                       <li key={i} className="item-row">
-                        <span className="detail-value">{item.quantity}x {item.name} - ₱{item.price.toFixed(2)}</span>
+                        <span className="detail-value">{item.quantity}x {item.name} - ₱{item.price?.toFixed(2)}</span>
                       </li>
                     ))}
                   </ul>
