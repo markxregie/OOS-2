@@ -1,7 +1,8 @@
 import React from 'react';
 import { Container, Row, Col } from 'react-bootstrap';
+import { Link } from 'react-router-dom';
 import "bootstrap-icons/font/bootstrap-icons.css";
-import logo from '../assets/png.png'; 
+import logo from '../assets/png.png';
 import './footer.css';
 
 const Footer = () => {
@@ -25,7 +26,7 @@ const Footer = () => {
           <Col md={9}>
             <Row>
               {/* Follow Us Column */}
-              <Col md={4} className="mb-3 mb-md-0">
+              <Col md={3} className="mb-3 mb-md-0">
                 <h5 className="mb-3 text-custom">Follow Us</h5>
                 <div className="social-icons">
                   <a href="#" className="text-custom me-3">
@@ -41,7 +42,7 @@ const Footer = () => {
               </Col>
 
               {/* Contact Column */}
-              <Col md={4} className="mb-3 mb-md-0">
+              <Col md={3} className="mb-3 mb-md-0">
                 <h5 className="mb-3 text-custom text-start">Contact</h5>
                 <p className="mb-1 text-custom text-start">
                   <i className="bi bi-geo-alt-fill me-2"></i> 123 Cafe Street
@@ -56,10 +57,18 @@ const Footer = () => {
 
 
               {/* Hours Column */}
-              <Col md={4}>
+              <Col md={3} className="mb-3 mb-md-0">
                 <h5 className="mb-3 text-custom text-start">Hours</h5>
                 <p className="mb-1 text-custom text-start">Mon-Fri: 7am - 9pm</p>
                 <p className="mb-1 text-custom text-start">Sat-Sun: 8am - 10pm</p>
+              </Col>
+
+              {/* Concerns Column */}
+              <Col md={3} className="mb-3 mb-md-0">
+                <h5 className="mb-3 text-custom text-start">Concerns</h5>
+                <p className="mb-1 text-custom text-start">
+                  <Link to="/concerns" className="text-custom">Submit Concerns</Link>
+                </p>
               </Col>
 
             </Row>

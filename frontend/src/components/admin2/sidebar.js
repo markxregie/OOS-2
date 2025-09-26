@@ -55,6 +55,13 @@ function SidebarComponent() {
               Rider Dashboard
             </MenuItem>
             <MenuItem
+              icon={<FontAwesomeIcon icon={faEnvelope} />}
+              component={<Link to="/admin/concerns" />}
+              active={location.pathname === '/admin/concerns'}
+            >
+              Concerns
+            </MenuItem>
+            <MenuItem
               icon={<FontAwesomeIcon icon={faChartBar} />}
               component={<Link to="/admin/report" />}
               active={location.pathname === '/admin/report'}

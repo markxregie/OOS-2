@@ -1,0 +1,12 @@
+.concerns-admin {
+  background-color: #f8f9fa;
+  min-height: 100vh;
+}
+
+.concerns-admin h1 {
+  color: #333;
+}
+
+.concerns-admin .table {
+  background-color: white;
+}
