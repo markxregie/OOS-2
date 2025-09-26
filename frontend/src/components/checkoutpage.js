@@ -95,7 +95,7 @@ const CheckoutPage = () => {
     const token = localStorage.getItem("authToken");
     if (!token || !saved) return;
 
-    const { cartItems, orderType, paymentMethod, userData: savedUserData, deliveryNotes } = saved;
+    const { cartItems, orderType, paymentMethod, userData: savedUserData, deliveryNotes, reference_number } = saved;
     const subtotal = cartItems.reduce((acc, item) => acc + item.ProductPrice * item.quantity, 0);
     const deliveryFee = orderType === "Delivery" ? 50 : 0;
     const total = subtotal + deliveryFee;
@@ -110,7 +110,7 @@ const CheckoutPage = () => {
     }));
 
     const deliveryInfoPayload = orderType === "Delivery" ? {
-      FirstName: savedUserData.firstName,
+      FirstName: savedUserData.username,
       MiddleName: savedUserData.middleName,
       LastName: savedUserData.lastName,
       Address: savedUserData.blockStreetSubdivision,
@@ -139,6 +139,7 @@ const CheckoutPage = () => {
           notes: deliveryNotes || "",
           cart_items: cartPayload,
           delivery_info: deliveryInfoPayload,
+          reference_number,
         }),
       });
 
@@ -205,12 +206,13 @@ const CheckoutPage = () => {
     const subtotal = cartItems.reduce((acc, item) => acc + item.ProductPrice * item.quantity, 0);
     const deliveryFee = orderType === "Delivery" ? 50 : 0;
     const total = subtotal + deliveryFee;
+    const reference_number = `REF-${Date.now()}`;
 
     // Validate required fields
     if (orderType === "Delivery") {
       const requiredFields = ['firstName', 'lastName', 'blockStreetSubdivision', 'city', 'province', 'landmark', 'email', 'phone'];
       const missingFields = requiredFields.filter(field => !userData[field]);
-      
+
       if (missingFields.length > 0) {
         Swal.fire({
           icon: 'error',
@@ -229,7 +231,8 @@ const CheckoutPage = () => {
       orderType,
       paymentMethod,
       userData: currentUserData,
-      deliveryNotes
+      deliveryNotes,
+      reference_number
     }));
 
     try {

@@ -2,10 +2,10 @@ import aioodbc
 import os
 
 # database config
-server = 'DESKTOP-D84FNH8'
-database = 'OOS'
+server = 'DESKTOP-OD6PU2O'
+database = 'bleuIMS'
 username = 'sa'
-password = 'markregie123'
+password = 'speedmabagal69'
 driver = 'ODBC Driver 17 for SQL Server'
 
 # async function to get db connection

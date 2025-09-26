@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { FaChevronDown, FaBell, FaAngleLeft, FaAngleRight, FaAngleDoubleLeft, FaAngleDoubleRight } from 'react-icons/fa';
 import { Form } from 'react-bootstrap';
 import { FaSignOutAlt, FaUndo } from "react-icons/fa";
@@ -110,6 +110,12 @@ const Report = () => {
   const [statusFilter, setStatusFilter] = useState("");
   const [dashboardData, setDashboardData] = useState(data);
   const [exportOption, setExportOption] = useState('csv');
+  const [startDate, setStartDate] = useState(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 30);
+    return date.toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
     const tokenFromUrl = searchParams.get('authorization');
@@ -170,7 +176,8 @@ const Report = () => {
           deliveryNotes: order.deliveryNotes,
           adminNotes: order.adminNotes || "",
           statusHistory: order.statusHistory || [],
-          items: order.items || []
+          items: order.items || [],
+          referenceNo: order.reference_number
         }));
 
         setOrders(transformedOrders);
@@ -183,16 +190,26 @@ const Report = () => {
     fetchOrders();
   }, [authToken]);
 
-  useEffect(() => {
-    if (orders.length === 0) return;
+  const dateFilteredOrders = useMemo(() => {
+    return orders.filter(order => {
+      const orderDate = new Date(order.date);
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999); // Include the entire end date
+      return orderDate >= start && orderDate <= end;
+    });
+  }, [orders, startDate, endDate]);
 
-    const totalRevenue = orders.filter(order => order.status.toLowerCase() === 'completed').reduce((sum, order) => sum + order.total, 0);
-    const totalOrders = orders.length;
+  const dashboardDataMemo = useMemo(() => {
+    if (dateFilteredOrders.length === 0) return data;
+
+    const totalRevenue = dateFilteredOrders.filter(order => order.status.toLowerCase() === 'completed').reduce((sum, order) => sum + order.total, 0);
+    const totalOrders = dateFilteredOrders.length;
     const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-    const completedOrders = orders.filter(order => order.status.toLowerCase() === 'completed').length;
+    const completedOrders = dateFilteredOrders.filter(order => order.status.toLowerCase() === 'completed').length;
     const completionRate = totalOrders > 0 ? (completedOrders / totalOrders) * 100 : 0;
 
-    const updatedData = [
+    return [
       {
         title: "Total Revenue",
         current: totalRevenue,
@@ -226,22 +243,24 @@ const Report = () => {
         type: "completionRate"
       }
     ];
+  }, [dateFilteredOrders]);
 
-    setDashboardData(updatedData);
-  }, [orders]);
+  useEffect(() => {
+    setDashboardData(dashboardDataMemo);
+  }, [dashboardDataMemo]);
 
   const toggleDropdown = () => {
     setDropdownOpen(!isDropdownOpen);
   };
 
   // Filter data based on search term and status
-  const filteredData = orders.filter(order =>
+  const filteredData = dateFilteredOrders.filter(order =>
     (order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
     order.id.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
     order.status.toLowerCase().includes(searchTerm.toLowerCase()) ||
     order.paymentMethod.toLowerCase().includes(searchTerm.toLowerCase()) ||
     order.orderType.toLowerCase().includes(searchTerm.toLowerCase())) &&
-    (statusFilter === "" || order.status === statusFilter)
+    (statusFilter === "" || order.status.toLowerCase() === statusFilter.toLowerCase())
   );
 
   // Pagination calculations
@@ -353,9 +372,23 @@ const Report = () => {
               <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
                 <div className="filter-date-range" style={{ display: 'flex', alignItems: 'center' }}>
                   <label htmlFor="startDate" style={{ marginRight: '8px', fontWeight: 'bold' }}>From:</label>
-                  <Form.Control type="date" id="startDate" name="startDate" style={{ padding: '6px 12px', borderRadius: '5px', border: '1px solid #ccc', backgroundColor: '#f9f9f9', cursor: 'pointer', marginRight: '10px', width: '150px' }} />
+                  <Form.Control 
+                    type="date" 
+                    id="startDate" 
+                    name="startDate" 
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    style={{ padding: '6px 12px', borderRadius: '5px', border: '1px solid #ccc', backgroundColor: '#f9f9f9', cursor: 'pointer', marginRight: '10px', width: '150px' }} 
+                  />
                   <label htmlFor="endDate" style={{ marginRight: '8px', fontWeight: 'bold' }}>To:</label>
-                  <Form.Control type="date" id="endDate" name="endDate" style={{ padding: '6px 12px', borderRadius: '5px', border: '1px solid #ccc', backgroundColor: '#f9f9f9', cursor: 'pointer', width: '150px' }} />
+                  <Form.Control 
+                    type="date" 
+                    id="endDate" 
+                    name="endDate" 
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    style={{ padding: '6px 12px', borderRadius: '5px', border: '1px solid #ccc', backgroundColor: '#f9f9f9', cursor: 'pointer', width: '150px' }} 
+                  />
                 </div>
                 <div className="filter-dropdown" style={{ display: 'flex', alignItems: 'center' }}>
                   <label htmlFor="filterStatus" style={{ marginRight: '8px', fontWeight: 'bold' }}>Filter by:</label>
@@ -382,7 +415,7 @@ const Report = () => {
                     onClick={() => {
                       if (exportOption === 'csv') {
                         // Prepare CSV content from orders table data
-                        const headers = ['Date', 'Order ID', 'Customer Name', 'Order Status', 'Payment Method', 'Time Ordered', 'Total Amount (₱)', 'Items Ordered', 'Order Type', 'Handled By'];
+                        const headers = ['Date', 'Order ID', 'Customer Name', 'Order Status', 'Payment Method', 'Time Ordered', 'Total Amount (₱)', 'Items Ordered', 'Reference No.', 'Order Type', 'Handled By'];
                         const rows = filteredData.map(order => {
                           const dateTime = new Date(order.date);
                           const date = dateTime.toLocaleDateString('en-US');
@@ -397,6 +430,7 @@ const Report = () => {
                             time,
                             order.total.toFixed(2),
                             order.items.length,
+                            order.referenceNo,
                             order.orderType,
                             'Admin'
                           ];
@@ -419,7 +453,7 @@ const Report = () => {
                             const autoTable = autoTableModule.default;
                             const doc = new jsPDF();
 
-                            const headers = [['Date', 'Order ID', 'Customer Name', 'Order Status', 'Payment Method', 'Time Ordered', 'Total Amount (₱)', 'Items Ordered', 'Order Type', 'Handled By']];
+                            const headers = [['Date', 'Order ID', 'Customer Name', 'Order Status', 'Payment Method', 'Time Ordered', 'Total Amount (₱)', 'Items Ordered', 'Reference No.', 'Order Type', 'Handled By']];
                             const rows = filteredData.map(order => {
                               const dateTime = new Date(order.date);
                               const date = dateTime.toLocaleDateString('en-US');
@@ -434,6 +468,7 @@ const Report = () => {
                                 time,
                                 order.total.toFixed(2),
                                 order.items.length,
+                                order.referenceNo,
                                 order.orderType,
                                 'Admin'
                               ];
@@ -467,6 +502,7 @@ const Report = () => {
                   <th>Time Ordered</th>
                   <th >Total Amount (₱)</th>
                   <th>Items Ordered</th>
+                  <th>Reference No.</th>
                   <th>Order Type</th>
                   <th>Handled By</th>
                 </tr>
@@ -487,6 +523,7 @@ const Report = () => {
                       <td>{time}</td>
                       <td>₱{order.total.toFixed(2)}</td>
                       <td>{order.items.length}</td>
+                      <td>{order.referenceNo}</td>
                       <td>{order.orderType}</td>
                       <td>Admin</td>
                     </tr>
