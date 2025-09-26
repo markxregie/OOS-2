@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { FaChevronDown, FaBell, FaAngleLeft, FaAngleRight, FaAngleDoubleLeft, FaAngleDoubleRight } from 'react-icons/fa';
-import { Form } from 'react-bootstrap';
+import { Form, Table } from 'react-bootstrap';
 import { FaSignOutAlt, FaUndo } from "react-icons/fa";
 import { useSearchParams } from "react-router-dom";
 import './report.css';
 
 import coffeeImage from "../../assets/coffee.jpg";
-  
+ 
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   AreaChart, Area
@@ -29,6 +29,10 @@ import {
   faSearch,
   faDownload
 } from '@fortawesome/free-solid-svg-icons';
+
+// Library initialization for FontAwesome
+library.add(faMoneyBillWave, faChartLine, faShoppingCart, faClock, faArrowTrendUp, faArrowTrendDown, faCog, faClipboardCheck, faDollarSign, faClipboardList, faChartPie, faCheckCircle, faSearch, faDownload);
+
 
 const data = [
   {
@@ -287,6 +291,215 @@ const Report = () => {
     setCurrentPage(totalPages);
   };
 
+  const handleExport = (option) => {
+    if (option === 'csv') {
+      // --- BEAUTIFIED CSV EXPORT LOGIC ---
+      let csvLines = [];
+
+      // 1. Report Title and Date Range
+      csvLines.push("Sales and Orders Report");
+      csvLines.push(`Report Period:,${startDate} to ${endDate}`);
+      csvLines.push(""); // Blank line for separation
+
+      // 2. Summary Metrics Section
+      csvLines.push("--- Summary Metrics ---");
+      const summaryHeaders = ['Metric', 'Value'];
+      csvLines.push(summaryHeaders.join(','));
+      
+      const summaryRows = dashboardData.map(card => [
+        card.title,
+        card.format === 'currency' ? `PHP ${card.current.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : (card.type === 'completionRate' ? `${card.current.toFixed(2)}%` : card.current.toLocaleString())
+      ]);
+      csvLines.push(...summaryRows.map(e => e.join(',')));
+      csvLines.push(""); // Blank line for separation
+      csvLines.push(""); // Another blank line for separation
+
+      // 3. Detailed Order List Section
+      csvLines.push("--- Detailed Order List ---");
+      const detailHeaders = ['Date', 'Order ID', 'Customer Name', 'Order Status', 'Payment Method', 'Time Ordered', 'Total Amount (PHP)', 'Items Ordered', 'Reference No.', 'Order Type', 'Handled By'];
+      csvLines.push(detailHeaders.join(','));
+      
+      const detailRows = filteredData.map(order => {
+        const dateTime = new Date(order.date);
+        // Using ISO date and 12-hour time for consistent formatting in CSV
+        const date = dateTime.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        const time = dateTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+        // Ensure string values are wrapped in quotes if they might contain commas
+        const wrapQuotes = (value) => `"${String(value).replace(/"/g, '""')}"`;
+
+        return [
+          wrapQuotes(date),
+          wrapQuotes(order.id),
+          wrapQuotes(order.customer),
+          wrapQuotes(order.status),
+          wrapQuotes(order.paymentMethod),
+          wrapQuotes(time),
+          order.total.toFixed(2), // Numeric values don't need quotes
+          order.items.length,
+          wrapQuotes(order.referenceNo),
+          wrapQuotes(order.orderType),
+          wrapQuotes('Admin')
+        ].join(',');
+      });
+      csvLines.push(...detailRows);
+
+      const csvContent = csvLines.join('\n');
+      
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `orders_report_${startDate}_to_${endDate}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else if (option === 'pdf') {
+      import('jspdf').then(jsPDFModule => {
+        import('jspdf-autotable').then(autoTableModule => {
+          const jsPDF = jsPDFModule.default;
+          const autoTable = autoTableModule.autoTable;
+          const doc = new jsPDF('p', 'mm', 'a4'); // 'p' for portrait, 'mm' for units, 'a4' for size
+
+          const primaryColor = [74, 155, 165]; // Your theme color (a shade of teal/blue)
+          const primaryTextColor = [255, 255, 255]; // White
+          const secondaryTextColor = [50, 50, 50]; // Dark grey
+
+          let finalY = 0;
+
+          // --- Header and Footer Functions ---
+          const addHeaderFooter = (doc, totalPages) => {
+            const pageCount = doc.internal.getNumberOfPages();
+            for(let i = 1; i <= pageCount; i++) {
+                doc.setPage(i);
+
+                // Header
+                doc.setFontSize(10);
+                doc.setTextColor(secondaryTextColor[0], secondaryTextColor[1], secondaryTextColor[2]);
+                doc.text(`Report Period: ${startDate} to ${endDate}`, doc.internal.pageSize.getWidth() - 10, 10, { align: 'right' });
+
+                doc.setFontSize(18);
+                doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+                doc.text('Sales and Orders Report', 14, 10);
+                doc.line(14, 12, doc.internal.pageSize.getWidth() - 14, 12); // Separator line
+
+                // Footer
+                doc.setFontSize(8);
+                doc.text(`Page ${i} of ${totalPages}`, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
+            }
+          };
+
+          // --- Summary Metrics Table ---
+          doc.setFontSize(14);
+          doc.setTextColor(secondaryTextColor[0], secondaryTextColor[1], secondaryTextColor[2]);
+          doc.text('Summary Metrics', 14, 25);
+
+          const summaryHeaders = [['Metric', 'Value']];
+          const summaryBody = dashboardData.map(card => [
+              card.title,
+              card.format === 'currency' ? `PHP ${card.current.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` :
+              (card.type === 'completionRate' ? `${card.current.toFixed(2)}%` : card.current.toLocaleString())
+          ]);
+
+          autoTable(doc, {
+              startY: 30,
+              head: summaryHeaders,
+              body: summaryBody,
+              theme: 'striped',
+              styles: { fontSize: 10, cellPadding: 3 },
+              headStyles: { fillColor: primaryColor, textColor: primaryTextColor, fontStyle: 'bold' },
+              alternateRowStyles: { fillColor: [240, 240, 240] },
+              columnStyles: {
+                  0: { cellWidth: 50 }, // Metric column width
+                  1: { fontStyle: 'bold' } // Value column bold
+              },
+              didParseCell: (data) => {
+                  // Center-align the value column
+                  if (data.column.index === 1 && data.section === 'body') {
+                      data.cell.styles.halign = 'center';
+                  }
+              }
+          });
+
+          finalY = doc.lastAutoTable.finalY;
+
+          // --- Orders Table ---
+          doc.setFontSize(14);
+          doc.setTextColor(secondaryTextColor[0], secondaryTextColor[1], secondaryTextColor[2]);
+          doc.text('Detailed Order List', 14, finalY + 15);
+
+          const tableHeaders = [['Date', 'Order ID', 'Customer', 'Status', 'Payment', 'Time', 'Total (₱)', 'Items', 'Reference']];
+
+          const tableRows = filteredData.map(order => {
+              const dateTime = new Date(order.date);
+              const date = dateTime.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+              const time = dateTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+              return [
+                  date,
+                  order.id,
+                  order.customer,
+                  order.status,
+                  order.paymentMethod,
+                  time,
+                  order.total.toFixed(2),
+                  order.items.length,
+                  order.referenceNo
+              ];
+          });
+
+          autoTable(doc, {
+              head: tableHeaders,
+              body: tableRows,
+              startY: finalY + 20,
+              theme: 'striped',
+              styles: {
+                  fontSize: 8,
+                  cellPadding: 2,
+                  textColor: secondaryTextColor,
+                  valign: 'middle'
+              },
+              headStyles: {
+                  fillColor: primaryColor,
+                  textColor: primaryTextColor,
+                  fontStyle: 'bold',
+                  halign: 'center'
+              },
+              alternateRowStyles: {
+                  fillColor: [240, 240, 240] // Light gray for alternate rows
+              },
+              columnStyles: {
+                  0: { halign: 'center' }, // Date
+                  1: { halign: 'center' }, // Order ID
+                  3: { halign: 'center', cellWidth: 15 }, // Status
+                  5: { halign: 'center', cellWidth: 15 }, // Time
+                  6: { halign: 'right', fontStyle: 'bold' }, // Total Amount
+                  7: { halign: 'center', cellWidth: 15 }, // Items Ordered
+              },
+              didParseCell: (data) => {
+                  // Custom styling for Status column
+                  if (data.column.index === 3 && data.section === 'body') {
+                      let color = [150, 150, 150]; // Default
+                      if (data.cell.raw === 'Completed') color = [39, 174, 96]; // Green
+                      else if (data.cell.raw === 'Pending') color = [241, 196, 15]; // Yellow
+                      else if (data.cell.raw === 'Cancelled') color = [192, 57, 43]; // Red
+
+                      data.cell.styles.fillColor = color;
+                      data.cell.styles.textColor = [255, 255, 255];
+                      data.cell.styles.fontStyle = 'bold';
+                  }
+              }
+          });
+
+          addHeaderFooter(doc, doc.internal.getNumberOfPages());
+
+          doc.save(`orders_report_${startDate}_to_${endDate}.pdf`);
+        });
+      });
+    }
+  };
+
+
   return (
     <div className="dashboard">
       <main className="dashboard-main">
@@ -311,25 +524,25 @@ const Report = () => {
               </div>
               {isDropdownOpen && (
 <div className="profile-dropdown" style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "white", border: "1px solid #ccc", borderRadius: "4px", boxShadow: "0 2px 8px rgba(0,0,0,0.15)", zIndex: 1000, width: "150px" }}>
-                                    <ul style={{ listStyle: "none", margin: 0, padding: "8px 0" }}>
-                                      <li
-                                        onClick={() => window.location.reload()}
-                                        style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#4b929d" }}
-                                        onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f0f0f0"}
-                                        onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
-                                      >
-                                        <FaUndo /> Refresh
-                                      </li>
-                                      <li
-                                        onClick={() => { localStorage.removeItem("access_token"); window.location.href = "http://localhost:4002/"; }}
-                                        style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#dc3545" }}
-                                        onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8d7da"}
-                                        onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
-                                      >
-                                        <FaSignOutAlt /> Logout
-                                      </li>
-                                    </ul>
-                    </div>
+                    <ul style={{ listStyle: "none", margin: 0, padding: "8px 0" }}>
+                      <li
+                        onClick={() => window.location.reload()}
+                        style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#4b929d" }}
+                        onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f0f0f0"}
+                        onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
+                      >
+                        <FaUndo /> Refresh
+                      </li>
+                      <li
+                        onClick={() => { localStorage.removeItem("access_token"); window.location.href = "http://localhost:4002/"; }}
+                        style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#dc3545" }}
+                        onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8d7da"}
+                        onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
+                      >
+                        <FaSignOutAlt /> Logout
+                      </li>
+                    </ul>
+                </div>
               )}
             </div>
           </div>
@@ -412,86 +625,12 @@ const Report = () => {
                       cursor: 'pointer',
                       fontSize: '16px'
                     }}
-                    onClick={() => {
-                      if (exportOption === 'csv') {
-                        // Prepare CSV content from orders table data
-                        const headers = ['Date', 'Order ID', 'Customer Name', 'Order Status', 'Payment Method', 'Time Ordered', 'Total Amount (₱)', 'Items Ordered', 'Reference No.', 'Order Type', 'Handled By'];
-                        const rows = filteredData.map(order => {
-                          const dateTime = new Date(order.date);
-                          const date = dateTime.toLocaleDateString('en-US');
-                          const time = dateTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-
-                          return [
-                            date,
-                            order.id,
-                            order.customer,
-                            order.status,
-                            order.paymentMethod,
-                            time,
-                            order.total.toFixed(2),
-                            order.items.length,
-                            order.referenceNo,
-                            order.orderType,
-                            'Admin'
-                          ];
-                        });
-                        const csvContent = [headers, ...rows]
-                          .map(e => e.join(","))
-                          .join("\n");
-                        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                        const url = URL.createObjectURL(blob);
-                        const link = document.createElement('a');
-                        link.href = url;
-                        link.setAttribute('download', 'orders_report.csv');
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                      } else if (exportOption === 'pdf') {
-                        import('jspdf').then(jsPDFModule => {
-                          import('jspdf-autotable').then(autoTableModule => {
-                            const jsPDF = jsPDFModule.default;
-                            const autoTable = autoTableModule.default;
-                            const doc = new jsPDF();
-
-                            const headers = [['Date', 'Order ID', 'Customer Name', 'Order Status', 'Payment Method', 'Time Ordered', 'Total Amount (₱)', 'Items Ordered', 'Reference No.', 'Order Type', 'Handled By']];
-                            const rows = filteredData.map(order => {
-                              const dateTime = new Date(order.date);
-                              const date = dateTime.toLocaleDateString('en-US');
-                              const time = dateTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-
-                              return [
-                                date,
-                                order.id,
-                                order.customer,
-                                order.status,
-                                order.paymentMethod,
-                                time,
-                                order.total.toFixed(2),
-                                order.items.length,
-                                order.referenceNo,
-                                order.orderType,
-                                'Admin'
-                              ];
-                            });
-
-                            autoTable(doc, {
-                              head: headers,
-                              body: rows,
-                              startY: 10,
-                              styles: { fontSize: 8 },
-                              headStyles: { fillColor: [74, 155, 165] }
-                            });
-
-                            doc.save('orders_report.pdf');
-                          });
-                        });
-                      }
-                    }}
+                    onClick={() => handleExport(exportOption)}
                   />
                 </div>
               </div>
             </div>
-            <table className="orders-table" style={{ width: "100%" }}>
+            <Table responsive className="orders-table">
               <thead>
                 <tr>
                   <th>Date</th>
@@ -530,7 +669,7 @@ const Report = () => {
                   );
                 })}
               </tbody>
-            </table>
+            </Table>
 
             {/* Pagination Controls */}
             {filteredData.length > rowsPerPage && (

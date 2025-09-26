@@ -1,12 +1,103 @@
 .concerns-admin {
   background-color: #f8f9fa;
   min-height: 100vh;
+  /* Add a custom max-width, e.g., 90% of the viewport */
+  max-width: 82vw; 
+  /* Also add margin auto to center it if it's not full width */
+  margin-top: 1.5rem!important;
+  border-radius: 15px;
 }
 
 .concerns-admin h1 {
   color: #333;
 }
 
-.concerns-admin .table {
-  background-color: white;
+.concerns-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background-color: #fff;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
+    margin-top: 1rem; /* Reusing the margin from the original table section */
+}
+
+/* Table Header - Primary Color */
+.concerns-table thead {
+    background-color: white; 
+    color: #333;
+}
+
+.concerns-table th {
+    padding: 15px 20px;
+    text-align: left;
+    font-weight: 500;
+}
+
+/* Table Body Cells */
+.concerns-table td {
+    padding: 15px 20px;
+    border-bottom: 1px solid #e9ecef;
+    vertical-align: middle;
+}
+
+.concerns-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Row Hover Effect */
+.concerns-table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* --- Status Badges (Using Bootstrap classes for consistency with JS) --- */
+
+/* Note: The JS component uses Bootstrap's Badge utility classes (e.g., bg-warning, bg-success). 
+   These styles are provided here for custom control if the utility classes aren't loading 
+   or if a custom look is desired, but for the provided JS, using the general look is best. */
+.badge {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    display: inline-block;
+}
+
+/* --- Action Buttons (Adapted for the JS component buttons) --- */
+
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    border-radius: 0.2rem;
+}
+
+/* Specific styling for the small action buttons used in the table (View, Delete) */
+.concerns-table .btn-outline-primary {
+    color: #4a9ba5;
+    border-color: #4a9ba5;
+}
+
+.concerns-table .btn-outline-primary:hover {
+    background-color: #4a9ba5;
+    color: white;
+}
+
+.concerns-table .btn-outline-danger {
+    color: #dc3545;
+    border-color: #dc3545;
+}
+
+.concerns-table .btn-outline-danger:hover {
+    background-color: #dc3545;
+    color: white;
+}
+
+/* --- Responsive Table (Kept as is) --- */
+@media (max-width: 768px) {
+    .concerns-table {
+        display: block;
+        overflow-x: auto;
+    }
 }
