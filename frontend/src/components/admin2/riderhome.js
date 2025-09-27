@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from "react-router-dom";
 import { FaChevronDown, FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaUndo, FaSignOutAlt, FaTimesCircle, FaExchangeAlt, FaBars, FaHome, FaHistory, FaCog, FaCreditCard, FaUserTie } from "react-icons/fa";
 import { Container, Card, Form, Button } from "react-bootstrap";
 import riderImage from "../../assets/rider.jpg";
@@ -8,14 +9,37 @@ import "./riderdashboard.css";
 import Swal from 'sweetalert2';
 
 function RiderDashboard() {
-  const userRole = "Admin";
-  const userName = "Lim Alcovendas";
+  const [userRole, setUserRole] = useState("");
+  const [userName, setUserName] = useState("");
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 991);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [currentOrderToDeliver, setCurrentOrderToDeliver] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const authToken = localStorage.getItem("authToken");
+  const [riderId, setRiderId] = useState(localStorage.getItem("riderId") || "");
+  const [riderName, setRiderName] = useState(localStorage.getItem("riderName") || "");
+  const [riderPhone, setRiderPhone] = useState(localStorage.getItem("riderPhone") || "");
+  const [userLoading, setUserLoading] = useState(true); // New loading state for user info
+
+  const location = useLocation();
+
+  useEffect(() => {
+    const queryParams = new URLSearchParams(location.search);
+    const tokenFromUrl = queryParams.get("authorization");
+    const usernameFromUrl = queryParams.get("username");
+
+    if (tokenFromUrl) {
+      localStorage.setItem("authToken", tokenFromUrl);
+    }
+    if (usernameFromUrl) {
+      localStorage.setItem("riderUsername", usernameFromUrl);
+    }
+  }, [location.search]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -44,95 +68,110 @@ function RiderDashboard() {
   const [orders, setOrders] = useState([]);
 
   useEffect(() => {
-    setOrders(sampleOrders);
-  }, []);
-
-
-
-  const sampleOrders = [
-    {
-      id: 1,
-      currentStatus: "inTransit",
-      orderedAt: "2023-10-01 10:00 AM",
-      customerName: "Alice Johnson",
-      phone: "+1-1234567890",
-      address: "123 Main St, Springfield",
-      items: [
-        { quantity: 2, name: "Americano", price: 5.00 },
-        { quantity: 1, name: "Croissant", price: 3.50 }
-      ],
-      total: 13.50,
-      assignedRider: "rider1"
-    },
-    {
-      id: 2,
-      currentStatus: "delivered",
-      orderedAt: "2023-10-01 10:30 AM",
-      customerName: "Bob Smith",
-      phone: "+1-1234567891",
-      address: "456 Elm St, Springfield",
-      items: [
-        { quantity: 1, name: "Latte", price: 6.00 },
-        { quantity: 2, name: "Muffin", price: 4.00 }
-      ],
-      total: 14.00,
-      assignedRider: "rider1"
-    },
-    {
-      id: 3,
-      currentStatus: "pending",
-      orderedAt: "2023-10-01 11:00 AM",
-      customerName: "Charlie Brown",
-      phone: "+1-1234567892",
-      address: "789 Oak Ave, Springfield",
-      items: [
-        { quantity: 3, name: "Espresso", price: 4.00 }
-      ],
-      total: 12.00,
-      assignedRider: "rider2"
-    },
-    {
-      id: 4,
-      currentStatus: "inTransit",
-      orderedAt: "2023-10-01 11:30 AM",
-      customerName: "Diana Prince",
-      phone: "+1-1234567893",
-      address: "101 Justice Ln, Metropolis",
-      items: [
-        { quantity: 1, name: "Cappuccino", price: 6.50 },
-        { quantity: 1, name: "Danish", price: 4.50 }
-      ],
-      total: 11.00,
-      assignedRider: "rider2"
-    },
-    {
-      id: 5,
-      currentStatus: "cancelled",
-      orderedAt: "2023-10-01 11:45 AM",
-      customerName: "Clark Kent",
-      phone: "+1-1234567894",
-      address: "300 Krypton Dr, Smallville",
-      items: [
-        { quantity: 2, name: "Hot Chocolate", price: 5.50 }
-      ],
-      total: 11.00,
-      assignedRider: "rider1"
-    },
-    {
-      id: 6,
-      currentStatus: "preparing",
-      orderedAt: "2023-10-01 12:00 PM",
-      customerName: "Bruce Wayne",
-      phone: "+1-1234567895",
-      address: "1007 Mountain Ln, Gotham",
-      items: [
-        { quantity: 1, name: "Americano", price: 5.00 },
-        { quantity: 1, name: "Muffin", price: 4.00 }
-      ],
-      total: 9.00,
-      assignedRider: "rider1"
+    const fetchOrders = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`http://localhost:7004/delivery/rider/${riderId}/orders`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        // ✅ no remapping needed, backend already normalized
+        setOrders(data);
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (riderId && authToken) {
+      fetchOrders();
     }
-  ];
+  }, [riderId, authToken]);
+
+  // Fetch user info with loading and debug logging
+  useEffect(() => {
+    if (authToken) {
+      setUserLoading(true);
+      console.log("Fetching user info");
+      fetch("http://localhost:4000/auth/users/me", {
+        headers: { "Authorization": `Bearer ${authToken}` }
+      })
+        .then(res => {
+          if (res.status === 401) {
+            handleLogout();
+            return;
+          }
+          if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
+          }
+          return res.json();
+        })
+        .then(async data => {
+          console.log("User data:", data);
+          if (!data) return;
+          const userId = data.userId || "";
+          const userRoleData = data.userRole || "";
+          const fallbackName = (data.fullName && data.fullName.trim() !== "")
+            ? data.fullName
+            : (data.username && data.username.trim() !== "")
+              ? data.username
+              : "Rider";
+          const fallbackPhone = data.phone || "";
+
+          setRiderId(userId);
+          localStorage.setItem("riderId", userId);
+          setUserRole(userRoleData);
+          setUserName(fallbackName);
+
+          // Fetch rider details from riders endpoint
+          if (userId) {
+            try {
+              const riderRes = await fetch(`http://localhost:4000/users/riders/${userId}`, {
+                headers: { "Authorization": `Bearer ${authToken}` }
+              });
+              if (riderRes.ok) {
+                const riderData = await riderRes.json();
+                console.log("Rider data:", riderData);
+                const riderFullName = riderData.FullName || fallbackName;
+                const riderPhone = riderData.Phone || fallbackPhone;
+                setRiderName(riderFullName);
+                localStorage.setItem("riderName", riderFullName);
+                setRiderPhone(riderPhone);
+                localStorage.setItem("riderPhone", riderPhone);
+                setUserName(riderFullName);
+              } else {
+                // Fallback to user data
+                setRiderName(fallbackName);
+                localStorage.setItem("riderName", fallbackName);
+                setRiderPhone(fallbackPhone);
+                localStorage.setItem("riderPhone", fallbackPhone);
+              }
+            } catch (err) {
+              console.error("Failed to fetch rider info:", err);
+              // Fallback to user data
+              setRiderName(fallbackName);
+              localStorage.setItem("riderName", fallbackName);
+              setRiderPhone(fallbackPhone);
+              localStorage.setItem("riderPhone", fallbackPhone);
+            }
+          } else {
+            setRiderName(fallbackName);
+            localStorage.setItem("riderName", fallbackName);
+            setRiderPhone(fallbackPhone);
+            localStorage.setItem("riderPhone", fallbackPhone);
+          }
+          setUserLoading(false); // Done loading
+        })
+        .catch(err => {
+          console.error("Failed to fetch user info:", err);
+          setUserLoading(false); // Done loading even on error
+        });
+    }
+  }, [authToken]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -189,7 +228,24 @@ function RiderDashboard() {
       return true;
     });
 
-
+  const updateOrderStatus = async (orderId, status) => {
+    try {
+      const response = await fetch(`http://localhost:7004/delivery/orders/${orderId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ status })
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to update status: ${response.status}`);
+      }
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, currentStatus: status } : o));
+    } catch (e) {
+      Swal.fire('Error', e.message, 'error');
+    }
+  };
 
   const handleProgressiveStatusChange = (orderId, currentStatus) => {
     if (currentStatus === 'pickedUp' || currentStatus === 'inTransit') {
@@ -220,11 +276,7 @@ function RiderDashboard() {
       }).then((result) => {
         if (result.isConfirmed) {
           // If a file was uploaded and confirmed, update the order status
-          setOrders(prevOrders =>
-            prevOrders.map(order =>
-              order.id === orderId ? { ...order, currentStatus: 'delivered', proofOfDelivery: 'uploaded' } : order
-            )
-          );
+          updateOrderStatus(orderId, 'delivered');
           Swal.fire(
             'Delivered!',
             'The order has been marked as delivered.',
@@ -247,11 +299,7 @@ function RiderDashboard() {
         confirmButtonText: 'Yes, change it!'
       }).then((result) => {
         if (result.isConfirmed) {
-          setOrders(prevOrders =>
-            prevOrders.map(order =>
-              order.id === orderId ? { ...order, currentStatus: newStatus } : order
-            )
-          );
+          updateOrderStatus(orderId, newStatus);
           Swal.fire(
             'Updated!',
             'The order status has been changed.',
@@ -311,7 +359,10 @@ function RiderDashboard() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("access_token");
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("riderId");
+    localStorage.removeItem("riderName");
+    localStorage.removeItem("riderPhone");
     window.location.href = "http://localhost:4002/";
   };
 
@@ -362,7 +413,7 @@ function RiderDashboard() {
                       <li onClick={() => window.location.reload()}>
                         <FaUndo /> Refresh
                       </li>
-                      <li onClick={() => { localStorage.removeItem("access_token"); window.location.href = "http://localhost:4002/"; }}>
+                      <li onClick={handleLogout}>
                         <FaSignOutAlt /> Logout
                       </li>
                     </ul>
@@ -376,8 +427,11 @@ function RiderDashboard() {
         <Container fluid className="dashboard-summary-container" style={{ backgroundColor: "#a3d3d8" }}>
           <div className="rider-selector-group">
             <div className="rider-info-display">
-              <img src={riderImage} alt="John Doe" className="rider-profile-pic" />
-              <span className="rider-name-text">John Doe</span>
+              <img src={riderImage} alt={riderName} className="rider-profile-pic" />
+              <span className="rider-name-text">
+  {riderName || "Rider"}{riderPhone ? ` (${riderPhone})` : ""}
+</span>
+
             </div>
           </div>
           <div className="summary-cards-container">
@@ -433,7 +487,11 @@ function RiderDashboard() {
         </div>
 
         <div className="order-cards-container">
-          {filteredOrders.length === 0 ? (
+          {loading ? (
+            <div>Loading...</div>
+          ) : error ? (
+            <div>Error: {error}</div>
+          ) : filteredOrders.length === 0 ? (
             <div className="no-orders-message">
               <FaBoxOpen size={50} color="#ccc" />
               <p>No orders to show.</p>
@@ -448,9 +506,9 @@ function RiderDashboard() {
                   </div>
                 </div>
                 <div className="order-details">
-                  <p className="detail-item"><FaClock color="#4b929d" /> Ordered at: <span className="detail-value">{order.orderedAt}</span></p>
+                  <p className="detail-item"><FaClock color="#4b929d" /> Ordered at: <span className="detail-value">{new Date(order.orderedAt).toLocaleString()}</span></p>
                   <p className="detail-item"><FaUser color="#4b929d" /> Customer: <span className="detail-value">{order.customerName}</span></p>
-                  <p className="detail-item"><FaPhone color="#4b929d" /> Phone: <span className="detail-value">{order.phone.replace(/^\+1-/, "+63 ")}</span></p>
+                  <p className="detail-item"><FaPhone color="#4b929d" /> Phone: <span className="detail-value">{order.phone}</span></p>
                   <p className="detail-item"><FaMapMarkerAlt color="#4b929d" /> Address: <span className="detail-value">{order.address}</span></p>
                 </div>
                 <div className="order-items-section">
