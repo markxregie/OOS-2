@@ -292,6 +292,7 @@ body {
 .card.deliveredOrders .card-icon { background: #17a2b8; } /* info blue */
 .card.inPreparation .card-icon { background: #6c757d; } /* secondary gray */
 .card.confirmedOrders .card-icon { background: #6610f2; } /* purple */
+.card.cancelledOrders .card-icon { background: #dc3545; } /* red for cancelled */
 
 .card-text {
   flex: 1;

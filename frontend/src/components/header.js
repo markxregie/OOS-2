@@ -9,8 +9,9 @@ import shoppingIcon from '../assets/shopping.svg';
 import bellIcon from '../assets/bell.svg';
 import './header.css';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useContext } from 'react';
 import Swal from 'sweetalert2';
+import { CartContext } from '../contexts/CartContext';
 
 export default function AppHeader() {
   const location = useLocation();
@@ -171,6 +172,9 @@ export default function AppHeader() {
     }, 200); // delay hiding by 200ms
   };
 
+  const { cartItems } = useContext(CartContext);
+  const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0);
+
   return (
     <>
       <Navbar expand="lg" onToggle={(expanded) => setIsToggled(expanded)} className={`bg-body-tertiary ${isVisible ? '' : 'header-hidden'}`}>
@@ -185,8 +189,13 @@ export default function AppHeader() {
           </Navbar.Brand>
 
           {isLoggedIn && isMobile && (
-            <Nav.Link as={Link} to="/cart" className="mobile-cart-icon">
+            <Nav.Link as={Link} to="/cart" className="mobile-cart-icon position-relative">
               <img src={shoppingIcon} alt="Shopping Bag" className="cart-img" style={{ width: '24px', height: '24px' }} />
+              {cartCount > 0 && (
+                <span className="cart-badge badge bg-danger position-absolute top-0 start-100 translate-middle">
+                  {cartCount}
+                </span>
+              )}
             </Nav.Link>
           )}
 
@@ -352,8 +361,14 @@ export default function AppHeader() {
                         <Nav.Link
                           as={Link}
                           to="/cart"
+                          className="position-relative"
                         >
                           <img src={shoppingIcon} alt="Shopping Bag" className="cart-img" style={{ width: '24px', height: '24px' }} />
+                          {cartCount > 0 && (
+                            <span className="cart-badge badge bg-danger position-absolute top-0 start-100 translate-middle">
+                              {cartCount}
+                            </span>
+                          )}
                         </Nav.Link>
 
                         <Dropdown align="end">

@@ -1,0 +1,13 @@
+.concerns-page {
+    margin-top: 6rem;
+  min-height: 100vh;
+}
+
+.concerns-page h1 {
+  color: #333;
+}
+
+.concerns-page p {
+  font-size: 1.2rem;
+  color: #666;
+}

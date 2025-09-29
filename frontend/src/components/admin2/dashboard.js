@@ -19,18 +19,19 @@ import {
   faArrowTrendDown,
   faCheckCircle,
   faCog,
-  faClipboardCheck
+  faClipboardCheck,
+  faXmark
 } from '@fortawesome/free-solid-svg-icons';
 import { FaChevronDown, FaBell } from "react-icons/fa";
 
-library.add(faMoneyBillWave, faChartLine, faShoppingCart, faClock, faArrowTrendUp, faArrowTrendDown, faCheckCircle, faCog, faClipboardCheck);
+library.add(faMoneyBillWave, faChartLine, faShoppingCart, faClock, faArrowTrendUp, faArrowTrendDown, faCheckCircle, faCog, faClipboardCheck, faXmark);
 
 // --- Static data remains the same ---
 const revenueData = [ { name: 'Jan', income: 5000, expense: 3000 }, { name: 'Feb', income: 14000, expense: 10000 }, { name: 'Mar', income: 15000, expense: 12000 }, { name: 'Apr', income: 11000, expense: 9000 }, { name: 'May', income: 13000, expense: 7000 }, { name: 'June', income: 18000, expense: 10000 }, { name: 'July', income: 18000, expense: 13000 }, ];
-const salesData = [ { name: 'Mon', sales: 60 }, { name: 'Tue', sales: 95 }, { name: 'Wed', sales: 70 }, { name: 'Thu', sales: 25 }, { name: 'Fri', sales: 60 }, { name: 'Sat', sales: 68 }, { name: 'Sun', sales: 63 }, ];
+
 const currentDate = new Date().toLocaleString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric", });
 const userRole = "Admin";
-const initialData = [ { title: "Today's Sales", current: 0, previous: 0, format: "currency", icon: faMoneyBillWave, type: "sales" }, { title: "Total Orders", current: 0, previous: 0, format: "number", icon: faChartLine, type: "revenue" }, { title: "Today's Orders", current: 0, previous: 0, format: "number", icon: faShoppingCart, type: "orders" }, { title: "Pending Orders", current: 0, previous: 0, format: "number", icon: faClock, type: "pendings" }, { title: "Delivered Orders", current: 0, previous: 0, format: "number", icon: faCheckCircle, type: "deliveredOrders" }, { title: "In Preparation", current: 0, previous: 0, format: "number", icon: faCog, type: "inPreparation" }, { title: "Confirmed Orders", current: 0, previous: 0, format: "number", icon: faClipboardCheck, type: "confirmedOrders" } ];
+const initialData = [ { title: "Today's Sales", current: 0, previous: 0, format: "currency", icon: faMoneyBillWave, type: "sales" }, { title: "Total Orders", current: 0, previous: 0, format: "number", icon: faChartLine, type: "revenue" }, { title: "Today's Orders", current: 0, previous: 0, format: "number", icon: faShoppingCart, type: "orders" }, { title: "Pending Orders", current: 0, previous: 0, format: "number", icon: faClock, type: "pendings" }, { title: "Delivered Orders", current: 0, previous: 0, format: "number", icon: faCheckCircle, type: "deliveredOrders" }, { title: "Pick Up Orders", current: 0, previous: 0, format: "number", icon: faClipboardCheck, type: "confirmedOrders" }, { title: "Cancelled Orders", current: 0, previous: 0, format: "number", icon: faXmark, type: "cancelledOrders" } ];
 const formatValue = (value, format) => { return format === "currency" ? `₱${value.toLocaleString()}` : value.toLocaleString(); };
 
 // Recent Orders state will be populated from API
@@ -48,14 +49,18 @@ const Dashboard = () => {
   const [userName, setUserName] = useState("Loading...");
 
   const [revenueFilter, setRevenueFilter] = useState("Weekly");
-  const [salesFilter, setSalesFilter] = useState("Monthly");
+  const [salesFilter, setSalesFilter] = useState("Weekly");
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const [dashboardData, setDashboardData] = useState({
     totalOrders: 0,
     pendingOrders: 0,
     todaysOrders: 0,
+    cancelledOrders: 0,
+    deliveredOrders: 0,
+    confirmedOrders: 0,
   });
   const [recentOrders, setRecentOrders] = useState([]);
+  const [allOrders, setAllOrders] = useState([]);
 
   // 4. This useEffect runs once to read the parameters from the URL
   useEffect(() => {
@@ -191,8 +196,14 @@ const Dashboard = () => {
           date: order.order_date,
           status: order.order_status,
           amount: order.total_amount,
-        })).slice(0, 10); // Limit to 10 recent orders
-        setRecentOrders(transformedOrders);
+          orderType: order.order_type,
+        }));
+        setAllOrders(transformedOrders);
+        setRecentOrders(transformedOrders.slice(0, 10)); // Limit to 10 for display
+        const cancelledCount = transformedOrders.filter(order => order.status.toLowerCase() === "cancelled").length;
+        const deliveredCount = transformedOrders.filter(order => order.orderType.toLowerCase() === "delivery" && order.status.toLowerCase() === "completed").length;
+        const confirmedCount = transformedOrders.filter(order => order.orderType.toLowerCase() === "pick up" && order.status.toLowerCase() === "completed").length;
+        setDashboardData(prev => ({ ...prev, cancelledOrders: cancelledCount, deliveredOrders: deliveredCount, confirmedOrders: confirmedCount }));
       })
       .catch((err) => console.error("Failed to fetch recent orders:", err));
   }, [authToken]);
@@ -201,8 +212,8 @@ const Dashboard = () => {
     setDropdownOpen(!isDropdownOpen);
   };
 
-  // Compute daily total orders from recentOrders
-  const dailyOrdersData = recentOrders.reduce((acc, order) => {
+  // Compute daily total orders from allOrders
+  const dailyOrdersData = allOrders.reduce((acc, order) => {
     const date = order.date;
     if (!acc[date]) {
       acc[date] = 0;
@@ -214,25 +225,31 @@ const Dashboard = () => {
   // Prepare ordersData based on revenueFilter
   let ordersData = [];
   if (revenueFilter === "Weekly") {
-    // Show Sunday to Saturday
-    const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    // Aggregate orders by weekday name
-    const weekdayOrders = { Sun: 0, Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0 };
-    recentOrders.forEach(order => {
-      const orderDate = new Date(order.date);
-      const dayName = orderDate.toLocaleDateString('en-US', { weekday: 'short' });
-      if (weekDays.includes(dayName)) {
-        weekdayOrders[dayName] = (weekdayOrders[dayName] || 0) + 1;
-      }
-    });
-    ordersData = weekDays.map(day => ({ name: day, orders: weekdayOrders[day] }));
+    // Get current date
+    const now = new Date();
+    // Find Sunday of current week (assuming week starts on Sunday)
+    const sunday = new Date(now);
+    sunday.setDate(now.getDate() - now.getDay());
+    // Create array for 7 days
+    ordersData = [];
+    for (let i = 0; i < 7; i++) {
+      const day = new Date(sunday);
+      day.setDate(sunday.getDate() + i);
+      const dayStr = day.toISOString().split('T')[0]; // YYYY-MM-DD
+      const options = { month: 'short', day: 'numeric' };
+      const formattedDate = day.toLocaleDateString('en-US', options);
+      const count = allOrders
+        .filter(order => new Date(order.date).toISOString().split('T')[0] === dayStr)
+        .length;
+      ordersData.push({ name: formattedDate, orders: count });
+    }
   } else if (revenueFilter === "Monthly") {
     // Show all months
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     // Aggregate orders by month name
     const monthOrders = {};
     months.forEach(m => monthOrders[m] = 0);
-    recentOrders.forEach(order => {
+    allOrders.forEach(order => {
       const orderDate = new Date(order.date);
       const monthName = orderDate.toLocaleDateString('en-US', { month: 'short' });
       if (months.includes(monthName)) {
@@ -244,6 +261,47 @@ const Dashboard = () => {
     // Default to daily aggregation
     ordersData = Object.entries(dailyOrdersData).map(([date, count]) => ({ name: date, orders: count }));
   }
+
+  // Prepare salesData based on salesFilter
+  let salesData = [];
+  if (salesFilter === "Weekly") {
+    // Get current date
+    const now = new Date();
+    // Find Sunday of current week (assuming week starts on Sunday)
+    const sunday = new Date(now);
+    sunday.setDate(now.getDate() - now.getDay());
+    // Create array for 7 days
+    salesData = [];
+    for (let i = 0; i < 7; i++) {
+      const day = new Date(sunday);
+      day.setDate(sunday.getDate() + i);
+      const dayStr = day.toISOString().split('T')[0]; // YYYY-MM-DD
+      const options = { month: 'short', day: 'numeric' };
+      let formattedDate = day.toLocaleDateString('en-US', options);
+      if (day.toDateString() === new Date().toDateString()) {
+        formattedDate = 'today ' + formattedDate;
+      }
+      const sum = allOrders
+        .filter(order => new Date(order.date).toISOString().split('T')[0] === dayStr)
+        .reduce((acc, order) => acc + (order.amount || 0), 0);
+      salesData.push({ name: formattedDate, sales: sum });
+    }
+  } else if (salesFilter === "Monthly") {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthSums = {};
+    months.forEach(m => monthSums[m] = 0);
+    allOrders.forEach(order => {
+      const orderDate = new Date(order.date);
+      const monthName = orderDate.toLocaleDateString('en-US', { month: 'short' });
+      if (months.includes(monthName)) {
+        monthSums[monthName] += order.amount || 0;
+      }
+    });
+    salesData = months.map(month => ({ name: month, sales: monthSums[month] }));
+  }
+
+  // Compute today's sales from allOrders
+  const todaysSales = allOrders.filter(order => new Date(order.date).toDateString() === new Date().toDateString()).reduce((sum, order) => sum + (order.amount || 0), 0);
 
   const data = initialData.map((card) => {
     if (card.title === "Total Orders") {
@@ -262,6 +320,30 @@ const Dashboard = () => {
       return {
         ...card,
         current: dashboardData.todaysOrders,
+      };
+    }
+    if (card.title === "Today's Sales") {
+      return {
+        ...card,
+        current: todaysSales,
+      };
+    }
+    if (card.title === "Cancelled Orders") {
+      return {
+        ...card,
+        current: dashboardData.cancelledOrders,
+      };
+    }
+    if (card.title === "Delivered Orders") {
+      return {
+        ...card,
+        current: dashboardData.deliveredOrders,
+      };
+    }
+    if (card.title === "Pick Up Orders") {
+      return {
+        ...card,
+        current: dashboardData.confirmedOrders,
       };
     }
     return card;
@@ -383,10 +465,9 @@ const Dashboard = () => {
               <ResponsiveContainer width="100%" height={350}>
                 <LineChart data={ordersData}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
+                  <XAxis dataKey="name" tick={{ fontSize: 10, angle: -45, textAnchor: 'end' }} />
                   <YAxis />
                   <Tooltip />
-                  <Legend />
                   <Line type="monotone" dataKey="orders" stroke="#00b4d8" name="Orders" />
                 </LineChart>
               </ResponsiveContainer>
@@ -395,14 +476,12 @@ const Dashboard = () => {
               <div className="chart-header">
                 <span>Sales</span>
                 <select className="chart-dropdown" value={salesFilter} onChange={(e) => setSalesFilter(e.target.value)}>
-                  <option value="Daily">Daily</option>
                   <option value="Weekly">Weekly</option>
                   <option value="Monthly">Monthly</option>
-                  <option value="Yearly">Yearly</option>
                 </select>
               </div>
               <ResponsiveContainer width="100%" height={350}>
-                <AreaChart data={salesData}><defs><linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#00b4d8" stopOpacity={0.8} /><stop offset="95%" stopColor="#00b4d8" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="name" /><YAxis /><CartesianGrid strokeDasharray="3 3" /><Tooltip /><Area type="monotone" dataKey="sales" stroke="#00b4d8" fillOpacity={1} fill="url(#colorSales)" /></AreaChart>
+                <AreaChart data={salesData}><defs><linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#00b4d8" stopOpacity={0.8} /><stop offset="95%" stopColor="#00b4d8" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" /><YAxis /><CartesianGrid strokeDasharray="3 3" /><Tooltip /><Area type="monotone" dataKey="sales" stroke="#00b4d8" fillOpacity={1} fill="url(#colorSales)" /></AreaChart>
               </ResponsiveContainer>
             </div>
           </div>

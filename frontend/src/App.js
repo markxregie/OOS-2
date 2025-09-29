@@ -28,6 +28,8 @@ import RiderHome from './components/admin2/riderhome';
 import RiderHistory from './components/admin2/riderhistory';
 import NotFound from './components/NotFound';
 import Resetpassword from './components/Resetpassword';
+import Concerns from './components/concerns';
+import AdminConcerns from './components/admin2/concerns';
 
 import { BrowserRouter as Router, Routes, Route, useLocation, Outlet } from 'react-router-dom';
 import { AuthProvider } from './components/AuthContext';  // <-- Import AuthProvider
@@ -93,6 +95,7 @@ function MainApp() {
           <Route path="/menu" element={<Menus />} />
           <Route path="/cart" element={<Cart />} />
           <Route path="/checkout" element={<CheckoutPage />} />
+          <Route path="/concerns" element={<Concerns />} />
           {/* <Route path="/login" element={<LoginPage />} /> */}
           {/* <Route path="/signup" element={<Signup />} /> */}
           <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -110,6 +113,7 @@ function MainApp() {
             <Route path="/admin/inbox" element={<Inbox />} />
             <Route path="/admin/delivery" element={<DeliveryManagement />} />
             <Route path="/admin/riderdashboard" element={<RiderDashboard />} />
+            <Route path="/admin/concerns" element={<AdminConcerns />} />
             <Route path="/admin/staff" element={<Staff />} />
             <Route path="/admin/report" element={<Report />} />
           </Route>

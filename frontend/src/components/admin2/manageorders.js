@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { Container, Row, Col, Table, Form, Modal, Button } from "react-bootstrap";
+import { Container, Table, Form } from "react-bootstrap";
 import { CartFill, BellFill, PersonFill, Search, EyeFill, PencilFill, TrashFill, PrinterFill } from "react-bootstrap-icons";
 import { FaChevronDown, FaBell, FaAngleLeft, FaAngleRight, FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa";
 import { useSearchParams } from "react-router-dom";
+import Swal from 'sweetalert2';
+import withReactContent from 'sweetalert2-react-content';
 import "../admin2/manageorder.css";
 import { FaSignOutAlt, FaUndo } from "react-icons/fa";
+
+// Initialize SweetAlert with React Content
+const MySwal = withReactContent(Swal);
 
 // Sample orders data for demonstration
 const sampleOrders = [
@@ -114,10 +119,6 @@ const ManageOrders = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [showItemsModal, setShowItemsModal] = useState(false);
-  const [selectedItems, setSelectedItems] = useState([]);
-  const [showOrderDetailsModal, setShowOrderDetailsModal] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -168,53 +169,53 @@ const ManageOrders = () => {
   const [orders, setOrders] = useState([]);
 
   useEffect(() => {
-  if (!authToken) return;
+    if (!authToken) return;
 
-  const fetchOrders = async () => {
-    try {
-      const response = await fetch("http://localhost:7004/cart/admin/orders/manage", {
-        headers: {
-          Authorization: `Bearer ${authToken}`
+    const fetchOrders = async () => {
+      try {
+        const response = await fetch("http://localhost:7004/cart/admin/orders/manage", {
+          headers: {
+            Authorization: `Bearer ${authToken}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
-      });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const data = await response.json();
+        console.log("Backend raw data:", data);
+
+        const transformedOrders = data.map(order => ({
+          id: order.order_id,
+          customer: order.customer_name,
+          date: order.order_date,
+          orderType: order.order_type,
+          paymentMethod: order.payment_method,
+          total: order.total_amount,
+          status: order.order_status,
+          emailAddress: order.emailAddress,
+          phoneNumber: order.phoneNumber,
+          deliveryAddress: order.deliveryAddress,
+          deliveryNotes: order.deliveryNotes,
+          adminNotes: order.adminNotes || "",
+          statusHistory: order.statusHistory || [],
+          items: order.items || []  // ← DIRECTLY use the array
+        }));
+
+        setOrders(transformedOrders);
+      } catch (error) {
+        console.error("Failed to fetch orders:", error);
+        setOrders(sampleOrders);
       }
+    };
 
-      const data = await response.json();
-      console.log("Backend raw data:", data);
-
-      const transformedOrders = data.map(order => ({
-        id: order.order_id,
-        customer: order.customer_name,
-        date: order.order_date,
-        orderType: order.order_type,
-        paymentMethod: order.payment_method,
-        total: order.total_amount,
-        status: order.order_status,
-        emailAddress: order.emailAddress,
-        phoneNumber: order.phoneNumber,
-        deliveryAddress: order.deliveryAddress,
-        deliveryNotes: order.deliveryNotes,
-        adminNotes: order.adminNotes || "",
-        statusHistory: order.statusHistory || [],
-        items: order.items || []  // ← DIRECTLY use the array
-      }));
-
-      setOrders(transformedOrders);
-    } catch (error) {
-      console.error("Failed to fetch orders:", error);
-      setOrders(sampleOrders);
-    }
-  };
-
-  fetchOrders();
-}, [authToken]);
+    fetchOrders();
+  }, [authToken]);
 
 
   const filteredOrders = orders.filter(order => {
-    const matchesSearch = 
+    const matchesSearch =
       order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.id.toString().includes(searchTerm) ||
       order.status.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -266,24 +267,128 @@ const ManageOrders = () => {
     }
   };
 
-  const handleViewOrder = (order) => {
-    setSelectedOrder(order);
-    setShowOrderDetailsModal(true);
-  };
-
-  const handleCloseOrderDetails = () => {
-    setShowOrderDetailsModal(false);
-    setSelectedOrder(null);
-  };
-
   const handleShowItems = (items) => {
-    setSelectedItems(items);
-    setShowItemsModal(true);
+    MySwal.fire({
+      title: <h5 className="mb-3">Order Items</h5>,
+      html: (
+        <div className="modern-modal-content">
+          <ul className="list-unstyled mb-0 text-start">
+            {items.map((item, index) => (
+              <li key={index} className="mb-2">
+                <span className="fw-bold">{item.quantity} x</span> {item.name}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ),
+      icon: 'info',
+      confirmButtonText: 'Close',
+      customClass: {
+        container: 'modern-swal-container',
+        popup: 'modern-swal-popup',
+        title: 'modern-swal-title',
+        htmlContainer: 'modern-swal-html-container',
+        confirmButton: 'modern-swal-confirm-button',
+      },
+      showClass: {
+        popup: 'animate__animated animate__fadeIn'
+      },
+      hideClass: {
+        popup: 'animate__animated animate__fadeOut'
+      }
+    });
   };
 
-  const handleCloseItems = () => {
-    setShowItemsModal(false);
-    setSelectedItems([]);
+  const handleViewOrder = (order) => {
+    MySwal.fire({
+      title: <h5 className="mb-3">Order Details - ID: {order.id}</h5>,
+      html: (
+        <div className="modern-modal-content text-start">
+          <div className="invoice-header mb-4 border-bottom pb-2">
+            <h6>Order Invoice</h6>
+            <div className="text-muted">
+              <strong>Order ID:</strong> #{order.id} <br />
+              <strong>Date/Time Ordered:</strong> {order.date}
+            </div>
+          </div>
+          <div className="invoice-section mb-4">
+            <h6>Customer Details</h6>
+            <div className="text-muted">
+              <strong>Name:</strong> {order.customer}<br />
+              {order.emailAddress && (
+                <>
+                  <strong>Email:</strong> {order.emailAddress}<br />
+                </>
+              )}
+              {order.phoneNumber && (
+                <>
+                  <strong>Phone:</strong> {order.phoneNumber}
+                </>
+              )}
+            </div>
+          </div>
+          <div className="invoice-section mb-4">
+            <h6>Items Ordered</h6>
+            <Table bordered className="items-table">
+              <thead>
+                <tr>
+                  <th>Qty</th>
+                  <th>Product</th>
+                  <th>Price (₱)</th>
+                  <th>Subtotal (₱)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {order.items.map((item, index) => (
+                  <tr key={index}>
+                    <td>{item.quantity}</td>
+                    <td>{item.name}</td>
+                    <td>{item.price ? item.price.toFixed(2) : "-"}</td>
+                    <td>{item.price ? (item.price * item.quantity).toFixed(2) : "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+            <div className="text-end fw-bold mt-2">
+              Total Amount: ₱{order.total.toFixed(2)}
+            </div>
+          </div>
+          <div className="invoice-section mb-4">
+            <h6>Order & Payment Info</h6>
+            <div className="text-muted">
+              <strong>Order Type:</strong> {order.orderType}<br />
+              <strong>Payment Method:</strong> {order.paymentMethod}<br />
+              {order.orderType === 'Delivery' && (
+                <>
+                  <strong>Delivery Address:</strong> {order.deliveryAddress}<br />
+                  <strong>Delivery Notes:</strong> {order.deliveryNotes || "N/A"}
+                </>
+              )}
+            </div>
+          </div>
+          {order.adminNotes && (
+            <div className="invoice-section">
+              <h6>Admin Notes</h6>
+              <p className="text-muted mb-0">{order.adminNotes}</p>
+            </div>
+          )}
+        </div>
+      ),
+      confirmButtonText: 'Close',
+      customClass: {
+        container: 'modern-swal-container',
+        popup: 'modern-swal-popup',
+        title: 'modern-swal-title',
+        htmlContainer: 'modern-swal-html-container',
+        confirmButton: 'modern-swal-confirm-button',
+      },
+      showClass: {
+        popup: 'animate__animated animate__fadeIn'
+      },
+      hideClass: {
+        popup: 'animate__animated animate__fadeOut'
+      }
+    });
   };
 
   const handleUpdateStatus = (orderId) => {
@@ -316,26 +421,26 @@ const ManageOrders = () => {
               <div className="dropdown-icon" onClick={() => setDropdownOpen(!dropdownOpen)}><FaChevronDown /></div>
               <div className="bell-icon"><FaBell className="bell-outline" /></div>
               {dropdownOpen && (
-<div className="profile-dropdown" style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "white", border: "1px solid #ccc", borderRadius: "4px", boxShadow: "0 2px 8px rgba(0,0,0,0.15)", zIndex: 1000, width: "150px" }}>
-                                    <ul style={{ listStyle: "none", margin: 0, padding: "8px 0" }}>
-                                      <li
-                                        onClick={() => window.location.reload()}
-                                        style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#4b929d" }}
-                                        onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f0f0f0"}
-                                        onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
-                                      >
-                                        <FaUndo /> Refresh
-                                      </li>
-                                      <li
-                                        onClick={() => { localStorage.removeItem("access_token"); window.location.href = "http://localhost:4002/"; }}
-                                        style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#dc3545" }}
-                                        onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8d7da"}
-                                        onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
-                                      >
-                                        <FaSignOutAlt /> Logout
-                                      </li>
-                                    </ul>
-                    </div>
+                <div className="profile-dropdown" style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "white", border: "1px solid #ccc", borderRadius: "4px", boxShadow: "0 2px 8px rgba(0,0,0,0.15)", zIndex: 1000, width: "150px" }}>
+                  <ul style={{ listStyle: "none", margin: 0, padding: "8px 0" }}>
+                    <li
+                      onClick={() => window.location.reload()}
+                      style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#4b929d" }}
+                      onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f0f0f0"}
+                      onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
+                    >
+                      <FaUndo /> Refresh
+                    </li>
+                    <li
+                      onClick={() => { localStorage.removeItem("access_token"); window.location.href = "http://localhost:4002/"; }}
+                      style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#dc3545" }}
+                      onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8d7da"}
+                      onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
+                    >
+                      <FaSignOutAlt /> Logout
+                    </li>
+                  </ul>
+                </div>
               )}
             </div>
           </div>
@@ -347,14 +452,14 @@ const ManageOrders = () => {
             <h5 style={{ color: "#4a9ba5", margin: 0, marginLeft: "10" }}>Recent Orders</h5>
             <div className="d-flex align-items-center gap-3">
               <div className="position-relative" style={{ width: "300px" }}>
-                <Search 
-                  className="position-absolute" 
-                  style={{ top: "50%", left: "12px", color: "#495057", transform: "translateY(-50%)", fontSize: "1.2rem" }} 
+                <Search
+                  className="position-absolute"
+                  style={{ top: "50%", left: "12px", color: "#495057", transform: "translateY(-50%)", fontSize: "1.2rem" }}
                 />
-                <Form.Control 
-                  type="text" 
-                  placeholder="Search orders..." 
-                  className="search-input ps-5" 
+                <Form.Control
+                  type="text"
+                  placeholder="Search orders..."
+                  className="search-input ps-5"
                   value={searchTerm}
                   style={{
                     borderRadius: "20px",
@@ -454,21 +559,21 @@ const ManageOrders = () => {
                 Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredOrders.length)} of {filteredOrders.length} entries
               </div>
               <div className="d-flex align-items-center">
-                <button 
-                  className="pagination-btn" 
-                  onClick={handleFirstPage} 
+                <button
+                  className="pagination-btn"
+                  onClick={handleFirstPage}
                   disabled={currentPage === 1}
                 >
                   <FaAngleDoubleLeft />
                 </button>
-                <button 
-                  className="pagination-btn" 
-                  onClick={handlePrevPage} 
+                <button
+                  className="pagination-btn"
+                  onClick={handlePrevPage}
                   disabled={currentPage === 1}
                 >
                   <FaAngleLeft />
                 </button>
-                
+
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map(number => (
                   <button
                     key={number}
@@ -478,17 +583,17 @@ const ManageOrders = () => {
                     {number}
                   </button>
                 ))}
-                
-                <button 
-                  className="pagination-btn" 
-                  onClick={handleNextPage} 
+
+                <button
+                  className="pagination-btn"
+                  onClick={handleNextPage}
                   disabled={currentPage === totalPages}
                 >
                   <FaAngleRight />
                 </button>
-                <button 
-                  className="pagination-btn" 
-                  onClick={handleLastPage} 
+                <button
+                  className="pagination-btn"
+                  onClick={handleLastPage}
                   disabled={currentPage === totalPages}
                 >
                   <FaAngleDoubleRight />
@@ -497,98 +602,6 @@ const ManageOrders = () => {
             </div>
           )}
         </div>
-
-        {/* Items Modal */}
-        <Modal show={showItemsModal} onHide={handleCloseItems}>
-          <Modal.Header closeButton>
-            <Modal.Title>Order Items</Modal.Title>
-          </Modal.Header>
-          <Modal.Body>
-            <ul>
-              {selectedItems.map((item, index) => (
-                <li key={index}>{item.quantity} x {item.name}</li>
-              ))}
-            </ul>
-          </Modal.Body>
-          <Modal.Footer>
-            <Button variant="secondary" onClick={handleCloseItems}>
-              Close
-            </Button>
-          </Modal.Footer>
-        </Modal>
-
-        {/* Order Details Modal */}
-        <Modal 
-          show={showOrderDetailsModal} 
-          onHide={handleCloseOrderDetails} 
-          size="lg"
-          dialogClassName="custom-modal-dialog"
-          contentClassName="custom-modal-content"
-        >
-          <Modal.Header closeButton className="custom-modal-header">
-            <Modal.Title className="custom-modal-title">Order Details - ID: {selectedOrder ? selectedOrder.id : ""}</Modal.Title>
-          </Modal.Header>
-          <Modal.Body className="custom-modal-body invoice-modal-body">
-            {selectedOrder && (
-              <>
-                <div className="invoice-header mb-3">
-                  <h5>Order Invoice</h5>
-                  <div><strong>Order ID:</strong> #{selectedOrder.id}</div>
-                  <div><strong>Date/Time Ordered:</strong> {selectedOrder.date}</div>
-                </div>
-
-                <div className="invoice-section mb-3">
-                  <h6>Customer Details</h6>
-                  <div><strong>Name:</strong> {selectedOrder.customer}</div>
-                </div>
-
-                <div className="invoice-section mb-3">
-                  <h6>Items Ordered</h6>
-                  <Table bordered size="sm" responsive>
-                    <thead>
-                      <tr>
-                        <th>Quantity</th>
-                        <th>Product Name</th>
-                        <th>Price (₱)</th>
-                        <th>Subtotal (₱)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedOrder.items.map((item, index) => (
-                        <tr key={index}>
-                          <td>{item.quantity}</td>
-                          <td>{item.name}</td>
-                          <td>{item.price ? item.price.toFixed(2) : ""}</td>
-                          <td>{item.price ? (item.price * item.quantity).toFixed(2) : ""}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                  <div className="text-end fw-bold">Total Amount: ₱{selectedOrder.total.toFixed(2)}</div>
-                </div>
-
-                <div className="invoice-section mb-3">
-                  <h6>Payment Info</h6>
-                  <div><strong>Method:</strong> {selectedOrder.paymentMethod}</div>
-                </div>
-
-                <div className="invoice-section mb-3">
-                </div>
-
-                <div className="invoice-section mb-3">
-                </div>
-
-                <div className="invoice-section mb-3">
-                </div>
-              </>
-            )}
-          </Modal.Body>
-          <Modal.Footer className="custom-modal-footer">
-            <Button variant="secondary" onClick={handleCloseOrderDetails}>
-              Close
-            </Button>
-          </Modal.Footer>
-        </Modal>
       </Container>
     </div>
   );

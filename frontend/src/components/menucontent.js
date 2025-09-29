@@ -9,11 +9,14 @@ import { CartContext } from '../contexts/CartContext';
 
 const MenuContent = () => {
   const [products, setProducts] = useState({});
-const [selectedCategory, setSelectedCategory] = useState('');
-const [selectedSubcategory, setSelectedSubcategory] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedSubcategory, setSelectedSubcategory] = useState('');
   const [selectedItem, setSelectedItem] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [orderNotes, setOrderNotes] = useState('');
+  const [showBuyNowModal, setShowBuyNowModal] = useState(false); // State for the new modal
+  const [deliveryMethod, setDeliveryMethod] = useState('Pick-up'); // State for delivery method
+  const [paymentMethod, setPaymentMethod] = useState('Cash'); // State for payment method
 
   const { addToCart: addToContextCart } = useContext(CartContext);
   const navigate = useNavigate();
@@ -95,16 +98,16 @@ const [selectedSubcategory, setSelectedSubcategory] = useState('');
           const publicProducts = await publicResponse.json();
 
           const grouped = {};
-          publicProducts.forEach((product) => {
-            const typeName = product.ProductTypeName || "Other";
-            const category = product.ProductCategory || "Other";
-            if (!grouped[typeName]) grouped[typeName] = {};
-            if (!grouped[typeName][category]) grouped[typeName][category] = [];
-            grouped[typeName][category].push({
-              ...product,
-              Status: "Available",
-            });
-          });
+publicProducts.forEach((product) => {
+  const typeName = product.ProductTypeName || "Other";
+  const category = product.ProductCategory || "Other";
+  if (!grouped[typeName]) grouped[typeName] = {};
+  if (!grouped[typeName][category]) grouped[typeName][category] = [];
+  grouped[typeName][category].push({
+    ...product,
+    Status: product.Status || "Available", // ✅ use backend Status, fallback to "Available"
+  });
+});
 
           setProducts(grouped);
 
@@ -143,16 +146,16 @@ const [selectedSubcategory, setSelectedSubcategory] = useState('');
       toast.error("You must be logged in to add to cart.");
       return;
     }
- // or whatever your cart state is called
+    // or whatever your cart state is called
     console.log("🛒 Item added to cart:", selectedItem);
     addToContextCart({
-    product_id: selectedItem.ProductID,
-    ProductName: selectedItem.ProductName,
-    ProductPrice: selectedItem.ProductPrice ?? 0,
-    ProductImage: selectedItem.ProductImage,
-    ProductType: selectedItem.ProductTypeName,    // ✅ lowercase
-    ProductCategory: selectedItem.ProductCategory, // ✅ lowercase
-    orderType: "Pick Up" 
+      product_id: selectedItem.ProductID,
+      ProductName: selectedItem.ProductName,
+      ProductPrice: selectedItem.ProductPrice ?? 0,
+      ProductImage: selectedItem.ProductImage,
+      ProductType: selectedItem.ProductTypeName,
+      ProductCategory: selectedItem.ProductCategory,
+      orderType: "Pick Up"
     });
 
     toast.success(`${selectedItem.ProductName} added to cart!`);
@@ -161,16 +164,37 @@ const [selectedSubcategory, setSelectedSubcategory] = useState('');
   };
 
   const handleBuyNow = () => {
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      toast.error("You must be logged in to buy now.");
+      return;
+    }
+    setShowModal(false); // Close the first modal
+    setShowBuyNowModal(true); // Open the new modal
+  };
+
+  const handleConfirmBuyNow = () => {
     if (selectedItem) {
-      navigate('/checkout', { state: { cartItems: [{
-        product_id: selectedItem.ProductID,
-        ProductName: selectedItem.ProductName,
-        ProductPrice: selectedItem.ProductPrice ?? 0,
-        ProductImage: selectedItem.ProductImage,
-        ProductType: selectedItem.ProductTypeName,
-        ProductCategory: selectedItem.ProductCategory,
-        quantity: 1
-      }], orderType: "Pick Up" } });
+      navigate('/checkout', {
+        state: {
+          cartItems: [{
+            product_id: selectedItem.ProductID,
+            ProductName: selectedItem.ProductName,
+            ProductPrice: selectedItem.ProductPrice ?? 0,
+            ProductImage: selectedItem.ProductImage,
+            ProductType: selectedItem.ProductTypeName,
+            ProductCategory: selectedItem.ProductCategory,
+            quantity: 1
+          }],
+          orderType: deliveryMethod,
+          paymentMethod,
+          orderNotes
+        }
+      });
+      setShowBuyNowModal(false);
+      setOrderNotes('');
+      setDeliveryMethod('Pick-up');
+      setPaymentMethod('Cash');
     }
   };
 
@@ -178,6 +202,14 @@ const [selectedSubcategory, setSelectedSubcategory] = useState('');
     setShowModal(false);
     setSelectedItem(null);
     setOrderNotes('');
+  };
+
+  const handleCloseBuyNowModal = () => {
+    setShowBuyNowModal(false);
+    setSelectedItem(null);
+    setOrderNotes('');
+    setDeliveryMethod('Pick-up');
+    setPaymentMethod('Cash');
   };
 
   const subcategories = products[selectedCategory] ? Object.keys(products[selectedCategory]) : [];
@@ -295,15 +327,6 @@ const [selectedSubcategory, setSelectedSubcategory] = useState('');
                     <h4 style={{ color: '#4b929d' }}>{selectedItem.ProductName}</h4>
                     <p className="text-muted">{selectedItem.ProductDescription}</p>
                     <p className="h5" style={{ textAlign: 'left' }}>₱{selectedItem.ProductPrice}</p>
-                    {/* <div className="mt-4">
-                      <h6>Order method:</h6>
-                      <div className="btn-group w-100" role="group">
-                        <input type="radio" className="btn-check" name="order-method" id="method-pickup" autoComplete="off" defaultChecked />
-                        <label className="btn btn-outline-secondary" htmlFor="method-pickup">Pickup</label>
-                        <input type="radio" className="btn-check" name="order-method" id="method-delivery" autoComplete="off" />
-                        <label className="btn btn-outline-secondary" htmlFor="method-delivery">Delivery</label>
-                      </div>
-                    </div> */}
                     <div className="mt-3">
                       <label htmlFor="order-notes" className="form-label">Add Notes:</label>
                       <textarea id="order-notes" className="form-control" rows="3" placeholder="Add any special instructions or notes here" value={orderNotes} onChange={(e) => setOrderNotes(e.target.value)} />
@@ -321,6 +344,72 @@ const [selectedSubcategory, setSelectedSubcategory] = useState('');
             </div>
           </Modal.Footer>
         </Modal>
+
+        {/* New Buy Now Modal */}
+        <Modal show={showBuyNowModal} onHide={handleCloseBuyNowModal} centered>
+          <Modal.Header closeButton>
+            <Modal.Title>Complete your purchase</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <div className="mb-3">
+              <label className="form-label">Delivery Method</label>
+              <div className="btn-group w-100" role="group">
+                <input
+                  type="radio"
+                  className="btn-check"
+                  name="deliveryMethod"
+                  id="pickup"
+                  autoComplete="off"
+                  checked={deliveryMethod === 'Pick-up'}
+                  onChange={() => setDeliveryMethod('Pick-up')}
+                />
+                <label className="btn btn-outline-secondary rounded-start-pill" htmlFor="pickup">Pick-up</label>
+
+                <input
+                  type="radio"
+                  className="btn-check"
+                  name="deliveryMethod"
+                  id="delivery"
+                  autoComplete="off"
+                  checked={deliveryMethod === 'Delivery'}
+                  onChange={() => setDeliveryMethod('Delivery')}
+                />
+                <label className="btn btn-outline-secondary rounded-end-pill" htmlFor="delivery">Delivery</label>
+              </div>
+            </div>
+            <div className="mb-3">
+              <label className="form-label">Payment Method</label>
+              <div className="btn-group w-100" role="group">
+                <input
+                  type="radio"
+                  className="btn-check"
+                  name="paymentMethod"
+                  id="cash"
+                  autoComplete="off"
+                  checked={paymentMethod === 'Cash'}
+                  onChange={() => setPaymentMethod('Cash')}
+                />
+                <label className="btn btn-outline-secondary rounded-start-pill" htmlFor="cash">Cash</label>
+
+                <input
+                  type="radio"
+                  className="btn-check"
+                  name="paymentMethod"
+                  id="gcash"
+                  autoComplete="off"
+                  checked={paymentMethod === 'Gcash'}
+                  onChange={() => setPaymentMethod('Gcash')}
+                />
+                <label className="btn btn-outline-secondary rounded-end-pill" htmlFor="gcash">Gcash</label>
+              </div>
+            </div>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="outline-secondary" onClick={handleCloseBuyNowModal}>Cancel</Button>
+            <Button variant="primary" onClick={handleConfirmBuyNow}>Confirm Buy Now</Button>
+          </Modal.Footer>
+        </Modal>
+
         <ToastContainer position="top-center" autoClose={2000} hideProgressBar />
       </div>
     </section>
