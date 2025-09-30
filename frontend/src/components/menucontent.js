@@ -1,22 +1,31 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Modal, Button } from 'react-bootstrap';
+import { Button } from 'react-bootstrap'; // Keep Button for general use outside of modals
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useNavigate } from 'react-router-dom';
+import Swal from 'sweetalert2'; // 1. Import SweetAlert2
 
 import './menu.css';
 import { CartContext } from '../contexts/CartContext';
+
+// Define Add-ons structure
+const ADD_ONS = [
+  { name: 'Espresso Shot', price: 50 },
+  { name: 'Seasalt Cream', price: 30 },
+  { name: 'Syrup/Sauces', price: 20 },
+];
 
 const MenuContent = () => {
   const [products, setProducts] = useState({});
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedSubcategory, setSelectedSubcategory] = useState('');
   const [selectedItem, setSelectedItem] = useState(null);
-  const [showModal, setShowModal] = useState(false);
   const [orderNotes, setOrderNotes] = useState('');
-  const [showBuyNowModal, setShowBuyNowModal] = useState(false); // State for the new modal
-  const [deliveryMethod, setDeliveryMethod] = useState('Pick-up'); // State for delivery method
-  const [paymentMethod, setPaymentMethod] = useState('Cash'); // State for payment method
+  const [deliveryMethod, setDeliveryMethod] = useState('Pick-up');
+  const [paymentMethod, setPaymentMethod] = useState('Cash');
+  // 1. New state for selected add-ons and total
+  const [selectedAddOns, setSelectedAddOns] = useState([]);
+  const [addOnsTotal, setAddOnsTotal] = useState(0);
 
   const { addToCart: addToContextCart } = useContext(CartContext);
   const navigate = useNavigate();
@@ -98,16 +107,16 @@ const MenuContent = () => {
           const publicProducts = await publicResponse.json();
 
           const grouped = {};
-publicProducts.forEach((product) => {
-  const typeName = product.ProductTypeName || "Other";
-  const category = product.ProductCategory || "Other";
-  if (!grouped[typeName]) grouped[typeName] = {};
-  if (!grouped[typeName][category]) grouped[typeName][category] = [];
-  grouped[typeName][category].push({
-    ...product,
-    Status: product.Status || "Available", // ✅ use backend Status, fallback to "Available"
-  });
-});
+          publicProducts.forEach((product) => {
+            const typeName = product.ProductTypeName || "Other";
+            const category = product.ProductCategory || "Other";
+            if (!grouped[typeName]) grouped[typeName] = {};
+            if (!grouped[typeName][category]) grouped[typeName][category] = [];
+            grouped[typeName][category].push({
+              ...product,
+              Status: product.Status || "Available", // ✅ use backend Status, fallback to "Available"
+            });
+          });
 
           setProducts(grouped);
 
@@ -135,81 +144,321 @@ publicProducts.forEach((product) => {
 
   const handleItemClick = (item) => {
     setSelectedItem(item);
-    setShowModal(true);
+    // Reset add-ons and notes before showing the modal
+    setSelectedAddOns([]);
+    setAddOnsTotal(0);
+    setOrderNotes(''); 
+    showSweetAlertItemDetails(item);
   };
 
-  const handleAddToCart = () => {
-    if (!selectedItem) return;
+  const handleAddToCart = (item, notes, addOns, addOnsTotal) => {
+    if (!item) return;
 
     const token = localStorage.getItem("authToken");
     if (!token) {
       toast.error("You must be logged in to add to cart.");
       return;
     }
-    // or whatever your cart state is called
-    console.log("🛒 Item added to cart:", selectedItem);
+    
+    // Check if the item is available before adding to cart
+    if (item.Status !== 'Available') {
+      toast.error(`${item.ProductName} is currently unavailable.`);
+      return;
+    }
+    
+    // Calculate the final price including add-ons
+    const finalPrice = (item.ProductPrice ?? 0) + addOnsTotal;
+
     addToContextCart({
-      product_id: selectedItem.ProductID,
-      ProductName: selectedItem.ProductName,
-      ProductPrice: selectedItem.ProductPrice ?? 0,
-      ProductImage: selectedItem.ProductImage,
-      ProductType: selectedItem.ProductTypeName,
-      ProductCategory: selectedItem.ProductCategory,
-      orderType: "Pick Up"
+      product_id: item.ProductID,
+      ProductName: item.ProductName,
+      // 2. Use the final calculated price
+      ProductPrice: finalPrice, 
+      ProductImage: item.ProductImage,
+      ProductType: item.ProductTypeName,
+      ProductCategory: item.ProductCategory,
+      orderType: "Pick Up",
+      // 3. Include notes and add-ons in the cart item
+      orderNotes: notes, 
+      addOns: addOns, 
     });
 
-    toast.success(`${selectedItem.ProductName} added to cart!`);
-    handleClose();
+    toast.success(`${item.ProductName} added to cart! Total: ₱${finalPrice.toFixed(2)}`);
+    // Clear temporary states after adding to cart
     setOrderNotes('');
+    setSelectedAddOns([]);
+    setAddOnsTotal(0);
   };
 
-  const handleBuyNow = () => {
+  const showSweetAlertItemDetails = (item) => {
+    if (!item) return;
+    setSelectedItem(item);
+
+    const imageUrl = item.ProductImage
+      ? item.ProductImage.startsWith('http')
+        ? item.ProductImage
+        : `http://localhost:8001${item.ProductImage}`
+      : 'URL_TO_DEFAULT_IMAGE_OR_BLANK';
+      
+    // HTML for add-ons section
+    const addOnsHtml = ADD_ONS.map((addon, index) => `
+        <div class="form-check d-flex justify-content-between align-items-center mb-1">
+            <div>
+                <input class="form-check-input addon-checkbox" type="checkbox" id="addon-${index}" value="${addon.name}" data-price="${addon.price}">
+                <label class="form-check-label" for="addon-${index}">
+                    ${addon.name}
+                </label>
+            </div>
+            <span class="text-muted small">₱${addon.price.toFixed(2)}</span>
+        </div>
+    `).join('');
+
+
+    Swal.fire({
+      title: item.ProductName,
+      html: `
+        <div class="container-fluid" style="text-align: left; padding: 0;">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <div class="modal-image-placeholder">
+                <img src="${imageUrl}" alt="${item.ProductName}" style="width: 100%; height: auto; max-height: 400px; object-fit: contain;">
+              </div>
+            </div>
+            <div class="col-md-6">
+              <h4 style="color: #4b929d;">${item.ProductName}</h4>
+              <p class="text-muted">${item.ProductDescription || 'No description available.'}</p>
+              <p class="h5" style="text-align: left;">Base Price: ₱${(item.ProductPrice ?? 0).toFixed(2)}</p>
+              
+              <div class="mt-3">
+                <h5 class="mb-2">Add-ons</h5>
+                <div class="addons-list" style="border: 1px solid #eee; padding: 10px; border-radius: 5px; max-height: 150px; overflow-y: auto;">
+                    ${addOnsHtml}
+                </div>
+              </div>
+
+              <div class="mt-3">
+                <label for="order-notes" class="form-label">Add Notes:</label>
+                <textarea id="order-notes" class="form-control" rows="2" placeholder="You can request for less sugar here">${orderNotes}</textarea>
+              </div>
+              <h5 class="mt-3" style="text-align: left;">Total: <span id="final-price-display">₱${(item.ProductPrice ?? 0).toFixed(2)}</span></h5>
+            </div>
+          </div>
+        </div>
+      `,
+      width: 800,
+      showCloseButton: true,
+      showCancelButton: true,
+      showDenyButton: true,
+      confirmButtonText: 'Add to cart',
+      denyButtonText: 'Buy Now',
+      cancelButtonText: 'Close',
+      customClass: {
+        confirmButton: 'btn btn-outline-primary me-2',
+        denyButton: 'btn btn-primary',
+        // 🚀 ADDED 'ms-2' (margin-start: 2) to push it away from the Deny/Buy Now button
+        cancelButton: 'btn btn-outline-secondary ms-2', 
+        popup: 'custom-sweetalert-popup',
+        htmlContainer: 'swal2-html-container-tight' 
+      },
+      didOpen: () => {
+        const checkboxes = Swal.getPopup().querySelectorAll('.addon-checkbox');
+        const priceDisplay = document.getElementById('final-price-display');
+        const basePrice = parseFloat(item.ProductPrice ?? 0);
+
+        const updatePrice = () => {
+          let currentAddOnsTotal = 0;
+          checkboxes.forEach(cb => {
+            if (cb.checked) {
+              currentAddOnsTotal += parseFloat(cb.dataset.price);
+            }
+          });
+          priceDisplay.textContent = `₱${(basePrice + currentAddOnsTotal).toFixed(2)}`;
+          // Note: State update happens in preConfirm/preDeny
+        };
+
+        checkboxes.forEach(cb => cb.addEventListener('change', updatePrice));
+        // Initial price display
+        updatePrice();
+      },
+      buttonsStyling: false,
+      preConfirm: () => {
+        // Handle 'Add to cart'
+        const notes = document.getElementById('order-notes').value;
+        const addOns = [];
+        let total = 0;
+        Swal.getPopup().querySelectorAll('.addon-checkbox:checked').forEach(cb => {
+          const price = parseFloat(cb.dataset.price);
+          addOns.push({ name: cb.value, price: price });
+          total += price;
+        });
+        setOrderNotes(notes);
+        setSelectedAddOns(addOns);
+        setAddOnsTotal(total);
+        return { action: 'add-to-cart', notes, addOns, addOnsTotal: total };
+      },
+      preDeny: () => {
+        // Handle 'Buy Now'
+        const notes = document.getElementById('order-notes').value;
+        const addOns = [];
+        let total = 0;
+        Swal.getPopup().querySelectorAll('.addon-checkbox:checked').forEach(cb => {
+          const price = parseFloat(cb.dataset.price);
+          addOns.push({ name: cb.value, price: price });
+          total += price;
+        });
+        setOrderNotes(notes);
+        setSelectedAddOns(addOns);
+        setAddOnsTotal(total);
+        return { action: 'buy-now', notes, addOns, addOnsTotal: total };
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        handleAddToCart(item, result.value.notes, result.value.addOns, result.value.addOnsTotal);
+      } else if (result.isDenied) {
+        handleBuyNow(item, result.value.notes, result.value.addOns, result.value.addOnsTotal);
+      }
+      // Reset temporary states if the modal is closed without confirmation (cancel/close)
+      if (result.isDismissed) {
+        setOrderNotes('');
+        setSelectedAddOns([]);
+        setAddOnsTotal(0);
+      }
+    });
+  };
+
+
+  const handleBuyNow = (item, notes, addOns, addOnsTotal) => {
     const token = localStorage.getItem("authToken");
     if (!token) {
       toast.error("You must be logged in to buy now.");
       return;
     }
-    setShowModal(false); // Close the first modal
-    setShowBuyNowModal(true); // Open the new modal
+    showSweetAlertBuyNow(item, notes, addOns, addOnsTotal);
   };
 
-  const handleConfirmBuyNow = () => {
-    if (selectedItem) {
+  const showSweetAlertBuyNow = (item, notes, addOns, addOnsTotal) => {
+    if (!item) return;
+
+    // Use current state for delivery/payment methods as initial values
+    Swal.fire({
+      title: 'Complete your purchase',
+      html: `
+        <div style="text-align: left;">
+          <h5 class="mb-2">Item: ${item.ProductName}</h5>
+          <h5 class="mb-3">Total Payable: ₱${((item.ProductPrice ?? 0) + addOnsTotal).toFixed(2)}</h5>
+          <div class="mb-3">
+            <label class="form-label">Delivery Method</label>
+            <div class="btn-group w-100" role="group">
+              <input
+                type="radio"
+                class="btn-check"
+                name="deliveryMethodSwal"
+                id="pickupSwal"
+                autocomplete="off"
+                value="Pick-up"
+                ${deliveryMethod === 'Pick-up' ? 'checked' : ''}
+              />
+              <label class="btn btn-outline-secondary rounded-start-pill" for="pickupSwal">Pick-up</label>
+
+              <input
+                type="radio"
+                class="btn-check"
+                name="deliveryMethodSwal"
+                id="deliverySwal"
+                autocomplete="off"
+                value="Delivery"
+                ${deliveryMethod === 'Delivery' ? 'checked' : ''}
+              />
+              <label class="btn btn-outline-secondary rounded-end-pill" for="deliverySwal">Delivery</label>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Payment Method</label>
+            <div class="btn-group w-100" role="group">
+              <input
+                type="radio"
+                class="btn-check"
+                name="paymentMethodSwal"
+                id="cashSwal"
+                autocomplete="off"
+                value="Cash"
+                ${paymentMethod === 'Cash' ? 'checked' : ''}
+              />
+              <label class="btn btn-outline-secondary rounded-start-pill" for="cashSwal">Cash</label>
+
+              <input
+                type="radio"
+                class="btn-check"
+                name="paymentMethodSwal"
+                id="gcashSwal"
+                autocomplete="off"
+                value="Gcash"
+                ${paymentMethod === 'Gcash' ? 'checked' : ''}
+              />
+              <label class="btn btn-outline-secondary rounded-end-pill" for="gcashSwal">Gcash</label>
+            </div>
+          </div>
+        </div>
+      `,
+      showCloseButton: true,
+      showCancelButton: true,
+      confirmButtonText: 'Confirm Buy Now',
+      cancelButtonText: 'Cancel',
+      focusConfirm: false,
+      customClass: {
+        confirmButton: 'btn btn-primary',
+        // 🚀 ADDED 'ms-2' (margin-start: 2) to push it away from the Confirm/Buy Now button
+        cancelButton: 'btn btn-outline-secondary ms-2', 
+        popup: 'custom-sweetalert-popup',
+        // htmlContainer is intentionally omitted here to preserve default spacing
+      },
+      buttonsStyling: false,
+      preConfirm: () => {
+        const selectedDelivery = document.querySelector('input[name="deliveryMethodSwal"]:checked').value;
+        const selectedPayment = document.querySelector('input[name="paymentMethodSwal"]:checked').value;
+        return { delivery: selectedDelivery, payment: selectedPayment };
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        setDeliveryMethod(result.value.delivery);
+        setPaymentMethod(result.value.payment);
+        handleConfirmBuyNow(item, notes, addOns, addOnsTotal, result.value.delivery, result.value.payment);
+      }
+    });
+  };
+
+  // Updated handler to accept add-ons details
+  const handleConfirmBuyNow = (item, notes, addOns, addOnsTotal, delivery, payment) => {
+    if (item) {
+        const finalPrice = (item.ProductPrice ?? 0) + addOnsTotal;
+
       navigate('/checkout', {
         state: {
           cartItems: [{
-            product_id: selectedItem.ProductID,
-            ProductName: selectedItem.ProductName,
-            ProductPrice: selectedItem.ProductPrice ?? 0,
-            ProductImage: selectedItem.ProductImage,
-            ProductType: selectedItem.ProductTypeName,
-            ProductCategory: selectedItem.ProductCategory,
-            quantity: 1
+            product_id: item.ProductID,
+            ProductName: item.ProductName,
+            // 4. Use the final calculated price
+            ProductPrice: finalPrice, 
+            ProductImage: item.ProductImage,
+            ProductType: item.ProductTypeName,
+            ProductCategory: item.ProductCategory,
+            quantity: 1,
+            // 5. Include add-ons in the cart item for checkout
+            orderNotes: notes, 
+            addOns: addOns, 
           }],
-          orderType: deliveryMethod,
-          paymentMethod,
-          orderNotes
+          orderType: delivery,
+          paymentMethod: payment,
+          orderNotes: notes
         }
       });
-      setShowBuyNowModal(false);
+      // Reset temporary states after successful navigation
       setOrderNotes('');
+      setSelectedAddOns([]);
+      setAddOnsTotal(0);
       setDeliveryMethod('Pick-up');
       setPaymentMethod('Cash');
     }
-  };
-
-  const handleClose = () => {
-    setShowModal(false);
-    setSelectedItem(null);
-    setOrderNotes('');
-  };
-
-  const handleCloseBuyNowModal = () => {
-    setShowBuyNowModal(false);
-    setSelectedItem(null);
-    setOrderNotes('');
-    setDeliveryMethod('Pick-up');
-    setPaymentMethod('Cash');
   };
 
   const subcategories = products[selectedCategory] ? Object.keys(products[selectedCategory]) : [];
@@ -302,113 +551,6 @@ publicProducts.forEach((product) => {
             })}
           </div>
         </div>
-
-        {/* Modal */}
-        <Modal show={showModal} onHide={handleClose} centered size="lg">
-          <Modal.Header closeButton>
-            <Modal.Title>{selectedItem ? selectedItem.ProductName : ''}</Modal.Title>
-          </Modal.Header>
-          <Modal.Body>
-            {selectedItem && (
-              <div className="container">
-                <div className="row">
-                  <div className="col-md-6">
-                    <div className="modal-image-placeholder">
-                      <div className="d-flex align-items-center justify-content-center h-100 bg-light">
-                        {selectedItem.ProductImage ? (
-                          <img src={selectedItem.ProductImage.startsWith('http') ? selectedItem.ProductImage : `http://localhost:8001${selectedItem.ProductImage}`} alt={selectedItem.ProductName} style={{ width: '100%', height: 'auto', maxHeight: '400px', objectFit: 'contain' }} />
-                        ) : (
-                          <span className="text-muted">Item Image</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="col-md-6">
-                    <h4 style={{ color: '#4b929d' }}>{selectedItem.ProductName}</h4>
-                    <p className="text-muted">{selectedItem.ProductDescription}</p>
-                    <p className="h5" style={{ textAlign: 'left' }}>₱{selectedItem.ProductPrice}</p>
-                    <div className="mt-3">
-                      <label htmlFor="order-notes" className="form-label">Add Notes:</label>
-                      <textarea id="order-notes" className="form-control" rows="3" placeholder="Add any special instructions or notes here" value={orderNotes} onChange={(e) => setOrderNotes(e.target.value)} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </Modal.Body>
-          <Modal.Footer className="justify-content-between">
-            <Button variant="outline-secondary" onClick={handleClose}>Close</Button>
-            <div>
-              <Button variant="outline-primary" className="me-2" onClick={handleAddToCart}>Add to cart</Button>
-              <Button variant="primary" onClick={handleBuyNow}>Buy Now</Button>
-            </div>
-          </Modal.Footer>
-        </Modal>
-
-        {/* New Buy Now Modal */}
-        <Modal show={showBuyNowModal} onHide={handleCloseBuyNowModal} centered>
-          <Modal.Header closeButton>
-            <Modal.Title>Complete your purchase</Modal.Title>
-          </Modal.Header>
-          <Modal.Body>
-            <div className="mb-3">
-              <label className="form-label">Delivery Method</label>
-              <div className="btn-group w-100" role="group">
-                <input
-                  type="radio"
-                  className="btn-check"
-                  name="deliveryMethod"
-                  id="pickup"
-                  autoComplete="off"
-                  checked={deliveryMethod === 'Pick-up'}
-                  onChange={() => setDeliveryMethod('Pick-up')}
-                />
-                <label className="btn btn-outline-secondary rounded-start-pill" htmlFor="pickup">Pick-up</label>
-
-                <input
-                  type="radio"
-                  className="btn-check"
-                  name="deliveryMethod"
-                  id="delivery"
-                  autoComplete="off"
-                  checked={deliveryMethod === 'Delivery'}
-                  onChange={() => setDeliveryMethod('Delivery')}
-                />
-                <label className="btn btn-outline-secondary rounded-end-pill" htmlFor="delivery">Delivery</label>
-              </div>
-            </div>
-            <div className="mb-3">
-              <label className="form-label">Payment Method</label>
-              <div className="btn-group w-100" role="group">
-                <input
-                  type="radio"
-                  className="btn-check"
-                  name="paymentMethod"
-                  id="cash"
-                  autoComplete="off"
-                  checked={paymentMethod === 'Cash'}
-                  onChange={() => setPaymentMethod('Cash')}
-                />
-                <label className="btn btn-outline-secondary rounded-start-pill" htmlFor="cash">Cash</label>
-
-                <input
-                  type="radio"
-                  className="btn-check"
-                  name="paymentMethod"
-                  id="gcash"
-                  autoComplete="off"
-                  checked={paymentMethod === 'Gcash'}
-                  onChange={() => setPaymentMethod('Gcash')}
-                />
-                <label className="btn btn-outline-secondary rounded-end-pill" htmlFor="gcash">Gcash</label>
-              </div>
-            </div>
-          </Modal.Body>
-          <Modal.Footer>
-            <Button variant="outline-secondary" onClick={handleCloseBuyNowModal}>Cancel</Button>
-            <Button variant="primary" onClick={handleConfirmBuyNow}>Confirm Buy Now</Button>
-          </Modal.Footer>
-        </Modal>
 
         <ToastContainer position="top-center" autoClose={2000} hideProgressBar />
       </div>
