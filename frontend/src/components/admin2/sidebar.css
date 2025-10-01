@@ -12,7 +12,7 @@
 
 /* Sidebar Styles */
 .sidebar-container {
-  height: 150vh;
+  height: 220vh;
   width: 100% !important;
   transition: width 0.3s ease;
   background-color: #fff;

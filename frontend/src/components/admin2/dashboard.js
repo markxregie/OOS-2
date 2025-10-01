@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from "react";
 // 1. Import useSearchParams to read URL query parameters
-import { useSearchParams } from "react-router-dom"; 
+import { useSearchParams } from "react-router-dom";
 import coffeeImage from "../../assets/coffee.jpg";
 import "../admin2/dashboard.css";
 import { FaSignOutAlt, FaUndo } from "react-icons/fa";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  AreaChart, Area
+  AreaChart, Area, BarChart, Bar,
+  // ADDED PIECHART COMPONENTS
+  PieChart, Pie, Cell
 } from 'recharts';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { library } from '@fortawesome/fontawesome-svg-core';
@@ -29,22 +31,53 @@ library.add(faMoneyBillWave, faChartLine, faShoppingCart, faClock, faArrowTrendU
 // --- Static data remains the same ---
 const revenueData = [ { name: 'Jan', income: 5000, expense: 3000 }, { name: 'Feb', income: 14000, expense: 10000 }, { name: 'Mar', income: 15000, expense: 12000 }, { name: 'Apr', income: 11000, expense: 9000 }, { name: 'May', income: 13000, expense: 7000 }, { name: 'June', income: 18000, expense: 10000 }, { name: 'July', income: 18000, expense: 13000 }, ];
 
+// NEW STATIC DATA: Rider Earnings Data for the Bar Graph
+const riderEarningsData = [
+    { name: 'Rider A', earnings: 15000 },
+    { name: 'Rider B', earnings: 12000 },
+    { name: 'Rider C', earnings: 18500 },
+    { name: 'Rider D', earnings: 9000 },
+    { name: 'Rider E', earnings: 21000 },
+    { name: 'Rider F', earnings: 14500 },
+    { name: 'Rider G', earnings: 16000 },
+];
+
+const PIE_COLORS = ['#00b4d8', '#ffb703', '#48cae4', '#03045e', '#a9d6e5'];
+
+// ✅ FIXED: Date.toLocaleString "second" property is now "numeric"
 const currentDate = new Date().toLocaleString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric", });
 const userRole = "Admin";
 const initialData = [ { title: "Today's Sales", current: 0, previous: 0, format: "currency", icon: faMoneyBillWave, type: "sales" }, { title: "Total Orders", current: 0, previous: 0, format: "number", icon: faChartLine, type: "revenue" }, { title: "Today's Orders", current: 0, previous: 0, format: "number", icon: faShoppingCart, type: "orders" }, { title: "Pending Orders", current: 0, previous: 0, format: "number", icon: faClock, type: "pendings" }, { title: "Delivered Orders", current: 0, previous: 0, format: "number", icon: faCheckCircle, type: "deliveredOrders" }, { title: "Pick Up Orders", current: 0, previous: 0, format: "number", icon: faClipboardCheck, type: "confirmedOrders" }, { title: "Cancelled Orders", current: 0, previous: 0, format: "number", icon: faXmark, type: "cancelledOrders" } ];
 const formatValue = (value, format) => { return format === "currency" ? `₱${value.toLocaleString()}` : value.toLocaleString(); };
 
-// Recent Orders state will be populated from API
+// Define the custom label for the Pie chart
+const renderCustomizedLabel = ({ name, percent }) => {
+  if (percent > 0.05) { // Only show label for slices larger than 5%
+    return `${name} (${(percent * 100).toFixed(0)}%)`;
+  }
+  return '';
+};
 
-// Compute daily total orders from recentOrders - moved inside component
+// Custom Tooltip for Pie Chart
+const CustomTooltip = ({ active, payload, label, popularItems }) => {
+    if (active && payload && payload.length) {
+        const item = payload[0].payload;
+        const totalSold = popularItems.reduce((sum, entry) => sum + entry.value, 0);
+        const percentage = ((item.value / totalSold) * 100).toFixed(1);
+        return (
+            <div style={{ backgroundColor: 'white', padding: '10px', border: '1px solid #ccc', borderRadius: '4px' }}>
+                <p style={{ margin: 0, fontWeight: 'bold' }}>{item.name}</p>
+                <p style={{ margin: 0 }}>Units Sold: {item.value}</p>
+                <p style={{ margin: 0 }}>Percentage: {percentage}%</p>
+            </div>
+        );
+    }
+    return null;
+};
 
-// --- End of static data ---
 
 const Dashboard = () => {
-  // 2. Initialize useSearchParams to access the URL
   const [searchParams] = useSearchParams();
-
-  // 3. Create state to hold the token and username from the URL
   const [authToken, setAuthToken] = useState(null);
   const [userName, setUserName] = useState("Loading...");
 
@@ -62,16 +95,15 @@ const Dashboard = () => {
   const [recentOrders, setRecentOrders] = useState([]);
   const [allOrders, setAllOrders] = useState([]);
 
-  // 4. This useEffect runs once to read the parameters from the URL
+  // --- useEffects for Auth and Data Fetching ---
   useEffect(() => {
   const tokenFromUrl = searchParams.get('authorization');
   const usernameFromUrl = searchParams.get('username');
 
   if (tokenFromUrl) {
     setAuthToken(tokenFromUrl);
-    localStorage.setItem("authToken", tokenFromUrl); // Save to localStorage
+    localStorage.setItem("authToken", tokenFromUrl); 
   } else {
-    // If not in URL, try getting from localStorage
     const storedToken = localStorage.getItem("authToken");
     if (storedToken) {
       setAuthToken(storedToken);
@@ -82,7 +114,7 @@ const Dashboard = () => {
 
   if (usernameFromUrl) {
     setUserName(usernameFromUrl);
-    localStorage.setItem("userName", usernameFromUrl); // Save to localStorage
+    localStorage.setItem("userName", usernameFromUrl);
   } else {
     const storedUsername = localStorage.getItem("userName");
     if (storedUsername) {
@@ -92,102 +124,41 @@ const Dashboard = () => {
 }, [searchParams]);
 
   useEffect(() => {
-    if (!authToken) {
-      return; 
-    }
-
-    fetch("http://localhost:7004/cart/admin/orders/total", {
-      headers: {
-        // Use the token from the state
-        Authorization: `Bearer ${authToken}`,
-      },
-    })
-    .then((res) => {
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
-      return res.json();
-    })
+    if (!authToken) { return; }
+    fetch("http://localhost:7004/cart/admin/orders/total", { headers: { Authorization: `Bearer ${authToken}`, }, })
+    .then((res) => { if (!res.ok) { throw new Error(`HTTP error! status: ${res.status}`); } return res.json(); })
     .then((data) => {
       console.log("Fetched total orders:", data);
-      const totalOrders = data.total_orders;
-      setDashboardData((prev) => ({
-        ...prev,
-        totalOrders: totalOrders,
-      }));
+      setDashboardData((prev) => ({ ...prev, totalOrders: data.total_orders, }));
     })
-    .catch((err) =>
-      console.error("Failed to fetch total orders:", err)
-    );
-  }, [authToken]); // This effect depends on authToken. It will run when authToken is set.
+    .catch((err) => console.error("Failed to fetch total orders:", err));
+  }, [authToken]);
 
   useEffect(() => {
-    if (!authToken) {
-      return;
-    }
-
-    fetch("http://localhost:7004/cart/admin/orders/pending", {
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-      },
-    })
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`);
-        }
-        return res.json();
-      })
+    if (!authToken) { return; }
+    fetch("http://localhost:7004/cart/admin/orders/pending", { headers: { Authorization: `Bearer ${authToken}`, }, })
+      .then((res) => { if (!res.ok) { throw new Error(`HTTP error! status: ${res.status}`); } return res.json(); })
       .then((orders) => {
         const pendingCount = orders.filter(order => order.order_status === "Pending").length;
-        setDashboardData(prev => ({
-          ...prev,
-          pendingOrders: pendingCount,
-        }));
+        setDashboardData(prev => ({ ...prev, pendingOrders: pendingCount, }));
       })
       .catch((err) => console.error("Failed to fetch pending orders:", err));
   }, [authToken]);
 
   useEffect(() => {
-    if (!authToken) {
-      return;
-    }
-
-    fetch("http://localhost:7004/cart/admin/orders/today_count", {
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-      },
-    })
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`);
-        }
-        return res.json();
-      })
+    if (!authToken) { return; }
+    fetch("http://localhost:7004/cart/admin/orders/today_count", { headers: { Authorization: `Bearer ${authToken}`, }, })
+      .then((res) => { if (!res.ok) { throw new Error(`HTTP error! status: ${res.status}`); } return res.json(); })
       .then((data) => {
-        setDashboardData(prev => ({
-          ...prev,
-          todaysOrders: data.todays_orders,
-        }));
+        setDashboardData(prev => ({ ...prev, todaysOrders: data.todays_orders, }));
       })
       .catch((err) => console.error("Failed to fetch today's orders:", err));
   }, [authToken]);
 
   useEffect(() => {
-    if (!authToken) {
-      return;
-    }
-
-    fetch("http://localhost:7004/cart/admin/orders/manage", {
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-      },
-    })
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`);
-        }
-        return res.json();
-      })
+    if (!authToken) { return; }
+    fetch("http://localhost:7004/cart/admin/orders/manage", { headers: { Authorization: `Bearer ${authToken}`, }, })
+      .then((res) => { if (!res.ok) { throw new Error(`HTTP error! status: ${res.status}`); } return res.json(); })
       .then((data) => {
         console.log("Fetched recent orders:", data);
         const transformedOrders = data.map(order => ({
@@ -199,7 +170,7 @@ const Dashboard = () => {
           orderType: order.order_type,
         }));
         setAllOrders(transformedOrders);
-        setRecentOrders(transformedOrders.slice(0, 10)); // Limit to 10 for display
+        setRecentOrders(transformedOrders.slice(0, 10));
         const cancelledCount = transformedOrders.filter(order => order.status.toLowerCase() === "cancelled").length;
         const deliveredCount = transformedOrders.filter(order => order.orderType.toLowerCase() === "delivery" && order.status.toLowerCase() === "completed").length;
         const confirmedCount = transformedOrders.filter(order => order.orderType.toLowerCase() === "pick up" && order.status.toLowerCase() === "completed").length;
@@ -207,83 +178,61 @@ const Dashboard = () => {
       })
       .catch((err) => console.error("Failed to fetch recent orders:", err));
   }, [authToken]);
+  // --- End of useEffects ---
 
   const toggleDropdown = () => {
     setDropdownOpen(!isDropdownOpen);
   };
 
-  // Compute daily total orders from allOrders
+  // Logic for ordersData, salesData, todaysSales, and data (Unchanged)
   const dailyOrdersData = allOrders.reduce((acc, order) => {
     const date = order.date;
-    if (!acc[date]) {
-      acc[date] = 0;
-    }
-    acc[date]++;
-    return acc;
+    if (!acc[date]) { acc[date] = 0; } acc[date]++; return acc;
   }, {});
 
-  // Prepare ordersData based on revenueFilter
   let ordersData = [];
   if (revenueFilter === "Weekly") {
-    // Get current date
     const now = new Date();
-    // Find Sunday of current week (assuming week starts on Sunday)
     const sunday = new Date(now);
     sunday.setDate(now.getDate() - now.getDay());
-    // Create array for 7 days
     ordersData = [];
     for (let i = 0; i < 7; i++) {
       const day = new Date(sunday);
       day.setDate(sunday.getDate() + i);
-      const dayStr = day.toISOString().split('T')[0]; // YYYY-MM-DD
+      const dayStr = day.toISOString().split('T')[0];
       const options = { month: 'short', day: 'numeric' };
       const formattedDate = day.toLocaleDateString('en-US', options);
-      const count = allOrders
-        .filter(order => new Date(order.date).toISOString().split('T')[0] === dayStr)
-        .length;
+      const count = allOrders.filter(order => new Date(order.date).toISOString().split('T')[0] === dayStr).length;
       ordersData.push({ name: formattedDate, orders: count });
     }
   } else if (revenueFilter === "Monthly") {
-    // Show all months
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    // Aggregate orders by month name
     const monthOrders = {};
     months.forEach(m => monthOrders[m] = 0);
     allOrders.forEach(order => {
       const orderDate = new Date(order.date);
       const monthName = orderDate.toLocaleDateString('en-US', { month: 'short' });
-      if (months.includes(monthName)) {
-        monthOrders[monthName] = (monthOrders[monthName] || 0) + 1;
-      }
+      if (months.includes(monthName)) { monthOrders[monthName] = (monthOrders[monthName] || 0) + 1; }
     });
     ordersData = months.map(month => ({ name: month, orders: monthOrders[month] }));
   } else {
-    // Default to daily aggregation
     ordersData = Object.entries(dailyOrdersData).map(([date, count]) => ({ name: date, orders: count }));
   }
 
-  // Prepare salesData based on salesFilter
   let salesData = [];
   if (salesFilter === "Weekly") {
-    // Get current date
     const now = new Date();
-    // Find Sunday of current week (assuming week starts on Sunday)
     const sunday = new Date(now);
     sunday.setDate(now.getDate() - now.getDay());
-    // Create array for 7 days
     salesData = [];
     for (let i = 0; i < 7; i++) {
       const day = new Date(sunday);
       day.setDate(sunday.getDate() + i);
-      const dayStr = day.toISOString().split('T')[0]; // YYYY-MM-DD
+      const dayStr = day.toISOString().split('T')[0];
       const options = { month: 'short', day: 'numeric' };
       let formattedDate = day.toLocaleDateString('en-US', options);
-      if (day.toDateString() === new Date().toDateString()) {
-        formattedDate = 'today ' + formattedDate;
-      }
-      const sum = allOrders
-        .filter(order => new Date(order.date).toISOString().split('T')[0] === dayStr)
-        .reduce((acc, order) => acc + (order.amount || 0), 0);
+      if (day.toDateString() === new Date().toDateString()) { formattedDate = 'today ' + formattedDate; }
+      const sum = allOrders.filter(order => new Date(order.date).toISOString().split('T')[0] === dayStr).reduce((acc, order) => acc + (order.amount || 0), 0);
       salesData.push({ name: formattedDate, sales: sum });
     }
   } else if (salesFilter === "Monthly") {
@@ -293,62 +242,25 @@ const Dashboard = () => {
     allOrders.forEach(order => {
       const orderDate = new Date(order.date);
       const monthName = orderDate.toLocaleDateString('en-US', { month: 'short' });
-      if (months.includes(monthName)) {
-        monthSums[monthName] += order.amount || 0;
-      }
+      if (months.includes(monthName)) { monthSums[monthName] += order.amount || 0; }
     });
     salesData = months.map(month => ({ name: month, sales: monthSums[month] }));
   }
 
-  // Compute today's sales from allOrders
   const todaysSales = allOrders.filter(order => new Date(order.date).toDateString() === new Date().toDateString()).reduce((sum, order) => sum + (order.amount || 0), 0);
 
   const data = initialData.map((card) => {
-    if (card.title === "Total Orders") {
-      return {
-        ...card,
-        current: dashboardData.totalOrders,
-      };
-    }
-    if (card.title === "Pending Orders") {
-      return {
-        ...card,
-        current: dashboardData.pendingOrders,
-      };
-    }
-    if (card.title === "Today's Orders") {
-      return {
-        ...card,
-        current: dashboardData.todaysOrders,
-      };
-    }
-    if (card.title === "Today's Sales") {
-      return {
-        ...card,
-        current: todaysSales,
-      };
-    }
-    if (card.title === "Cancelled Orders") {
-      return {
-        ...card,
-        current: dashboardData.cancelledOrders,
-      };
-    }
-    if (card.title === "Delivered Orders") {
-      return {
-        ...card,
-        current: dashboardData.deliveredOrders,
-      };
-    }
-    if (card.title === "Pick Up Orders") {
-      return {
-        ...card,
-        current: dashboardData.confirmedOrders,
-      };
-    }
+    if (card.title === "Total Orders") { return { ...card, current: dashboardData.totalOrders, }; }
+    if (card.title === "Pending Orders") { return { ...card, current: dashboardData.pendingOrders, }; }
+    if (card.title === "Today's Orders") { return { ...card, current: dashboardData.todaysOrders, }; }
+    if (card.title === "Today's Sales") { return { ...card, current: todaysSales, }; }
+    if (card.title === "Cancelled Orders") { return { ...card, current: dashboardData.cancelledOrders, }; }
+    if (card.title === "Delivered Orders") { return { ...card, current: dashboardData.deliveredOrders, }; }
+    if (card.title === "Pick Up Orders") { return { ...card, current: dashboardData.confirmedOrders, }; }
     return card;
   });
 
+  // Data preparation for Popular Items (Unchanged)
   const popularItems = React.useMemo(() => {
     const itemAgg = {};
     recentOrders.forEach(order => {
@@ -359,14 +271,14 @@ const Dashboard = () => {
           itemAgg[item.name] = { sold: 0, revenue: 0 };
         }
         itemAgg[item.name].sold += item.quantity;
-        itemAgg[item.name].revenue += amountPerItem;
+        itemAgg[item.name].revenue += amountPerItem * item.quantity;
       });
     });
     return Object.entries(itemAgg).map(([name, data]) => ({
       name,
-      sold: data.sold,
+      value: data.sold, 
       revenue: Math.round(data.revenue)
-    })).sort((a, b) => b.sold - a.sold).slice(0, 5);
+    })).sort((a, b) => b.value - a.value).slice(0, 5); // Limit to top 5
   }, [recentOrders]);
 
   return (
@@ -382,7 +294,6 @@ const Dashboard = () => {
               <div className="profile-pic" />
               <div className="profile-info">
                 <div className="profile-role">Hi! I'm {userRole}</div>
-                {/* 6. Display the username read from the URL */}
                 <div className="profile-name">{userName}</div>
               </div>
               <div className="dropdown-icon" onClick={toggleDropdown}>
@@ -404,8 +315,7 @@ const Dashboard = () => {
                     </li>
                     <li
                       onClick={() => {
-                        // 7. Logout now simply redirects, as there's no localStorage to clear.
-                        window.location.href = "http://localhost:4002/"; 
+                        window.location.href = "http://localhost:4002/";
                       }}
                       style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#dc3545" }}
                       onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8d7da"}
@@ -420,8 +330,7 @@ const Dashboard = () => {
           </div>
         </header>
 
-        {/* ... The rest of your component's JSX remains exactly the same ... */}
-        
+        {/* --- Card Section --- */}
         <div className="dashboard-contents">
           <div className="dashboard-cards" style={{ display: 'flex', gap: '20px', flexWrap: 'nowrap' }}>
             {data.map((card, index) => {
@@ -440,7 +349,7 @@ const Dashboard = () => {
                       {hasChange && (
                         <div className={`card-percent ${isImproved ? 'green' : 'red'}`}>
                           <FontAwesomeIcon icon={isImproved ? faArrowTrendUp : faArrowTrendDown} />
-                             {Math.abs(percent).toFixed(1)}%
+                                {Math.abs(percent).toFixed(1)}%
                         </div>
                       )}
                     </div>
@@ -453,6 +362,7 @@ const Dashboard = () => {
             })}
           </div>
 
+          {/* --- Line and Area Charts --- */}
           <div className="dashboard-charts">
             <div className="chart-box">
               <div className="chart-header">
@@ -485,11 +395,32 @@ const Dashboard = () => {
               </ResponsiveContainer>
             </div>
           </div>
+
+          {/* --- Rider Earnings Chart --- */}
+          <div className="dashboard-charts" style={{ marginTop: '20px', display: 'block' }}>
+              <div className="chart-box" style={{ width: '100%', margin: '0', padding: '20px' }}>
+                  <div className="chart-header">
+                      <span>Rider Earnings - All-Time</span>
+                  </div>
+                  <ResponsiveContainer width="100%" height={350}>
+                      <BarChart data={riderEarningsData} margin={{ top: 10, right: 30, left: 20, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                          <YAxis tickFormatter={(value) => `₱${value.toLocaleString()}`} />
+                          <Tooltip formatter={(value) => [`₱${value.toLocaleString()}`, 'Earnings']} />
+                          <Legend />
+                          <Bar dataKey="earnings" fill="#00b4d8" name="Rider Earnings" />
+                      </BarChart>
+                  </ResponsiveContainer>
+              </div>
+          </div>
+
+          {/* --- Recent Orders and Popular Items Chart Section --- */}
           <div className="dashboard-extra-cards" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
             <div className="chart-box" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start', padding: '20px' }}>
               <div style={{ fontSize: '22px', fontWeight: '700', marginBottom: '5px' }}>Recent Orders</div>
               <div style={{ fontSize: '14px', color: '#666', marginBottom: '15px' }}>Latest orders from customers</div>
-              <div style={{ width: '100%', maxHeight: '200px', overflowY: 'auto', marginBottom: '10px' }}>
+              <div style={{ width: '100%', maxHeight: '300px', overflowY: 'auto', marginBottom: '10px' }}>
                 {recentOrders.map((order, index) => (
                   <div key={index} style={{ display: 'flex', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #eee' }}>
                     <div style={{ fontSize: '14px', fontWeight: '500', flex: 1, textAlign: 'left' }}>{order.customer}</div>
@@ -502,9 +433,9 @@ const Dashboard = () => {
                       fontWeight: '500',
                       display: 'inline-block',
                       backgroundColor: order.status.toLowerCase() === 'pending' ? '#fff3cd' :
-                                       order.status.toLowerCase() === 'processing' ? '#cce5ff' :
-                                       order.status.toLowerCase() === 'completed' ? '#d4edda' :
-                                       order.status.toLowerCase() === 'cancelled' ? '#f8d7da' : '#e9ecef',
+                                         order.status.toLowerCase() === 'processing' ? '#cce5ff' :
+                                         order.status.toLowerCase() === 'completed' ? '#d4edda' :
+                                         order.status.toLowerCase() === 'cancelled' ? '#f8d7da' : '#e9ecef',
                       color: order.status.toLowerCase() === 'pending' ? '#856404' :
                              order.status.toLowerCase() === 'processing' ? '#004085' :
                              order.status.toLowerCase() === 'completed' ? '#155724' :
@@ -517,27 +448,51 @@ const Dashboard = () => {
                       minWidth: '80px',
                       lineHeight: '1.5',
                       verticalAlign: 'middle',
-                    }}>{order.status}</div>
+                    }}>
+                      {order.status}
+                    </div>
                     <div style={{ fontSize: '14px', fontWeight: '500', flex: 0, textAlign: 'left', marginLeft: '10px', minWidth: '90px' }}>₱{order.amount}</div>
                   </div>
                 ))}
               </div>
-              
+
             </div>
+            {/* START: Popular Items PIE CHART */}
             <div className="chart-box" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start', padding: '20px' }}>
               <div style={{ fontSize: '22px', fontWeight: '700', marginBottom: '5px' }}>Popular Items</div>
-              <div style={{ fontSize: '14px', color: '#666', marginBottom: '15px' }}>Best selling menu items</div>
-              <div style={{ width: '100%', maxHeight: '200px', overflowY: 'auto', marginBottom: '10px' }}>
-                {popularItems.map((item, index) => (
-                  <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #eee' }}>
-                    <div style={{ fontSize: '14px', fontWeight: '500', flex: 1 }}>{item.name}</div>
-                    <div style={{ fontSize: '12px', color: '#666', flex: 1, textAlign: 'center' }}>{item.sold}</div>
-                    <div style={{ fontSize: '14px', fontWeight: '500', flex: 1, textAlign: 'right' }}>₱{item.revenue.toLocaleString()}</div>
-                  </div>
-                ))}
-              </div>
-              
+              <div style={{ fontSize: '14px', color: '#666', marginBottom: '15px' }}>Top 5 best selling menu items (Proportion by Units Sold)</div>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={popularItems}
+                    dataKey="value" // The key for the data value (Units Sold)
+                    nameKey="name"  // The key for the name (Item Name)
+                    cx="50%"        // Center X position
+                    cy="50%"        // Center Y position
+                    outerRadius={100} // Radius of the outer circle
+                    fill="#8884d8"
+                    labelLine={false} // Hide the line connecting the label
+                    label={renderCustomizedLabel} // Use the custom label function
+                  >
+                    {popularItems.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  {/* Pass popularItems to CustomTooltip */}
+                  <Tooltip content={<CustomTooltip popularItems={popularItems} />} /> 
+                  
+                  {/* ✅ FIXED: Legend is now horizontal and centered below the chart */}
+                  <Legend 
+                      layout="horizontal" 
+                      verticalAlign="bottom" 
+                      align="center" 
+                      wrapperStyle={{ paddingTop: 20 }} 
+                  />
+                  
+                </PieChart>
+              </ResponsiveContainer>
             </div>
+            {/* END: Popular Items PIE CHART */}
           </div>
         </div>
       </main>

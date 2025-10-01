@@ -21,6 +21,7 @@ export default function AppHeader() {
 
   // Remove AuthContext usage, use local state for login detection
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [profileImage, setProfileImage] = useState(null);
 
   // Check URL query params for authorization token and store in localStorage
   useEffect(() => {
@@ -133,6 +134,36 @@ export default function AppHeader() {
       window.scrollTo(0, 0);
     }
   }, [location.pathname]);
+
+  // Fetch user profile image when logged in
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        const token = localStorage.getItem('authToken');
+        if (!token) return;
+
+        const response = await fetch('http://localhost:4000/users/profile', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          console.error('Failed to fetch user profile:', response.statusText);
+          return;
+        }
+
+        const data = await response.json();
+        setProfileImage(data.profileImage || null);
+      } catch (error) {
+        console.error('Error fetching user profile:', error);
+      }
+    };
+
+    if (isLoggedIn) {
+      fetchUserProfile();
+    }
+  }, [isLoggedIn]);
 
   const handleLogoutClick = () => {
     Swal.fire({
@@ -378,10 +409,10 @@ export default function AppHeader() {
                             className="p-0 border-0 bg-transparent"
                           >
                             <img
-                              src="https://cdn-icons-png.flaticon.com/512/149/149071.png"
+                              src={profileImage || "https://cdn-icons-png.flaticon.com/512/149/149071.png"}
                               alt="Profile"
                               className="profile-icon"
-                              style={{ width: '32px', height: '32px', borderRadius: '50%' }}
+                              style={{ width: '40px', height: '40px', borderRadius: '50%' }}
                             />
                           </Dropdown.Toggle>
 
