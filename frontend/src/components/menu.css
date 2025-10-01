@@ -356,3 +356,12 @@
   border-top-right-radius: 8px;
   border-bottom-right-radius: 8px;
 }
+
+/* Add this to your menu.css file */
+.swal2-html-container-tight {
+  /* This negative margin pulls the content container up towards the title */
+  
+  /* You can also adjust the bottom padding if needed */
+  padding-bottom: 20px !important;
+    margin-top: -60px !important;
+}

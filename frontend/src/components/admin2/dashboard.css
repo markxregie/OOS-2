@@ -15,7 +15,8 @@ body {
   padding-right: 60px;
   padding-top: 20px;
   box-sizing: border-box;
-  margin: 0 auto;
+  margin-bottom: 0.5rem;
+ 
 }
 
 .dashboard-contents {
