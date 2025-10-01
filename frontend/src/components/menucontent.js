@@ -27,6 +27,7 @@ const MenuContent = () => {
   const [selectedAddOns, setSelectedAddOns] = useState([]);
   const [addOnsTotal, setAddOnsTotal] = useState(0);
 
+
   const { addToCart: addToContextCart } = useContext(CartContext);
   const navigate = useNavigate();
 
@@ -247,7 +248,7 @@ const MenuContent = () => {
       `,
       width: 800,
       showCloseButton: true,
-      showCancelButton: true,
+      showCancelButton: false,
       showDenyButton: true,
       confirmButtonText: 'Add to cart',
       denyButtonText: 'Buy Now',
@@ -255,7 +256,7 @@ const MenuContent = () => {
       customClass: {
         confirmButton: 'btn btn-outline-primary me-2',
         denyButton: 'btn btn-primary',
-        // 🚀 ADDED 'ms-2' (margin-start: 2) to push it away from the Deny/Buy Now button
+        
         cancelButton: 'btn btn-outline-secondary ms-2', 
         popup: 'custom-sweetalert-popup',
         htmlContainer: 'swal2-html-container-tight' 
@@ -541,6 +542,7 @@ const MenuContent = () => {
                     }
                   </div>
                   <div className="item-name-placeholder">{item.ProductName}</div>
+                  <div className="item-price-placeholder">₱{item.ProductPrice?.toFixed(2)}</div>
                   {!isAvailable && (
                     <div className="unavailable-overlay">
                       <span>Unavailable</span>

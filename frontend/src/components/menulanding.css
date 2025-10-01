@@ -256,8 +256,8 @@
     padding: 0 0.5rem;
   }
   .unavailable-overlay span {
-    font-size: 1.2rem;
-    padding: 6px 12px;
+    font-size: 0.8rem;
+    padding: 4px 8px;
   }
 }
 

@@ -54,7 +54,7 @@ export default function AppHeader() {
   useEffect(() => {
     const handleScroll = () => {
       const currentScrollY = window.pageYOffset;
-      if (window.innerWidth <= 576) { // mobile view only
+      if (window.innerWidth <= 576 && location.pathname !== '/menu') { // mobile view only, except on menu page
         if (currentScrollY > lastScrollY) {
           // scrolling down
           setIsVisible(false);
@@ -71,7 +71,7 @@ export default function AppHeader() {
     window.addEventListener('scroll', handleScroll);
 
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [location.pathname]);
 
   useEffect(() => {
     const handleResize = () => {
