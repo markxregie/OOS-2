@@ -8,12 +8,19 @@ import Swal from 'sweetalert2'; // 1. Import SweetAlert2
 import './menu.css';
 import { CartContext } from '../contexts/CartContext';
 
+// Define API base URLs
+const PRODUCTS_BASE_URL = "http://127.0.0.1:8001";
+const MERCH_BASE_URL = "http://127.0.0.1:8002";
+
 // Define Add-ons structure
 const ADD_ONS = [
   { name: 'Espresso Shot', price: 50 },
   { name: 'Seasalt Cream', price: 30 },
   { name: 'Syrup/Sauces', price: 20 },
 ];
+
+// Define category order
+const CATEGORY_ORDER = ["Drinks", "Foods", "Merchandise", "Other"];
 
 const MenuContent = () => {
   const [products, setProducts] = useState({});
@@ -42,8 +49,6 @@ const MenuContent = () => {
   }, []);
 
   useEffect(() => {
-    const API_BASE_URL = "http://127.0.0.1:8001";
-
     const fetchAllData = async () => {
       const token = localStorage.getItem("authToken");
 
@@ -52,9 +57,9 @@ const MenuContent = () => {
           const headers = { Authorization: `Bearer ${token}` };
 
           const [typesResponse, productsResponse, productsDetailsResponse] = await Promise.all([
-            fetch(`${API_BASE_URL}/ProductType/`, { headers }),
-            fetch(`${API_BASE_URL}/is_products/products/`, { headers }),
-            fetch(`${API_BASE_URL}/is_products/products/details/`, { headers }),
+            fetch(`${PRODUCTS_BASE_URL}/ProductType/`, { headers }),
+            fetch(`${PRODUCTS_BASE_URL}/is_products/products/`, { headers }),
+            fetch(`${PRODUCTS_BASE_URL}/is_products/products/details/`, { headers }),
           ]);
 
           if (!typesResponse.ok || !productsResponse.ok || !productsDetailsResponse.ok) {
@@ -64,6 +69,13 @@ const MenuContent = () => {
           const apiTypes = await typesResponse.json();
           const apiProducts = await productsResponse.json();
           const apiProductsDetails = await productsDetailsResponse.json();
+
+          // Fetch merchandise after other API calls
+          const merchandiseResponse = await fetch(`${MERCH_BASE_URL}/merchandise/menu`, { headers });
+          let apiMerchandise = [];
+          if (merchandiseResponse.ok) {
+            apiMerchandise = await merchandiseResponse.json();
+          }
 
           const productStatusMap = apiProductsDetails.reduce((acc, detail) => {
             acc[detail.ProductName] = detail.Status;
@@ -93,7 +105,36 @@ const MenuContent = () => {
             grouped[typeName][category].push(product);
           });
 
-          setProducts(grouped);
+          // Map merchandise fields to product format
+          const mappedMerchandise = apiMerchandise.map((item) => ({
+            ProductID: item.MerchandiseID,
+            ProductName: item.MerchandiseName,
+            ProductPrice: item.MerchandisePrice,
+            ProductImage: item.MerchandiseImage,
+            ProductTypeName: "Merchandise",
+            ProductCategory: "All Items",
+            Status: item.Status,
+          }));
+
+          // Add to grouped
+          if (!grouped["Merchandise"]) grouped["Merchandise"] = {};
+          grouped["Merchandise"]["All Items"] = mappedMerchandise;
+
+          // Reorder categories
+          const orderedGrouped = {};
+          CATEGORY_ORDER.forEach(cat => {
+            if (grouped[cat]) {
+              orderedGrouped[cat] = grouped[cat];
+            }
+          });
+          Object.keys(grouped).forEach(cat => {
+            if (!CATEGORY_ORDER.includes(cat)) {
+              orderedGrouped[cat] = grouped[cat];
+            }
+          });
+
+          setProducts(orderedGrouped);
+          console.log("Grouped products:", orderedGrouped);
 
           if (grouped["Drinks"]) {
             const firstSubcat = Object.keys(grouped["Drinks"])[0];
@@ -102,9 +143,16 @@ const MenuContent = () => {
             setSelectedSubcategory("");
           }
         } else {
-          const publicResponse = await fetch(`${API_BASE_URL}/is_products/public/products/`);
+          const publicResponse = await fetch(`${PRODUCTS_BASE_URL}/is_products/public/products/`);
           if (!publicResponse.ok) throw new Error("Failed to fetch public product data.");
           const publicProducts = await publicResponse.json();
+
+          // Fetch merchandise after other API calls
+          const merchandiseResponse = await fetch(`${MERCH_BASE_URL}/merchandise/public/menu`);
+          let apiMerchandise = [];
+          if (merchandiseResponse.ok) {
+            apiMerchandise = await merchandiseResponse.json();
+          }
 
           const grouped = {};
           publicProducts.forEach((product) => {
@@ -118,10 +166,38 @@ const MenuContent = () => {
             });
           });
 
-          setProducts(grouped);
+          // Map merchandise fields to product format
+          const mappedMerchandise = apiMerchandise.map((item) => ({
+            ProductID: item.MerchandiseID,
+            ProductName: item.MerchandiseName,
+            ProductPrice: item.MerchandisePrice,
+            ProductImage: item.MerchandiseImage,
+            ProductTypeName: "Merchandise",
+            ProductCategory: "All Items",
+            Status: item.Status,
+          }));
 
-          if (grouped["Drinks"]) {
-            const firstSubcat = Object.keys(grouped["Drinks"])[0];
+          // Add to grouped
+          if (!grouped["Merchandise"]) grouped["Merchandise"] = {};
+          grouped["Merchandise"]["All Items"] = mappedMerchandise;
+
+          // Reorder categories
+          const orderedGrouped = {};
+          CATEGORY_ORDER.forEach(cat => {
+            if (grouped[cat]) {
+              orderedGrouped[cat] = grouped[cat];
+            }
+          });
+          Object.keys(grouped).forEach(cat => {
+            if (!CATEGORY_ORDER.includes(cat)) {
+              orderedGrouped[cat] = grouped[cat];
+            }
+          });
+
+          setProducts(orderedGrouped);
+
+          if (orderedGrouped["Drinks"]) {
+            const firstSubcat = Object.keys(orderedGrouped["Drinks"])[0];
             setSelectedSubcategory(firstSubcat || "");
           } else {
             setSelectedSubcategory("");
@@ -197,7 +273,8 @@ const MenuContent = () => {
     const imageUrl = item.ProductImage
       ? item.ProductImage.startsWith('http')
         ? item.ProductImage
-        : `http://localhost:8001${item.ProductImage}`
+        : `${item.ProductTypeName === "Merchandise" ? "http://127.0.0.1:8002" : "http://127.0.0.1:8001"}${item.ProductImage}`
+
       : 'URL_TO_DEFAULT_IMAGE_OR_BLANK';
       
     // HTML for add-ons section
