@@ -52,7 +52,10 @@ const OrderHistory = () => {
         const cancelledOrders = [];
 
         data.forEach(order => {
-          const total = order.products.reduce((sum, p) => sum + p.price * p.quantity, 0);
+  const total = order.products.reduce((sum, p) => {
+    const addonSum = p.addons ? p.addons.reduce((s, a) => s + a.price, 0) : 0;
+    return sum + (p.price + addonSum) * p.quantity;
+  }, 0) + (order.orderType === 'Delivery' ? 50 : 0);
           const orderData = {
             id: order.id,
             orderType: order.orderType,
@@ -185,7 +188,18 @@ const OrderHistory = () => {
               <td>#{order.id}</td>
               <td>{order.orderType}</td>
               <td>
-                {order.products.map(p => `${p.name} (x${p.quantity})`).join(', ')}
+                {order.products.map((p, idx) => (
+                  <div key={idx}>
+                    {p.name} (x{p.quantity})
+                    {p.addons && p.addons.length > 0 && (
+                      <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.85em", color: "#666" }}>
+                        {p.addons.map((addon, i) => (
+                          <li key={i}>+ {addon.addon_name || addon.name} (₱{addon.price})</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
               </td>
               <td>₱{order.total.toFixed(2)}</td>
               <td>{new Date(order.date).toLocaleDateString()}</td>
@@ -208,10 +222,19 @@ const OrderHistory = () => {
                         <tbody>
                           ${order.products.map(p => `
                             <tr>
-                              <td style="border: 1px solid #ddd; padding: 8px;">${p.name}</td>
+                              <td style="border: 1px solid #ddd; padding: 8px;">
+                                ${p.name}
+                                ${p.addons && p.addons.length > 0 ? `
+                                  <ul style="margin:0; padding-left:15px; font-size:0.85em; color:#666;">
+                                    ${p.addons.map(ao => `<li>+ ${ao.addon_name || ao.name} (₱${ao.price})</li>`).join('')}
+                                  </ul>
+                                ` : ""}
+                              </td>
                               <td style="border: 1px solid #ddd; padding: 8px;">${p.quantity}</td>
                               <td style="border: 1px solid #ddd; padding: 8px;">${p.price.toFixed(2)}</td>
-                              <td style="border: 1px solid #ddd; padding: 8px;">${(p.price * p.quantity).toFixed(2)}</td>
+                              <td style="border: 1px solid #ddd; padding: 8px;">
+                                ${((p.price + (p.addons ? p.addons.reduce((s, ao) => s + ao.price, 0) : 0)) * p.quantity).toFixed(2)}
+                              </td>
                             </tr>
                           `).join('')}
                         </tbody>

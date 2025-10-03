@@ -5,11 +5,13 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import './cart.css';
 import { CartContext } from '../contexts/CartContext';
+import axios from 'axios';
+import Swal from 'sweetalert2';
 
 const Cart = () => {
   const navigate = useNavigate();
 
-  const { cartItems, incrementQuantity, decrementQuantity, removeFromCart } = useContext(CartContext);
+  const { cartItems, incrementQuantity, decrementQuantity, removeFromCart, setCartItems } = useContext(CartContext);
 
   console.log("🧾 Current cartItems:", cartItems);
 
@@ -91,7 +93,11 @@ const Cart = () => {
   }
 };
 
-  const calculateTotal = (item) => item.ProductPrice * item.quantity;
+  const calculateTotal = (item) => {
+  const basePrice = item.ProductPrice || 0;
+  const addonsTotal = (item.addons || []).reduce((sum, ao) => sum + (ao.price || 0), 0);
+  return (basePrice + addonsTotal) * item.quantity;
+};
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -145,21 +151,108 @@ const Cart = () => {
     return newErrors;
   };
 
-  const handleCheckoutClick = (e) => {
-  e.preventDefault();
-  if (selectedCartItems.length === 0) {
-    toast.error("Please select items to checkout.");
-    return;
-  }
-
-  navigate('/checkout', {
-    state: {
-      cartItems: selectedCartItems,
-      orderType: orderTypeMain,
-      paymentMethod: paymentMethodMain
+  const handleCheckoutClick = async (e) => {
+    e.preventDefault();
+    if (selectedCartItems.length === 0) {
+      toast.error("Please select items to checkout.");
+      return;
     }
-  });
-};
+
+    try {
+      // Prepare the payload for the API call
+      const itemsPayload = selectedCartItems.map(item => ({
+        productId: item.product_id,
+        requestedQty: item.quantity
+      }));
+
+      // Get token from localStorage
+      const token = localStorage.getItem('authToken');
+
+      // Call the backend API to check availability
+      const response = await axios.post(
+        "http://localhost:8004/recipes/availability/batch",
+        { items: itemsPayload },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      const { results, canProceed } = response.data;
+
+      if (!canProceed) {
+        let adjusted = false;
+        let removed = false;
+
+        // Create a copy of cartItems to modify
+        let updatedCartItems = [...cartItems];
+
+        results.forEach(result => {
+          const productId = result.ProductID;
+          const index = updatedCartItems.findIndex(item => item.product_id === productId);
+          if (index !== -1) {
+            if (!result.CanProcess) {
+              if (result.MaxOrderable > 0) {
+                // Adjust quantity to MaxOrderable
+                updatedCartItems[index] = {
+                  ...updatedCartItems[index],
+                  quantity: result.MaxOrderable
+                };
+                adjusted = true;
+              } else if (result.MaxOrderable === 0) {
+                // Remove item from cart
+                updatedCartItems.splice(index, 1);
+                removed = true;
+              }
+            }
+          }
+        });
+
+        // Update cart context and selected items to reflect changes
+        setCartItems(updatedCartItems);
+        setSelectedCartItems(prevSelected => prevSelected.filter(item =>
+          updatedCartItems.some(updatedItem => updatedItem.product_id === item.product_id)
+        ));
+
+        // Show appropriate SweetAlert warning
+        if (adjusted && removed) {
+          await Swal.fire({
+            icon: 'warning',
+            title: 'Some items were adjusted and some were removed due to stock availability.',
+            confirmButtonText: 'OK'
+          });
+        } else if (adjusted) {
+          await Swal.fire({
+            icon: 'warning',
+            title: 'Some items were adjusted to match available stock.',
+            confirmButtonText: 'OK'
+          });
+        } else if (removed) {
+          await Swal.fire({
+            icon: 'warning',
+            title: 'Some items were removed because they are out of stock.',
+            confirmButtonText: 'OK'
+          });
+        }
+
+        return; // Do not proceed to checkout if canProceed is false
+      }
+
+      // If canProceed is true, navigate to checkout
+      navigate('/checkout', {
+        state: {
+          cartItems: selectedCartItems,
+          orderType: orderTypeMain,
+          paymentMethod: paymentMethodMain
+        }
+      });
+    } catch (error) {
+      console.error('Error checking availability:', error);
+      toast.error('Failed to check item availability. Please try again later.');
+    }
+  };
 
   const handleConfirmOrder = () => {
     toast.success('Order confirmed! Redirecting...');
@@ -230,6 +323,15 @@ const Cart = () => {
               />
               <div>
                 <div className="fw-semibold">{item.ProductName}</div>
+                {item.addons && item.addons.length > 0 && (
+                  <ul className="cart-addons mb-0 ps-3">
+                    {item.addons.map((addon, idx) => (
+                      <li key={idx} style={{ fontSize: "0.85em", color: "#666" }}>
+                        + {addon.addon_name || addon.name} (₱{addon.price})
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
           </td>
@@ -297,7 +399,18 @@ const Cart = () => {
                 <tbody>
                   {selectedCartItems.map((item, i) => (
                     <tr key={i}>
-                              {item.ProductName}
+                      <td style={{ textAlign: 'left', padding: '8px' }}>
+                        <div className="fw-semibold">{item.ProductName}</div>
+                        {item.addons && item.addons.length > 0 && (
+                          <ul className="cart-addons mb-0 ps-3">
+                            {item.addons.map((addon, idx) => (
+                              <li key={idx} style={{ fontSize: "0.8em", color: "#666" }}>
+                                + {addon.addon_name || addon.name} (₱{addon.price})
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
                       <td style={{ textAlign: 'center', padding: '8px' }}>{item.quantity}</td>
                       <td style={{ textAlign: 'right', padding: '8px' }}>₱{item.ProductPrice.toFixed(2)}</td>
                     </tr>
@@ -308,7 +421,11 @@ const Cart = () => {
                     <td style={{ padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>Subtotal</td>
                     <td></td>
                     <td style={{ textAlign: 'right', padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>
-                      ₱{selectedCartItems.reduce((acc, item) => acc + item.ProductPrice * item.quantity, 0).toFixed(2)}
+                      ₱{selectedCartItems.reduce((acc, item) => {
+                        const basePrice = item.ProductPrice || 0;
+                        const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || 0), 0);
+                        return acc + (basePrice + addonsTotal) * item.quantity;
+                      }, 0).toFixed(2)}
                     </td>
                   </tr>
                   {orderTypeMain === 'Delivery' && (
@@ -324,6 +441,11 @@ const Cart = () => {
                     <td style={{ padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>Total</td>
                     <td></td>
                     <td style={{ textAlign: 'right', padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>
+                      ₱{(selectedCartItems.reduce((acc, item) => {
+                        const basePrice = item.ProductPrice || 0;
+                        const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || 0), 0);
+                        return acc + (basePrice + addonsTotal) * item.quantity;
+                      }, 0) + (orderTypeMain === 'Delivery' ? 50 : 0)).toFixed(2)}
                     </td>
                   </tr>
                   <tr className="payment-method-row">

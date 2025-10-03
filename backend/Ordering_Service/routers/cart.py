@@ -50,6 +50,12 @@ async def get_total_orders(token: str = Depends(oauth2_scheme)):
 
 
 
+class AddOn(BaseModel):
+    addon_id: int
+    addon_name: str
+    price: float
+
+
 class CartItem(BaseModel):
     username: str
     product_id: int
@@ -59,6 +65,7 @@ class CartItem(BaseModel):
     product_type: Optional[str] = None
     product_category: Optional[str] = None
     order_type: str
+    addons: Optional[List[AddOn]] = []
 
 
 class CartResponse(BaseModel):
@@ -72,6 +79,7 @@ class CartResponse(BaseModel):
     order_type: str
     status: str
     created_at: str
+    addons: Optional[List[AddOn]] = []
 
 
 class DeliveryInfoRequest(BaseModel):
@@ -254,7 +262,7 @@ async def get_all_pending_orders(token: str = Depends(oauth2_scheme)):
 
     return orders
 
-@router.get("cart/admin/orders/pending")
+@router.get("/cart/admin/orders/pending")
 async def get_pending_orders_count(token: str = Depends(oauth2_scheme)):
     await validate_token_and_roles(token, ["admin", "staff"])
     conn = await get_db_connection()
@@ -276,7 +284,7 @@ async def get_user_orders(token: str = Depends(oauth2_scheme)):
     cursor = await conn.cursor()
 
     await cursor.execute("""
-        SELECT o.OrderID, o.OrderDate, o.OrderType, o.Status, oi.ProductName, oi.Quantity, oi.Price
+        SELECT o.OrderID, o.OrderDate, o.OrderType, o.Status, oi.ProductName, oi.Quantity, oi.Price, oi.OrderItemID
         FROM Orders o
         JOIN OrderItems oi ON o.OrderID = oi.OrderID
         WHERE o.UserName = ?
@@ -284,13 +292,12 @@ async def get_user_orders(token: str = Depends(oauth2_scheme)):
     """, (username,))
 
     rows = await cursor.fetchall()
-    await cursor.close()
-    await conn.close()
 
     # Structure the data by order
     orders = {}
     for row in rows:
         order_id = row[0]
+        order_item_id = row[7]
         if order_id not in orders:
             orders[order_id] = {
                 "id": order_id,
@@ -299,11 +306,21 @@ async def get_user_orders(token: str = Depends(oauth2_scheme)):
                 "status": row[3],
                 "products": [],
             }
+
+        # Fetch addons for this order item
+        await cursor.execute("SELECT AddOnName, Price FROM OrderItemAddOns WHERE OrderItemID = ?", (order_item_id,))
+        addon_rows = await cursor.fetchall()
+        addons = [{"addon_name": addon[0], "price": float(addon[1])} for addon in addon_rows]
+
         orders[order_id]["products"].append({
             "name": row[4],
             "quantity": row[5],
-            "price": float(row[6])
+            "price": float(row[6]),
+            "addons": addons
         })
+
+    await cursor.close()
+    await conn.close()
 
     return list(orders.values())
 
@@ -392,7 +409,7 @@ async def get_cart(username: str, token: str = Depends(oauth2_scheme)):
     cursor = await conn.cursor()
 
     await cursor.execute("""
-        SELECT OrderID, OrderDate, Status
+        SELECT OrderID, OrderDate, OrderType, Status
         FROM Orders
         WHERE UserName = ? AND Status = 'Pending' AND PaymentStatus = 'Unpaid'
         ORDER BY OrderDate DESC
@@ -413,13 +430,17 @@ async def get_cart(username: str, token: str = Depends(oauth2_scheme)):
         WHERE OrderID = ?
     """, (order_id,))
     items = await cursor.fetchall()
-    await cursor.close()
-    await conn.close()
 
     cart = []
     for item in items:
+        order_item_id = item[0]
+        # Query addons
+        await cursor.execute("SELECT AddOnID, AddOnName, Price FROM OrderItemAddOns WHERE OrderItemID = ?", (order_item_id,))
+        addon_rows = await cursor.fetchall()
+        addons = [AddOn(addon_id=row[0], addon_name=row[1], price=float(row[2])) for row in addon_rows]
+
         cart.append(CartResponse(
-            order_item_id=item[0],
+            order_item_id=order_item_id,
             product_id=None,
             product_name=item[1],
             product_type=item[2],
@@ -427,9 +448,12 @@ async def get_cart(username: str, token: str = Depends(oauth2_scheme)):
             quantity=item[4],
             price=float(item[5]),
             order_type=order[2],
-            status=order[2],
-            created_at=order[1].strftime("%Y-%m-%d %H:%M:%S")
+            status=order[3],
+            created_at=order[1].strftime("%Y-%m-%d %H:%M:%S"),
+            addons=addons
         ))
+    await cursor.close()
+    await conn.close()
     return cart
 
 
@@ -463,35 +487,29 @@ async def add_to_cart(item: CartItem, token: str = Depends(oauth2_scheme)):
             row = await cursor.fetchone()
             order_id = row[0] if row else None
 
-        # Check if item already in cart
+        # Always insert a new row in OrderItems
         await cursor.execute("""
-            SELECT OrderItemID, Quantity FROM OrderItems
-            WHERE OrderID = ? AND ProductName = ? AND ProductType = ? AND ProductCategory = ?
+            INSERT INTO OrderItems (OrderID, ProductName, ProductType, ProductCategory, Quantity, Price)
+            OUTPUT INSERTED.OrderItemID
+            VALUES (?, ?, ?, ?, ?, ?)
         """, (
-            order_id, item.product_name,
-            item.product_type or '', item.product_category or ''
+            order_id,
+            item.product_name,
+            item.product_type or '',
+            item.product_category or '',
+            item.quantity,
+            item.price
         ))
-        existing_item = await cursor.fetchone()
+        row = await cursor.fetchone()
+        order_item_id = row[0] if row else None
 
-        if existing_item:
-            order_item_id, current_qty = existing_item
-            await cursor.execute("""
-                UPDATE OrderItems
-                SET Quantity = ?
-                WHERE OrderItemID = ?
-            """, (current_qty + item.quantity, order_item_id))
-        else:
-            await cursor.execute("""
-                INSERT INTO OrderItems (OrderID, ProductName, ProductType, ProductCategory, Quantity, Price)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                order_id,
-                item.product_name,
-                item.product_type or '',
-                item.product_category or '',
-                item.quantity,
-                item.price
-            ))
+        # If the request has addons, insert each one into OrderItemAddOns
+        if item.addons:
+            for addon in item.addons:
+                await cursor.execute("""
+                    INSERT INTO OrderItemAddOns (OrderItemID, AddOnID, AddOnName, Price)
+                    VALUES (?, ?, ?, ?)
+                """, (order_item_id, addon.addon_id, addon.addon_name, addon.price))
 
         await conn.commit()
 
@@ -502,7 +520,7 @@ async def add_to_cart(item: CartItem, token: str = Depends(oauth2_scheme)):
         await cursor.close()
         await conn.close()
 
-    return {"message": "Item added to cart"}
+    return {"message": "Item (with addons) added to cart"}
 
 
 @router.put("/quantity/{order_item_id}")

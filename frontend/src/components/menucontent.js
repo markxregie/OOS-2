@@ -11,13 +11,8 @@ import { CartContext } from '../contexts/CartContext';
 // Define API base URLs
 const PRODUCTS_BASE_URL = "http://127.0.0.1:8001";
 const MERCH_BASE_URL = "http://127.0.0.1:8002";
+const RECIPE_BASE_URL = "http://127.0.0.1:8004";
 
-// Define Add-ons structure
-const ADD_ONS = [
-  { name: 'Espresso Shot', price: 50 },
-  { name: 'Seasalt Cream', price: 30 },
-  { name: 'Syrup/Sauces', price: 20 },
-];
 
 // Define category order
 const CATEGORY_ORDER = ["Drinks", "Foods", "Merchandise", "Other"];
@@ -87,10 +82,24 @@ const MenuContent = () => {
             productStatusMap.hasOwnProperty(product.ProductName)
           );
 
-          const transformedProducts = filteredProducts.map((product) => ({
-            ...product,
-            Status: productStatusMap[product.ProductName],
-          }));
+          // Fetch all recipes from Recipe microservice
+          const recipesResponse = await fetch(`${RECIPE_BASE_URL}/recipes`, { headers });
+          const recipes = recipesResponse.ok ? await recipesResponse.json() : [];
+
+          // Build recipeAddOnsMap keyed by ProductID
+          const recipeAddOnsMap = recipes.reduce((acc, r) => {
+            acc[r.ProductID] = r.AddOns || [];
+            return acc;
+          }, {});
+
+          const transformedProducts = filteredProducts.map((product) => {
+            const details = apiProductsDetails.find(d => d.ProductID === product.ProductID);
+            return {
+              ...product,
+              Status: productStatusMap[product.ProductName],
+              AddOns: recipeAddOnsMap[product.ProductID] || []
+            };
+          });
 
           const grouped = {};
           apiTypes.forEach((type) => {
@@ -242,23 +251,20 @@ const MenuContent = () => {
       return;
     }
     
-    // Calculate the final price including add-ons
-    const finalPrice = (item.ProductPrice ?? 0) + addOnsTotal;
-
     addToContextCart({
       product_id: item.ProductID,
       ProductName: item.ProductName,
-      // 2. Use the final calculated price
-      ProductPrice: finalPrice, 
+      ProductPrice: item.ProductPrice,
       ProductImage: item.ProductImage,
       ProductType: item.ProductTypeName,
       ProductCategory: item.ProductCategory,
       orderType: "Pick Up",
       // 3. Include notes and add-ons in the cart item
-      orderNotes: notes, 
-      addOns: addOns, 
+      orderNotes: notes,
+      addOns: addOns,
     });
 
+    const finalPrice = (item.ProductPrice ?? 0) + addOnsTotal;
     toast.success(`${item.ProductName} added to cart! Total: ₱${finalPrice.toFixed(2)}`);
     // Clear temporary states after adding to cart
     setOrderNotes('');
@@ -278,16 +284,19 @@ const MenuContent = () => {
       : 'URL_TO_DEFAULT_IMAGE_OR_BLANK';
       
     // HTML for add-ons section
-    const addOnsHtml = ADD_ONS.map((addon, index) => `
-        <div class="form-check d-flex justify-content-between align-items-center mb-1">
-            <div>
-                <input class="form-check-input addon-checkbox" type="checkbox" id="addon-${index}" value="${addon.name}" data-price="${addon.price}">
-                <label class="form-check-label" for="addon-${index}">
-                    ${addon.name}
-                </label>
-            </div>
-            <span class="text-muted small">₱${addon.price.toFixed(2)}</span>
+    const addOnsHtml = (item.AddOns || []).map((addon, index) => `
+      <div class="form-check d-flex justify-content-between align-items-center mb-1">
+        <div>
+          <input class="form-check-input addon-checkbox" type="checkbox" 
+            id="addon-${index}" 
+            value="${addon.AddOnName}" 
+            data-price="${addon.Price}">
+          <label class="form-check-label" for="addon-${index}">
+            ${addon.AddOnName} (${addon.Amount}${addon.Measurement})
+          </label>
         </div>
+        <span class="text-muted small">₱${addon.Price.toFixed(2)}</span>
+      </div>
     `).join('');
 
 
@@ -507,22 +516,19 @@ const MenuContent = () => {
   // Updated handler to accept add-ons details
   const handleConfirmBuyNow = (item, notes, addOns, addOnsTotal, delivery, payment) => {
     if (item) {
-        const finalPrice = (item.ProductPrice ?? 0) + addOnsTotal;
-
       navigate('/checkout', {
         state: {
           cartItems: [{
             product_id: item.ProductID,
             ProductName: item.ProductName,
-            // 4. Use the final calculated price
-            ProductPrice: finalPrice, 
+            ProductPrice: item.ProductPrice,
             ProductImage: item.ProductImage,
             ProductType: item.ProductTypeName,
             ProductCategory: item.ProductCategory,
             quantity: 1,
             // 5. Include add-ons in the cart item for checkout
-            orderNotes: notes, 
-            addOns: addOns, 
+            orderNotes: notes,
+            addOns: addOns,
           }],
           orderType: delivery,
           paymentMethod: payment,
