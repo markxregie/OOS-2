@@ -1,17 +1,47 @@
-import React, { useCallback, useContext, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import qrImage from '../assets/qr.png';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import './cart.css';
 import { CartContext } from '../contexts/CartContext';
-import axios from 'axios';
-import Swal from 'sweetalert2';
 
 const Cart = () => {
   const navigate = useNavigate();
 
+  const PRODUCTS_BASE_URL = "http://127.0.0.1:8001";
+
   const { cartItems, incrementQuantity, decrementQuantity, removeFromCart, setCartItems } = useContext(CartContext);
+
+  const [maxQuantities, setMaxQuantities] = useState({});
+
+  useEffect(() => {
+    const token = localStorage.getItem("authToken");
+    if (!token || cartItems.length === 0) return;
+
+    const fetchMaxQuantities = async () => {
+      const headers = { Authorization: `Bearer ${token}` };
+      const results = {};
+
+      for (const item of cartItems) {
+        try {
+          const res = await fetch(
+            `${PRODUCTS_BASE_URL}/is_products/products/${item.product_id}/max-quantity`,
+            { headers }
+          );
+          if (res.ok) {
+            const data = await res.json();
+            results[item.product_id] = data;
+          }
+        } catch (err) {
+          console.error("Failed to fetch max quantity:", err);
+        }
+      }
+      setMaxQuantities(results);
+    };
+
+    fetchMaxQuantities();
+  }, [cartItems]);
 
   console.log("🧾 Current cartItems:", cartItems);
 
@@ -95,7 +125,7 @@ const Cart = () => {
 
   const calculateTotal = (item) => {
   const basePrice = item.ProductPrice || 0;
-  const addonsTotal = (item.addons || []).reduce((sum, ao) => sum + (ao.price || 0), 0);
+  const addonsTotal = (item.addons || []).reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0);
   return (basePrice + addonsTotal) * item.quantity;
 };
 
@@ -158,100 +188,14 @@ const Cart = () => {
       return;
     }
 
-    try {
-      // Prepare the payload for the API call
-      const itemsPayload = selectedCartItems.map(item => ({
-        productId: item.product_id,
-        requestedQty: item.quantity
-      }));
-
-      // Get token from localStorage
-      const token = localStorage.getItem('authToken');
-
-      // Call the backend API to check availability
-      const response = await axios.post(
-        "http://localhost:8004/recipes/availability/batch",
-        { items: itemsPayload },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      const { results, canProceed } = response.data;
-
-      if (!canProceed) {
-        let adjusted = false;
-        let removed = false;
-
-        // Create a copy of cartItems to modify
-        let updatedCartItems = [...cartItems];
-
-        results.forEach(result => {
-          const productId = result.ProductID;
-          const index = updatedCartItems.findIndex(item => item.product_id === productId);
-          if (index !== -1) {
-            if (!result.CanProcess) {
-              if (result.MaxOrderable > 0) {
-                // Adjust quantity to MaxOrderable
-                updatedCartItems[index] = {
-                  ...updatedCartItems[index],
-                  quantity: result.MaxOrderable
-                };
-                adjusted = true;
-              } else if (result.MaxOrderable === 0) {
-                // Remove item from cart
-                updatedCartItems.splice(index, 1);
-                removed = true;
-              }
-            }
-          }
-        });
-
-        // Update cart context and selected items to reflect changes
-        setCartItems(updatedCartItems);
-        setSelectedCartItems(prevSelected => prevSelected.filter(item =>
-          updatedCartItems.some(updatedItem => updatedItem.product_id === item.product_id)
-        ));
-
-        // Show appropriate SweetAlert warning
-        if (adjusted && removed) {
-          await Swal.fire({
-            icon: 'warning',
-            title: 'Some items were adjusted and some were removed due to stock availability.',
-            confirmButtonText: 'OK'
-          });
-        } else if (adjusted) {
-          await Swal.fire({
-            icon: 'warning',
-            title: 'Some items were adjusted to match available stock.',
-            confirmButtonText: 'OK'
-          });
-        } else if (removed) {
-          await Swal.fire({
-            icon: 'warning',
-            title: 'Some items were removed because they are out of stock.',
-            confirmButtonText: 'OK'
-          });
-        }
-
-        return; // Do not proceed to checkout if canProceed is false
+    // Proceed directly to checkout since stock limits are already handled
+    navigate('/checkout', {
+      state: {
+        cartItems: selectedCartItems,
+        orderType: orderTypeMain,
+        paymentMethod: paymentMethodMain
       }
-
-      // If canProceed is true, navigate to checkout
-      navigate('/checkout', {
-        state: {
-          cartItems: selectedCartItems,
-          orderType: orderTypeMain,
-          paymentMethod: paymentMethodMain
-        }
-      });
-    } catch (error) {
-      console.error('Error checking availability:', error);
-      toast.error('Failed to check item availability. Please try again later.');
-    }
+    });
   };
 
   const handleConfirmOrder = () => {
@@ -326,8 +270,8 @@ const Cart = () => {
                 {item.addons && item.addons.length > 0 && (
                   <ul className="cart-addons mb-0 ps-3">
                     {item.addons.map((addon, idx) => (
-                      <li key={idx} style={{ fontSize: "0.85em", color: "#666" }}>
-                        + {addon.addon_name || addon.name} (₱{addon.price})
+                      <li key={idx} style={{ fontSize: "0.85em", color: addon.status === 'Unavailable' ? '#999' : '#666', fontStyle: addon.status === 'Unavailable' ? 'italic' : 'normal' }}>
+                        + {addon.addon_name || addon.AddOnName || addon.name} (₱{addon.price || addon.Price || 0})
                       </li>
                     ))}
                   </ul>
@@ -338,10 +282,21 @@ const Cart = () => {
           <td style={{ verticalAlign: 'middle' }}>{item.ProductType || '-'}</td>
           <td style={{ verticalAlign: 'middle' }}>{item.ProductCategory || '-'}</td>
           <td style={{ textAlign: 'center' }}>
-            <div className="d-flex align-items-center justify-content-center">
+            <div className="quantity-control">
               <button className="btn btn-sm rounded-circle" onClick={() => handleDecrement(i)}>-</button>
               <span className="mx-2">{item.quantity}</span>
-              <button className="btn btn-sm rounded-circle" onClick={() => handleIncrement(i)}>+</button>
+              <button
+                className="btn btn-sm rounded-circle"
+                onClick={() => handleIncrement(i)}
+                disabled={item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 999)}
+              >
+                +
+              </button>
+              {(maxQuantities[item.product_id]?.maxQuantity ?? 999) !== 999 && (
+  <div className="max-info text-warning small">
+    Max: {maxQuantities[item.product_id]?.maxQuantity ?? 999}
+  </div>
+)}
             </div>
           </td>
           <td style={{ textAlign: 'right' }}>₱{item.ProductPrice.toFixed(2)}</td>
@@ -404,8 +359,8 @@ const Cart = () => {
                         {item.addons && item.addons.length > 0 && (
                           <ul className="cart-addons mb-0 ps-3">
                             {item.addons.map((addon, idx) => (
-                              <li key={idx} style={{ fontSize: "0.8em", color: "#666" }}>
-                                + {addon.addon_name || addon.name} (₱{addon.price})
+                              <li key={idx} style={{ fontSize: "0.8em", color: addon.status === 'Unavailable' ? '#999' : '#666', fontStyle: addon.status === 'Unavailable' ? 'italic' : 'normal' }}>
+                                + {addon.addon_name || addon.AddOnName || addon.name} (₱{addon.price || addon.Price || 0})
                               </li>
                             ))}
                           </ul>
@@ -423,7 +378,7 @@ const Cart = () => {
                     <td style={{ textAlign: 'right', padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>
                       ₱{selectedCartItems.reduce((acc, item) => {
                         const basePrice = item.ProductPrice || 0;
-                        const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || 0), 0);
+                        const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || addon.Price || 0), 0);
                         return acc + (basePrice + addonsTotal) * item.quantity;
                       }, 0).toFixed(2)}
                     </td>
@@ -443,7 +398,7 @@ const Cart = () => {
                     <td style={{ textAlign: 'right', padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>
                       ₱{(selectedCartItems.reduce((acc, item) => {
                         const basePrice = item.ProductPrice || 0;
-                        const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || 0), 0);
+                        const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || addon.Price || 0), 0);
                         return acc + (basePrice + addonsTotal) * item.quantity;
                       }, 0) + (orderTypeMain === 'Delivery' ? 50 : 0)).toFixed(2)}
                     </td>

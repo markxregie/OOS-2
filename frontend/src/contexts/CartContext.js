@@ -33,9 +33,10 @@ export const CartProvider = ({ children }) => {
 
   // Transform addons to correct shape for backend compatibility
   const normalizedAddons = (normalizedProduct.addons || addons || []).map((a, idx) => ({
-    addon_id: a.addon_id || idx, // fallback index if no id
-    addon_name: a.addon_name || a.name, // rename `name` -> `addon_name`
-    price: a.price
+    addon_id: a.AddOnID || a.addon_id || idx,
+    addon_name: a.AddOnName || a.addon_name || a.name,
+    price: a.Price || a.price || 0,
+    status: a.Status || a.status || "Available"
   }));
 
   setCartItems((prevItems) => {

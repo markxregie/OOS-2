@@ -11,7 +11,6 @@ import { CartContext } from '../contexts/CartContext';
 // Define API base URLs
 const PRODUCTS_BASE_URL = "http://127.0.0.1:8001";
 const MERCH_BASE_URL = "http://127.0.0.1:8002";
-const RECIPE_BASE_URL = "http://127.0.0.1:8004";
 
 
 // Define category order
@@ -45,6 +44,7 @@ const MenuContent = () => {
 
   useEffect(() => {
     const fetchAllData = async () => {
+      toast.info("Loading menu, please wait...", { autoClose: 1500 });
       const token = localStorage.getItem("authToken");
 
       try {
@@ -65,6 +65,10 @@ const MenuContent = () => {
           const apiProducts = await productsResponse.json();
           const apiProductsDetails = await productsDetailsResponse.json();
 
+          // ✅ Fetch all add-ons in one request
+          const allAddOnsResponse = await fetch(`${PRODUCTS_BASE_URL}/is_products/products/all_addons`, { headers });
+          const allAddOnsMap = allAddOnsResponse.ok ? await allAddOnsResponse.json() : {};
+
           // Fetch merchandise after other API calls
           const merchandiseResponse = await fetch(`${MERCH_BASE_URL}/merchandise/menu`, { headers });
           let apiMerchandise = [];
@@ -82,22 +86,12 @@ const MenuContent = () => {
             productStatusMap.hasOwnProperty(product.ProductName)
           );
 
-          // Fetch all recipes from Recipe microservice
-          const recipesResponse = await fetch(`${RECIPE_BASE_URL}/recipes`, { headers });
-          const recipes = recipesResponse.ok ? await recipesResponse.json() : [];
-
-          // Build recipeAddOnsMap keyed by ProductID
-          const recipeAddOnsMap = recipes.reduce((acc, r) => {
-            acc[r.ProductID] = r.AddOns || [];
-            return acc;
-          }, {});
-
           const transformedProducts = filteredProducts.map((product) => {
             const details = apiProductsDetails.find(d => d.ProductID === product.ProductID);
             return {
               ...product,
               Status: productStatusMap[product.ProductName],
-              AddOns: recipeAddOnsMap[product.ProductID] || []
+              AddOns: allAddOnsMap[product.ProductID] || []  // ✅ attach add-ons directly from map
             };
           });
 
@@ -221,6 +215,8 @@ const MenuContent = () => {
     fetchAllData();
   }, []);
 
+
+
   const handleCategoryClick = (category, subcategory) => {
     setSelectedCategory(category);
     setSelectedSubcategory(subcategory);
@@ -287,12 +283,13 @@ const MenuContent = () => {
     const addOnsHtml = (item.AddOns || []).map((addon, index) => `
       <div class="form-check d-flex justify-content-between align-items-center mb-1">
         <div>
-          <input class="form-check-input addon-checkbox" type="checkbox" 
-            id="addon-${index}" 
-            value="${addon.AddOnName}" 
-            data-price="${addon.Price}">
+          <input class="form-check-input addon-checkbox" type="checkbox"
+            id="addon-${index}"
+            value="${addon.AddOnName}"
+            data-price="${addon.Price}"
+            ${addon.Status !== 'Available' ? 'disabled' : ''}>
           <label class="form-check-label" for="addon-${index}">
-            ${addon.AddOnName} (${addon.Amount}${addon.Measurement})
+            ${addon.AddOnName} (${addon.Status})
           </label>
         </div>
         <span class="text-muted small">₱${addon.Price.toFixed(2)}</span>
