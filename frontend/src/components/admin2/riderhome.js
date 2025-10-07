@@ -20,7 +20,7 @@ function RiderDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const authToken = localStorage.getItem("authToken");
+  const [authToken, setAuthToken] = useState(localStorage.getItem("authToken"));
   const [riderId, setRiderId] = useState(localStorage.getItem("riderId") || "");
   const [riderName, setRiderName] = useState(localStorage.getItem("riderName") || "");
   const [riderPhone, setRiderPhone] = useState(localStorage.getItem("riderPhone") || "");
@@ -35,6 +35,7 @@ function RiderDashboard() {
 
     if (tokenFromUrl) {
       localStorage.setItem("authToken", tokenFromUrl);
+      setAuthToken(tokenFromUrl);
     }
     if (usernameFromUrl) {
       localStorage.setItem("riderUsername", usernameFromUrl);
@@ -359,6 +360,7 @@ function RiderDashboard() {
   };
 
   const handleLogout = () => {
+    setAuthToken(null);
     localStorage.removeItem("authToken");
     localStorage.removeItem("riderId");
     localStorage.removeItem("riderName");
@@ -429,7 +431,7 @@ function RiderDashboard() {
             <div className="rider-info-display">
               <img src={riderImage} alt={riderName} className="rider-profile-pic" />
               <span className="rider-name-text">
-  {riderName || "Rider"}{riderPhone ? ` (${riderPhone})` : ""}
+  {riderName || "Rider"}
 </span>
 
             </div>

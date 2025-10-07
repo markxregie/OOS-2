@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import qrImage from '../assets/qr.png';
 import { ToastContainer, toast } from 'react-toastify';
@@ -9,7 +9,39 @@ import { CartContext } from '../contexts/CartContext';
 const Cart = () => {
   const navigate = useNavigate();
 
-  const { cartItems, incrementQuantity, decrementQuantity, removeFromCart } = useContext(CartContext);
+  const PRODUCTS_BASE_URL = "http://127.0.0.1:8001";
+
+  const { cartItems, incrementQuantity, decrementQuantity, removeFromCart, setCartItems } = useContext(CartContext);
+
+  const [maxQuantities, setMaxQuantities] = useState({});
+
+  useEffect(() => {
+    const token = localStorage.getItem("authToken");
+    if (!token || cartItems.length === 0) return;
+
+    const fetchMaxQuantities = async () => {
+      const headers = { Authorization: `Bearer ${token}` };
+      const results = {};
+
+      for (const item of cartItems) {
+        try {
+          const res = await fetch(
+            `${PRODUCTS_BASE_URL}/is_products/products/${item.product_id}/max-quantity`,
+            { headers }
+          );
+          if (res.ok) {
+            const data = await res.json();
+            results[item.product_id] = data;
+          }
+        } catch (err) {
+          console.error("Failed to fetch max quantity:", err);
+        }
+      }
+      setMaxQuantities(results);
+    };
+
+    fetchMaxQuantities();
+  }, [cartItems]);
 
   console.log("🧾 Current cartItems:", cartItems);
 
@@ -91,7 +123,11 @@ const Cart = () => {
   }
 };
 
-  const calculateTotal = (item) => item.ProductPrice * item.quantity;
+  const calculateTotal = (item) => {
+  const basePrice = item.ProductPrice || 0;
+  const addonsTotal = (item.addons || []).reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0);
+  return (basePrice + addonsTotal) * item.quantity;
+};
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -145,21 +181,22 @@ const Cart = () => {
     return newErrors;
   };
 
-  const handleCheckoutClick = (e) => {
-  e.preventDefault();
-  if (selectedCartItems.length === 0) {
-    toast.error("Please select items to checkout.");
-    return;
-  }
-
-  navigate('/checkout', {
-    state: {
-      cartItems: selectedCartItems,
-      orderType: orderTypeMain,
-      paymentMethod: paymentMethodMain
+  const handleCheckoutClick = async (e) => {
+    e.preventDefault();
+    if (selectedCartItems.length === 0) {
+      toast.error("Please select items to checkout.");
+      return;
     }
-  });
-};
+
+    // Proceed directly to checkout since stock limits are already handled
+    navigate('/checkout', {
+      state: {
+        cartItems: selectedCartItems,
+        orderType: orderTypeMain,
+        paymentMethod: paymentMethodMain
+      }
+    });
+  };
 
   const handleConfirmOrder = () => {
     toast.success('Order confirmed! Redirecting...');
@@ -230,16 +267,36 @@ const Cart = () => {
               />
               <div>
                 <div className="fw-semibold">{item.ProductName}</div>
+                {item.addons && item.addons.length > 0 && (
+                  <ul className="cart-addons mb-0 ps-3">
+                    {item.addons.map((addon, idx) => (
+                      <li key={idx} style={{ fontSize: "0.85em", color: addon.status === 'Unavailable' ? '#999' : '#666', fontStyle: addon.status === 'Unavailable' ? 'italic' : 'normal' }}>
+                        + {addon.addon_name || addon.AddOnName || addon.name} (₱{addon.price || addon.Price || 0})
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
           </td>
           <td style={{ verticalAlign: 'middle' }}>{item.ProductType || '-'}</td>
           <td style={{ verticalAlign: 'middle' }}>{item.ProductCategory || '-'}</td>
           <td style={{ textAlign: 'center' }}>
-            <div className="d-flex align-items-center justify-content-center">
+            <div className="quantity-control">
               <button className="btn btn-sm rounded-circle" onClick={() => handleDecrement(i)}>-</button>
               <span className="mx-2">{item.quantity}</span>
-              <button className="btn btn-sm rounded-circle" onClick={() => handleIncrement(i)}>+</button>
+              <button
+                className="btn btn-sm rounded-circle"
+                onClick={() => handleIncrement(i)}
+                disabled={item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 999)}
+              >
+                +
+              </button>
+              {(maxQuantities[item.product_id]?.maxQuantity ?? 999) !== 999 && (
+  <div className="max-info text-warning small">
+    Max: {maxQuantities[item.product_id]?.maxQuantity ?? 999}
+  </div>
+)}
             </div>
           </td>
           <td style={{ textAlign: 'right' }}>₱{item.ProductPrice.toFixed(2)}</td>
@@ -297,7 +354,18 @@ const Cart = () => {
                 <tbody>
                   {selectedCartItems.map((item, i) => (
                     <tr key={i}>
-                              {item.ProductName}
+                      <td style={{ textAlign: 'left', padding: '8px' }}>
+                        <div className="fw-semibold">{item.ProductName}</div>
+                        {item.addons && item.addons.length > 0 && (
+                          <ul className="cart-addons mb-0 ps-3">
+                            {item.addons.map((addon, idx) => (
+                              <li key={idx} style={{ fontSize: "0.8em", color: addon.status === 'Unavailable' ? '#999' : '#666', fontStyle: addon.status === 'Unavailable' ? 'italic' : 'normal' }}>
+                                + {addon.addon_name || addon.AddOnName || addon.name} (₱{addon.price || addon.Price || 0})
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
                       <td style={{ textAlign: 'center', padding: '8px' }}>{item.quantity}</td>
                       <td style={{ textAlign: 'right', padding: '8px' }}>₱{item.ProductPrice.toFixed(2)}</td>
                     </tr>
@@ -308,7 +376,11 @@ const Cart = () => {
                     <td style={{ padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>Subtotal</td>
                     <td></td>
                     <td style={{ textAlign: 'right', padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>
-                      ₱{selectedCartItems.reduce((acc, item) => acc + item.ProductPrice * item.quantity, 0).toFixed(2)}
+                      ₱{selectedCartItems.reduce((acc, item) => {
+                        const basePrice = item.ProductPrice || 0;
+                        const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || addon.Price || 0), 0);
+                        return acc + (basePrice + addonsTotal) * item.quantity;
+                      }, 0).toFixed(2)}
                     </td>
                   </tr>
                   {orderTypeMain === 'Delivery' && (
@@ -324,6 +396,11 @@ const Cart = () => {
                     <td style={{ padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>Total</td>
                     <td></td>
                     <td style={{ textAlign: 'right', padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>
+                      ₱{(selectedCartItems.reduce((acc, item) => {
+                        const basePrice = item.ProductPrice || 0;
+                        const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || addon.Price || 0), 0);
+                        return acc + (basePrice + addonsTotal) * item.quantity;
+                      }, 0) + (orderTypeMain === 'Delivery' ? 50 : 0)).toFixed(2)}
                     </td>
                   </tr>
                   <tr className="payment-method-row">
