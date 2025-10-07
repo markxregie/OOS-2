@@ -53,19 +53,8 @@ export default function AppHeader() {
 
   useEffect(() => {
     const handleScroll = () => {
-      const currentScrollY = window.pageYOffset;
-      if (window.innerWidth <= 576 && location.pathname !== '/menu') { // mobile view only, except on menu page
-        if (currentScrollY > lastScrollY) {
-          // scrolling down
-          setIsVisible(false);
-        } else {
-          // scrolling up
-          setIsVisible(true);
-        }
-      } else {
-        setIsVisible(true);
-      }
-      lastScrollY = currentScrollY;
+      // Always keep header visible on scroll
+      setIsVisible(true);
     };
 
     window.addEventListener('scroll', handleScroll);

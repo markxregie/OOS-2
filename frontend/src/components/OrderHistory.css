@@ -88,9 +88,107 @@
 
 /* Responsive Table */
 @media (max-width: 768px) {
-  .orders-table {
-      display: block;
-      overflow-x: auto;
+  .desktop-table {
+    display: none;
+  }
+
+  .orders-mobile-list {
+    display: block;
+  }
+
+  .order-card {
+    background-color: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    padding: 15px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e9ecef;
+    margin-bottom: 10px;
+    font-size: 1.1rem;
+  }
+
+  .card-body p {
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+    color: #495057;
+  }
+
+  .card-body p strong {
+    color: #343a40;
+    margin-right: 5px;
+  }
+
+  .card-total {
+    font-weight: bold;
+    font-size: 1.1rem !important;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e9ecef;
+  }
+
+  .card-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+  }
+
+  .card-actions .action-btn {
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+  }
+
+  .ordertable-container {
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: 6rem;
+    padding: 1rem;
+    width: 95%;
+  }
+
+  .table-header {
+    justify-content: flex-start; 
+  
+  }
+
+  .table-header h5 {
+    font-size: 1.25rem; /* Make title smaller on mobile */
+  }
+  .search-input {
+    display: none; /* Hide search field on mobile */
+  }
+}
+
+/* Additional mobile styles for tabs */
+@media (max-width: 768px) {
+  .orderhistory-tabs {
+    flex-wrap: nowrap; /* Prevent tabs from wrapping */
+    overflow-x: auto;  /* Allow horizontal scrolling */
+    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+    scrollbar-width: none; /* Hide scrollbar for Firefox */
+  }
+
+  .orderhistory-tabs::-webkit-scrollbar {
+    display: none; /* Hide scrollbar for Chrome, Safari, and Opera */
+  }
+
+  .orderhistory-tab.nav-link {
+    font-size: 0.8rem; /* Make font smaller */
+    padding: 0.5rem 0.4rem; /* Adjust padding to make tabs narrower */
+    white-space: nowrap; /* Ensure text doesn't wrap inside the tab */
   }
 }
 
@@ -163,4 +261,11 @@
 
 .action-btn.cancel {
     color: #dc3545; 
+}
+
+.orderhistory-no-orders {
+  text-align: center;
+  padding: 40px 20px;
+  color: #6c757d;
+  font-size: 1.1rem;
 }

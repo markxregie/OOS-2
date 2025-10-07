@@ -6,7 +6,7 @@ function ProfileSidebar() {
   return (
     <div className="d-flex">
       {/* Left Navigation */}
-      <div className="d-flex flex-column flex-shrink-0 p-3 bg-light" style={{width: "280px", height: "calc(100vh - 56px)", marginTop: "56px"}}>
+      <div className="d-flex flex-column flex-shrink-0 p-3 bg-light profile-sidebar-container" style={{width: "280px", height: "calc(100vh - 56px)", marginTop: "56px"}}>
         <NavLink to="/" className="d-flex align-items-center mb-3 mb-md-0 me-md-auto link-dark text-decoration-none" style={{ backgroundColor: 'transparent' }}>
           <span className="fs-4">Menu</span>
         </NavLink>
