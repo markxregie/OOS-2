@@ -59,6 +59,7 @@ class CartItem(BaseModel):
     product_type: Optional[str] = None
     product_category: Optional[str] = None
     order_type: str
+    notes: Optional[str] = None
 
 
 class CartResponse(BaseModel):
@@ -72,6 +73,7 @@ class CartResponse(BaseModel):
     order_type: str
     status: str
     created_at: str
+    notes: Optional[str] = None
 
 
 class DeliveryInfoRequest(BaseModel):
