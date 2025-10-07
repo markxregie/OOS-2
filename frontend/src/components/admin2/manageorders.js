@@ -122,7 +122,7 @@ const ManageOrders = () => {
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
+  const itemsPerPage = 10;
 
   useEffect(() => {
     const tokenFromUrl = searchParams.get('authorization');
@@ -262,6 +262,10 @@ const ManageOrders = () => {
         return <span className="status-badge status-completed">Completed</span>;
       case 'cancelled':
         return <span className="status-badge status-cancelled">Cancelled</span>;
+      case 'preparing':
+        return <span className="status-badge status-preparing">Preparing</span>;
+      case 'delivering':
+        return <span className="status-badge status-delivering">Delivering</span>;
       default:
         return <span className="status-badge">{status}</span>;
     }

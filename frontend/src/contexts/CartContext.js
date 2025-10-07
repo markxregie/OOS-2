@@ -23,24 +23,50 @@ export const CartProvider = ({ children }) => {
     localStorage.setItem(storageKey, JSON.stringify(cartItems));
   }, [cartItems, storageKey]);
 
-  const addToCart = (product) => {
-    setCartItems((prevItems) => {
-      const productIdStr = String(product.product_id);
-      const existingItemIndex = prevItems.findIndex(item => String(item.product_id) === productIdStr);
-      if (existingItemIndex !== -1) {
-        // If product already in cart, increment quantity immutably
-        return prevItems.map((item, index) => {
-          if (index === existingItemIndex) {
-            return { ...item, quantity: item.quantity + 1 };
-          }
-          return item;
-        });
-      } else {
-        // Add new product with quantity 1
-        return [...prevItems, { ...product, quantity: 1 }];
-      }
-    });
-  };
+  const addToCart = (product, addons = []) => {
+  // Normalize product: if addOns exists, copy to addons (lowercase) and remove addOns
+  const normalizedProduct = { ...product };
+  if (normalizedProduct.addOns) {
+    normalizedProduct.addons = normalizedProduct.addOns;
+    delete normalizedProduct.addOns;
+  }
+
+  // Transform addons to correct shape for backend compatibility
+  const normalizedAddons = (normalizedProduct.addons || addons || []).map((a, idx) => ({
+    addon_id: a.AddOnID || a.addon_id || idx,
+    addon_name: a.AddOnName || a.addon_name || a.name,
+    price: a.Price || a.price || 0,
+    status: a.Status || a.status || "Available"
+  }));
+
+  setCartItems((prevItems) => {
+    const productIdStr = String(normalizedProduct.product_id);
+    const existingItemIndex = prevItems.findIndex(item => String(item.product_id) === productIdStr);
+
+    if (existingItemIndex !== -1) {
+      // If product already in cart, increment quantity and merge addons immutably
+      return prevItems.map((item, index) => {
+        if (index === existingItemIndex) {
+          const existingAddons = item.addons || [];
+          const newAddons = normalizedAddons.filter(newAddon =>
+            !existingAddons.some(existingAddon =>
+              existingAddon.addon_name === newAddon.addon_name // check by name to avoid dupes
+            )
+          );
+          return {
+            ...item,
+            quantity: item.quantity + 1,
+            addons: [...existingAddons, ...newAddons]
+          };
+        }
+        return item;
+      });
+    } else {
+      // Add new product with quantity 1 and normalized addons
+      return [...prevItems, { ...normalizedProduct, quantity: 1, addons: normalizedAddons }];
+    }
+  });
+};
 
   const removeFromCart = (productId) => {
     const productIdStr = String(productId);
