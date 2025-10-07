@@ -12,3 +12,16 @@
   background-color: #4B929D;
   color: white !important;
 }
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .profilesidebar-nav-link {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.7rem;
+
+  }
+
+  .profile-sidebar-container {
+    display: none;
+  }
+}

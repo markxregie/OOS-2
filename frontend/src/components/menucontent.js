@@ -8,12 +8,13 @@ import Swal from 'sweetalert2'; // 1. Import SweetAlert2
 import './menu.css';
 import { CartContext } from '../contexts/CartContext';
 
-// Define Add-ons structure
-const ADD_ONS = [
-  { name: 'Espresso Shot', price: 50 },
-  { name: 'Seasalt Cream', price: 30 },
-  { name: 'Syrup/Sauces', price: 20 },
-];
+// Define API base URLs
+const PRODUCTS_BASE_URL = "http://127.0.0.1:8001";
+const MERCH_BASE_URL = "http://127.0.0.1:8002";
+
+
+// Define category order
+const CATEGORY_ORDER = ["Drinks", "Foods", "Merchandise", "Other"];
 
 const MenuContent = () => {
   const [products, setProducts] = useState({});
@@ -26,6 +27,7 @@ const MenuContent = () => {
   // 1. New state for selected add-ons and total
   const [selectedAddOns, setSelectedAddOns] = useState([]);
   const [addOnsTotal, setAddOnsTotal] = useState(0);
+
 
   const { addToCart: addToContextCart } = useContext(CartContext);
   const navigate = useNavigate();
@@ -42,9 +44,8 @@ const MenuContent = () => {
   }, []);
 
   useEffect(() => {
-    const API_BASE_URL = "http://127.0.0.1:8001";
-
     const fetchAllData = async () => {
+      toast.info("Loading menu, please wait...", { autoClose: 1500 });
       const token = localStorage.getItem("authToken");
 
       try {
@@ -52,9 +53,9 @@ const MenuContent = () => {
           const headers = { Authorization: `Bearer ${token}` };
 
           const [typesResponse, productsResponse, productsDetailsResponse] = await Promise.all([
-            fetch(`${API_BASE_URL}/ProductType/`, { headers }),
-            fetch(`${API_BASE_URL}/is_products/products/`, { headers }),
-            fetch(`${API_BASE_URL}/is_products/products/details/`, { headers }),
+            fetch(`${PRODUCTS_BASE_URL}/ProductType/`, { headers }),
+            fetch(`${PRODUCTS_BASE_URL}/is_products/products/`, { headers }),
+            fetch(`${PRODUCTS_BASE_URL}/is_products/products/details/`, { headers }),
           ]);
 
           if (!typesResponse.ok || !productsResponse.ok || !productsDetailsResponse.ok) {
@@ -64,6 +65,17 @@ const MenuContent = () => {
           const apiTypes = await typesResponse.json();
           const apiProducts = await productsResponse.json();
           const apiProductsDetails = await productsDetailsResponse.json();
+
+          // ✅ Fetch all add-ons in one request
+          const allAddOnsResponse = await fetch(`${PRODUCTS_BASE_URL}/is_products/products/all_addons`, { headers });
+          const allAddOnsMap = allAddOnsResponse.ok ? await allAddOnsResponse.json() : {};
+
+          // Fetch merchandise after other API calls
+          const merchandiseResponse = await fetch(`${MERCH_BASE_URL}/merchandise/menu`, { headers });
+          let apiMerchandise = [];
+          if (merchandiseResponse.ok) {
+            apiMerchandise = await merchandiseResponse.json();
+          }
 
           const productStatusMap = apiProductsDetails.reduce((acc, detail) => {
             acc[detail.ProductName] = detail.Status;
@@ -75,10 +87,14 @@ const MenuContent = () => {
             productStatusMap.hasOwnProperty(product.ProductName)
           );
 
-          const transformedProducts = filteredProducts.map((product) => ({
-            ...product,
-            Status: productStatusMap[product.ProductName],
-          }));
+          const transformedProducts = filteredProducts.map((product) => {
+            const details = apiProductsDetails.find(d => d.ProductID === product.ProductID);
+            return {
+              ...product,
+              Status: productStatusMap[product.ProductName],
+              AddOns: allAddOnsMap[product.ProductID] || []  // ✅ attach add-ons directly from map
+            };
+          });
 
           const grouped = {};
           apiTypes.forEach((type) => {
@@ -93,7 +109,36 @@ const MenuContent = () => {
             grouped[typeName][category].push(product);
           });
 
-          setProducts(grouped);
+          // Map merchandise fields to product format
+          const mappedMerchandise = apiMerchandise.map((item) => ({
+            ProductID: item.MerchandiseID,
+            ProductName: item.MerchandiseName,
+            ProductPrice: item.MerchandisePrice,
+            ProductImage: item.MerchandiseImage,
+            ProductTypeName: "Merchandise",
+            ProductCategory: "All Items",
+            Status: item.Status,
+          }));
+
+          // Add to grouped
+          if (!grouped["Merchandise"]) grouped["Merchandise"] = {};
+          grouped["Merchandise"]["All Items"] = mappedMerchandise;
+
+          // Reorder categories
+          const orderedGrouped = {};
+          CATEGORY_ORDER.forEach(cat => {
+            if (grouped[cat]) {
+              orderedGrouped[cat] = grouped[cat];
+            }
+          });
+          Object.keys(grouped).forEach(cat => {
+            if (!CATEGORY_ORDER.includes(cat)) {
+              orderedGrouped[cat] = grouped[cat];
+            }
+          });
+
+          setProducts(orderedGrouped);
+          console.log("Grouped products:", orderedGrouped);
 
           if (grouped["Drinks"]) {
             const firstSubcat = Object.keys(grouped["Drinks"])[0];
@@ -102,9 +147,16 @@ const MenuContent = () => {
             setSelectedSubcategory("");
           }
         } else {
-          const publicResponse = await fetch(`${API_BASE_URL}/is_products/public/products/`);
+          const publicResponse = await fetch(`${PRODUCTS_BASE_URL}/is_products/public/products/`);
           if (!publicResponse.ok) throw new Error("Failed to fetch public product data.");
           const publicProducts = await publicResponse.json();
+
+          // Fetch merchandise after other API calls
+          const merchandiseResponse = await fetch(`${MERCH_BASE_URL}/merchandise/public/menu`);
+          let apiMerchandise = [];
+          if (merchandiseResponse.ok) {
+            apiMerchandise = await merchandiseResponse.json();
+          }
 
           const grouped = {};
           publicProducts.forEach((product) => {
@@ -118,10 +170,38 @@ const MenuContent = () => {
             });
           });
 
-          setProducts(grouped);
+          // Map merchandise fields to product format
+          const mappedMerchandise = apiMerchandise.map((item) => ({
+            ProductID: item.MerchandiseID,
+            ProductName: item.MerchandiseName,
+            ProductPrice: item.MerchandisePrice,
+            ProductImage: item.MerchandiseImage,
+            ProductTypeName: "Merchandise",
+            ProductCategory: "All Items",
+            Status: item.Status,
+          }));
 
-          if (grouped["Drinks"]) {
-            const firstSubcat = Object.keys(grouped["Drinks"])[0];
+          // Add to grouped
+          if (!grouped["Merchandise"]) grouped["Merchandise"] = {};
+          grouped["Merchandise"]["All Items"] = mappedMerchandise;
+
+          // Reorder categories
+          const orderedGrouped = {};
+          CATEGORY_ORDER.forEach(cat => {
+            if (grouped[cat]) {
+              orderedGrouped[cat] = grouped[cat];
+            }
+          });
+          Object.keys(grouped).forEach(cat => {
+            if (!CATEGORY_ORDER.includes(cat)) {
+              orderedGrouped[cat] = grouped[cat];
+            }
+          });
+
+          setProducts(orderedGrouped);
+
+          if (orderedGrouped["Drinks"]) {
+            const firstSubcat = Object.keys(orderedGrouped["Drinks"])[0];
             setSelectedSubcategory(firstSubcat || "");
           } else {
             setSelectedSubcategory("");
@@ -135,6 +215,8 @@ const MenuContent = () => {
 
     fetchAllData();
   }, []);
+
+
 
   const handleCategoryClick = (category, subcategory) => {
     setSelectedCategory(category);
@@ -166,23 +248,20 @@ const MenuContent = () => {
       return;
     }
     
-    // Calculate the final price including add-ons
-    const finalPrice = (item.ProductPrice ?? 0) + addOnsTotal;
-
     addToContextCart({
       product_id: item.ProductID,
       ProductName: item.ProductName,
-      // 2. Use the final calculated price
-      ProductPrice: finalPrice, 
+      ProductPrice: item.ProductPrice,
       ProductImage: item.ProductImage,
       ProductType: item.ProductTypeName,
       ProductCategory: item.ProductCategory,
       orderType: "Pick Up",
       // 3. Include notes and add-ons in the cart item
-      orderNotes: notes, 
-      addOns: addOns, 
+      orderNotes: notes,
+      addOns: addOns,
     });
 
+    const finalPrice = (item.ProductPrice ?? 0) + addOnsTotal;
     toast.success(`${item.ProductName} added to cart! Total: ₱${finalPrice.toFixed(2)}`);
     // Clear temporary states after adding to cart
     setOrderNotes('');
@@ -197,20 +276,25 @@ const MenuContent = () => {
     const imageUrl = item.ProductImage
       ? item.ProductImage.startsWith('http')
         ? item.ProductImage
-        : `http://localhost:8001${item.ProductImage}`
+        : `${item.ProductTypeName === "Merchandise" ? "http://127.0.0.1:8002" : "http://127.0.0.1:8001"}${item.ProductImage}`
+
       : 'URL_TO_DEFAULT_IMAGE_OR_BLANK';
       
     // HTML for add-ons section
-    const addOnsHtml = ADD_ONS.map((addon, index) => `
-        <div class="form-check d-flex justify-content-between align-items-center mb-1">
-            <div>
-                <input class="form-check-input addon-checkbox" type="checkbox" id="addon-${index}" value="${addon.name}" data-price="${addon.price}">
-                <label class="form-check-label" for="addon-${index}">
-                    ${addon.name}
-                </label>
-            </div>
-            <span class="text-muted small">₱${addon.price.toFixed(2)}</span>
+    const addOnsHtml = (item.AddOns || []).map((addon, index) => `
+      <div class="form-check d-flex justify-content-between align-items-center mb-1">
+        <div>
+          <input class="form-check-input addon-checkbox" type="checkbox"
+            id="addon-${index}"
+            value="${addon.AddOnName}"
+            data-price="${addon.Price}"
+            ${addon.Status !== 'Available' ? 'disabled' : ''}>
+          <label class="form-check-label" for="addon-${index}">
+            ${addon.AddOnName} (${addon.Status})
+          </label>
         </div>
+        <span class="text-muted small">₱${addon.Price.toFixed(2)}</span>
+      </div>
     `).join('');
 
 
@@ -247,7 +331,7 @@ const MenuContent = () => {
       `,
       width: 800,
       showCloseButton: true,
-      showCancelButton: true,
+      showCancelButton: false,
       showDenyButton: true,
       confirmButtonText: 'Add to cart',
       denyButtonText: 'Buy Now',
@@ -255,7 +339,7 @@ const MenuContent = () => {
       customClass: {
         confirmButton: 'btn btn-outline-primary me-2',
         denyButton: 'btn btn-primary',
-        // 🚀 ADDED 'ms-2' (margin-start: 2) to push it away from the Deny/Buy Now button
+        
         cancelButton: 'btn btn-outline-secondary ms-2', 
         popup: 'custom-sweetalert-popup',
         htmlContainer: 'swal2-html-container-tight' 
@@ -430,22 +514,19 @@ const MenuContent = () => {
   // Updated handler to accept add-ons details
   const handleConfirmBuyNow = (item, notes, addOns, addOnsTotal, delivery, payment) => {
     if (item) {
-        const finalPrice = (item.ProductPrice ?? 0) + addOnsTotal;
-
       navigate('/checkout', {
         state: {
           cartItems: [{
             product_id: item.ProductID,
             ProductName: item.ProductName,
-            // 4. Use the final calculated price
-            ProductPrice: finalPrice, 
+            ProductPrice: item.ProductPrice,
             ProductImage: item.ProductImage,
             ProductType: item.ProductTypeName,
             ProductCategory: item.ProductCategory,
             quantity: 1,
             // 5. Include add-ons in the cart item for checkout
-            orderNotes: notes, 
-            addOns: addOns, 
+            orderNotes: notes,
+            addOns: addOns,
           }],
           orderType: delivery,
           paymentMethod: payment,
@@ -541,6 +622,7 @@ const MenuContent = () => {
                     }
                   </div>
                   <div className="item-name-placeholder">{item.ProductName}</div>
+                  <div className="item-price-placeholder">₱{item.ProductPrice?.toFixed(2)}</div>
                   {!isAvailable && (
                     <div className="unavailable-overlay">
                       <span>Unavailable</span>
