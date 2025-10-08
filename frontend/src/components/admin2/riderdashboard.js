@@ -11,6 +11,7 @@ function RiderDashboard() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [toggle, setToggle] = useState("active");
+  const [earningsFilter, setEarningsFilter] = useState("All-Time");
 
   const [riders, setRiders] = useState([]);
   const [selectedRider, setSelectedRider] = useState(null);
@@ -142,7 +143,43 @@ function RiderDashboard() {
 
   const activeOrdersCount = orders.filter(order => !["delivered", "cancelled", "returned"].includes(order.currentStatus)).length;
   const completedOrdersCount = orders.filter(order => order.currentStatus === "delivered").length;
-  const earnings = orders.filter(order => order.currentStatus === "delivered").reduce((sum, order) => sum + (order.total || 0), 0).toFixed(2);
+
+  const calculateEarnings = () => {
+    const now = new Date();
+    let startDate;
+
+    if (earningsFilter === "Daily") {
+      // Filter orders from today
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
+      return orders
+        .filter(order => activeStatuses.includes(order.currentStatus) && new Date(order.orderedAt) >= startOfDay)
+        .reduce((sum, order) => sum + (order.total || 0), 0)
+        .toFixed(2);
+    } else if (earningsFilter === "Weekly") {
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    } else if (earningsFilter === "Monthly") {
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    }
+
+    // For All-Time, include both 'pending' and 'delivered' statuses
+    if (earningsFilter === "All-Time") {
+      const validStatuses = ["pending", "delivered"];
+      return orders
+        .filter(order => validStatuses.includes(order.currentStatus))
+        .reduce((sum, order) => sum + (order.total || 0), 0)
+        .toFixed(2);
+    }
+
+    // For Weekly and Monthly filters, include active statuses and filter by date
+    const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
+    return orders
+      .filter(order => activeStatuses.includes(order.currentStatus) && new Date(order.orderedAt) >= startDate)
+      .reduce((sum, order) => sum + (order.total || 0), 0)
+      .toFixed(2);
+  };
+
+  const earnings = calculateEarnings();
 
   const statusIcons = {
     pending: <FaClock />,
@@ -216,7 +253,24 @@ function RiderDashboard() {
               <span className="card-title">Completed</span>
               <span className="card-value">{completedOrdersCount} orders</span>
             </Card>
-            <Card className="summary-card">
+            <Card className="summary-card" style={{ position: 'relative' }}>
+              <Form.Select
+                size="sm"
+                value={earningsFilter}
+                onChange={(e) => setEarningsFilter(e.target.value)}
+                style={{
+                  position: 'absolute',
+                  top: '10px',
+                  right: '10px',
+                  width: '120px',
+                  fontSize: '12px',
+                  padding: '2px 6px'
+                }}
+              >
+                <option value="Daily">Daily</option>
+                <option value="Weekly">Weekly</option>
+                <option value="Monthly">Monthly</option>
+              </Form.Select>
               <FaDollarSign size={32} color="#fd7e14" />
               <span className="card-title">Earnings</span>
               <span className="card-value">₱{earnings}</span>
