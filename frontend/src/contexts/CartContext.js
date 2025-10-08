@@ -15,7 +15,9 @@ export const CartProvider = ({ children }) => {
   const [cartItems, setCartItems] = useState(() => {
     // Load cart items from localStorage for the current user if available
     const storedCart = localStorage.getItem(storageKey);
-    return storedCart ? JSON.parse(storedCart) : [];
+    const parsed = storedCart ? JSON.parse(storedCart) : [];
+    // Assign unique cartItemId to existing items if missing
+    return parsed.map(item => item.cartItemId ? item : { ...item, cartItemId: Date.now() + Math.random() });
   });
 
   useEffect(() => {
@@ -39,45 +41,40 @@ export const CartProvider = ({ children }) => {
     status: a.Status || a.status || "Available"
   }));
 
+  // Sort addons by addon_name for consistent comparison
+  const sortedAddons = [...normalizedAddons].sort((a, b) => a.addon_name.localeCompare(b.addon_name));
+
+  const productIdStr = String(normalizedProduct.product_id);
+  const orderNotes = normalizedProduct.orderNotes || '';
+  const itemKey = `${productIdStr}-${JSON.stringify(sortedAddons)}-${orderNotes}`;
+
   setCartItems((prevItems) => {
-    const productIdStr = String(normalizedProduct.product_id);
-    const existingItemIndex = prevItems.findIndex(item => String(item.product_id) === productIdStr);
+    const existingItemIndex = prevItems.findIndex(item => {
+      const itemSortedAddons = [...(item.addons || [])].sort((a, b) => a.addon_name.localeCompare(b.addon_name));
+      const itemKeyCheck = `${String(item.product_id)}-${JSON.stringify(itemSortedAddons)}-${item.orderNotes || ''}`;
+      return itemKey === itemKeyCheck;
+    });
 
     if (existingItemIndex !== -1) {
-      // If product already in cart, increment quantity and merge addons immutably
-      return prevItems.map((item, index) => {
-        if (index === existingItemIndex) {
-          const existingAddons = item.addons || [];
-          const newAddons = normalizedAddons.filter(newAddon =>
-            !existingAddons.some(existingAddon =>
-              existingAddon.addon_name === newAddon.addon_name // check by name to avoid dupes
-            )
-          );
-          return {
-            ...item,
-            quantity: item.quantity + 1,
-            addons: [...existingAddons, ...newAddons]
-          };
-        }
-        return item;
-      });
+      // Increment quantity
+      return prevItems.map((item, index) =>
+        index === existingItemIndex ? { ...item, quantity: item.quantity + 1 } : item
+      );
     } else {
       // Add new product with quantity 1 and normalized addons
-      return [...prevItems, { ...normalizedProduct, quantity: 1, addons: normalizedAddons }];
+      return [...prevItems, { ...normalizedProduct, quantity: 1, addons: normalizedAddons, cartItemId: Date.now() + Math.random() }];
     }
   });
 };
 
-  const removeFromCart = (productId) => {
-    const productIdStr = String(productId);
-    setCartItems((prevItems) => prevItems.filter(item => String(item.product_id) !== productIdStr));
+  const removeFromCart = (cartItemId) => {
+    setCartItems((prevItems) => prevItems.filter(item => item.cartItemId !== cartItemId));
   };
 
-  const incrementQuantity = (productId) => {
-    const productIdStr = String(productId);
+  const incrementQuantity = (cartItemId) => {
     setCartItems((prevItems) => {
       return prevItems.map(item => {
-        if (String(item.product_id) === productIdStr) {
+        if (item.cartItemId === cartItemId) {
           return { ...item, quantity: item.quantity + 1 };
         }
         return item;
@@ -85,10 +82,10 @@ export const CartProvider = ({ children }) => {
     });
   };
 
-  const decrementQuantity = (productId) => {
+  const decrementQuantity = (cartItemId) => {
     setCartItems((prevItems) => {
       return prevItems.map(item => {
-        if (item.product_id === productId && item.quantity > 1) {
+        if (item.cartItemId === cartItemId && item.quantity > 1) {
           return { ...item, quantity: item.quantity - 1 };
         }
         return item;

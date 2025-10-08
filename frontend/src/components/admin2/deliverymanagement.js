@@ -542,10 +542,19 @@ function DeliveryManagement() {
               <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaMapMarkerAlt color="#4b929d" /> Address: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.address}</span></p>
               <p style={{ fontWeight: "600", marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaBox color="#4b929d" /> Items ({order.items.length})</p>
               {order.items.map((item, i) => (
-                <p key={i} style={{ marginBottom: "3px", alignSelf: "flex-start", color: "black", display: "flex", justifyContent: "space-between", width: "100%" }}>
-                  <span>{item.quantity}x {item.name}</span>
-                  <span style={{ marginLeft: "auto" }}>₱{item.price.toFixed(2)}</span>
-                </p>
+                <div key={i} style={{ marginBottom: "3px", alignSelf: "flex-start", color: "black", width: "100%" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
+                    <span>{item.quantity}x {item.name}</span>
+                    <span style={{ marginLeft: "auto" }}>₱{item.price.toFixed(2)}</span>
+                  </div>
+                  {item.addons && item.addons.length > 0 && (
+                    <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.85em", color: "#666" }}>
+                      {item.addons.map((addon, j) => (
+                        <li key={j}>+ {addon.addon_name} (₱{addon.price.toFixed(2)})</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               ))}
               <hr style={{ alignSelf: "stretch" }} />
               <p style={{ fontWeight: "600", marginBottom: "0", alignSelf: "flex-start", color: "black", display: "flex", justifyContent: "space-between", width: "100%" }}>

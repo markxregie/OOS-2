@@ -211,80 +211,50 @@ const CheckoutPage = () => {
   };
 
   const proceedPlaceOrder = async () => {
-    const token = localStorage.getItem("authToken");
-    if (!token) return;
+  const token = localStorage.getItem("authToken");
+  if (!token) return;
 
-    const deliveryNotes = document.getElementById("deliveryNotes")?.value || "";
-    const subtotal = cartItems.reduce((acc, item) => {
-      const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
-      return acc + (item.ProductPrice + addonSum) * item.quantity;
-    }, 0);
-    const deliveryFee = orderType === "Delivery" ? 50 : 0;
-    const total = subtotal + deliveryFee;
-    const reference_number = `REF-${Date.now()}`;
+  const deliveryNotes = document.getElementById("deliveryNotes")?.value || "";
+  const subtotal = cartItems.reduce((acc, item) => {
+    const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
+    return acc + (item.ProductPrice + addonSum) * item.quantity;
+  }, 0);
+  const deliveryFee = orderType === "Delivery" ? 50 : 0;
+  const total = subtotal + deliveryFee;
+  const reference_number = `REF-${Date.now()}`;
 
-    // Validate required fields
-    if (orderType === "Delivery") {
-      const requiredFields = ['firstName', 'lastName', 'blockStreetSubdivision', 'city', 'province', 'landmark', 'email', 'phone'];
-      const missingFields = requiredFields.filter(field => !userData[field]);
+  // Validate required fields
+  if (orderType === "Delivery") {
+    const requiredFields = ['firstName', 'lastName', 'blockStreetSubdivision', 'city', 'province', 'landmark', 'email', 'phone'];
+    const missingFields = requiredFields.filter(field => !userData[field]);
 
-      if (missingFields.length > 0) {
-        Swal.fire({
-          icon: 'error',
-          title: 'Missing Fields',
-          text: `Please fill in all required fields: ${missingFields.join(', ')}`,
-        });
-        return;
-      }
-    }
-
-    // Add items to cart to ensure addons are inserted
-    try {
-      for (const item of cartItems) {
-        const addonsPayload = item.addons ? item.addons.map(addon => ({
-          addon_name: addon.addon_name || addon.AddOnName || addon.name,
-          price: addon.price || addon.Price || 0,
-          addon_id: addon.addon_id || addon.AddOnID || 0
-        })) : [];
-
-        const addToCartPayload = {
-          username: userData.username,
-          product_id: item.product_id,
-          product_name: item.ProductName,
-          quantity: item.quantity,
-          price: item.ProductPrice,
-          product_type: item.ProductType || '',
-          product_category: item.ProductCategory || '',
-          order_type: orderType,
-          addons: addonsPayload
-        };
-
-        const addToCartResponse = await fetch("http://localhost:7004/cart/", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(addToCartPayload),
-        });
-
-        if (!addToCartResponse.ok) {
-          throw new Error(`Failed to add item ${item.ProductName} to cart`);
-        }
-      }
-    } catch (error) {
-      console.error("Error adding items to cart:", error);
+    if (missingFields.length > 0) {
       Swal.fire({
         icon: 'error',
-        title: 'Error',
-        text: 'Failed to add items to cart. Please try again.',
+        title: 'Missing Fields',
+        text: `Please fill in all required fields: ${missingFields.join(', ')}`,
       });
       return;
     }
+  }
 
-    // Save current userData with updated delivery info inputs
-    const currentUserData = { ...userData };
+  const currentUserData = { ...userData };
 
+  // **CHECK PAYMENT METHOD HERE**
+  if (paymentMethod === 'Cash') {
+    // Handle Cash payment directly - no PayMongo needed
+    const savedData = {
+      cartItems,
+      orderType,
+      paymentMethod,
+      userData: currentUserData,
+      deliveryNotes,
+      reference_number
+    };
+
+    await confirmPayment(savedData);
+  } else {
+    // Handle online payment via PayMongo
     localStorage.setItem("pendingOrderData", JSON.stringify({
       cartItems,
       orderType,
@@ -304,7 +274,7 @@ const CheckoutPage = () => {
         body: JSON.stringify({
           amount: parseFloat(total.toFixed(2)),
           description: "Order from OOS",
-          reference_number: `REF-${Date.now()}`,
+          reference_number,
           redirect_url: window.location.origin + "/checkout",
         }),
       });
@@ -327,7 +297,8 @@ const CheckoutPage = () => {
         text: 'An error occurred during payment processing',
       });
     }
-  };
+  }
+};
 
   return (
     <div className="container py-5" style={{ minHeight: '100vh', marginTop: '100px' }}>

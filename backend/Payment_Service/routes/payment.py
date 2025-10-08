@@ -55,6 +55,7 @@ class CartItem(BaseModel):
     product_category: Optional[str] = None
     quantity: int
     price: float
+    addons: Optional[List[dict]] = []
 
 class DeliveryInfo(BaseModel):
     FirstName: str
@@ -149,7 +150,8 @@ async def confirm_payment(payload: ConfirmPaymentRequest, token: str = Depends(o
                     "product_category": item.product_category,
                     "quantity": item.quantity,
                     "price": item.price,
-                    "order_type": payload.order_type
+                    "order_type": payload.order_type,
+                    "addons": item.addons
                 }
                 cart_response = await client.post(
                     "http://localhost:7004/cart/",
