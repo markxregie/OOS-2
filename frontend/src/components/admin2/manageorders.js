@@ -173,7 +173,7 @@ const ManageOrders = () => {
 
     const fetchOrders = async () => {
       try {
-        const response = await fetch("http://localhost:7004/admin/orders/manage", {
+        const response = await fetch("http://localhost:7004/cart/admin/orders/manage", {
           headers: {
             Authorization: `Bearer ${authToken}`
           }
@@ -200,7 +200,7 @@ const ManageOrders = () => {
           deliveryNotes: order.deliveryNotes,
           adminNotes: order.adminNotes || "",
           statusHistory: order.statusHistory || [],
-          items: order.items ? JSON.parse(order.items) : []  // ← Parse the JSON string
+          items: order.items || []  // ← DIRECTLY use the array
         }));
 
         setOrders(transformedOrders);
