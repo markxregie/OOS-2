@@ -70,7 +70,7 @@ const Cart = () => {
     if (checked) {
       setSelectedCartItems(prev => [...prev, item]);
     } else {
-      setSelectedCartItems(prev => prev.filter(ci => ci.product_id !== item.product_id));
+      setSelectedCartItems(prev => prev.filter(ci => ci.cartItemId !== item.cartItemId));
     }
   };
 
@@ -83,45 +83,45 @@ const Cart = () => {
   };
 
   const handleIncrement = (index) => {
-    const productId = cartItems[index].product_id;
-    incrementQuantity(productId);
+    const item = cartItems[index];
+    const maxQty = maxQuantities[item.product_id]?.maxQuantity ?? 999;
+    if (item.quantity + 1 > maxQty) {
+      toast.error(`Cannot add more. Max quantity is ${maxQty}.`);
+      return;
+    }
+    incrementQuantity(item.cartItemId);
 
     // Update quantity in selectedCartItems if item is selected
     setSelectedCartItems(prevSelected => {
-      return prevSelected.map(item => {
-        if (item.product_id === productId) {
-          return { ...item, quantity: item.quantity + 1 };
+      return prevSelected.map(selectedItem => {
+        if (selectedItem.cartItemId === item.cartItemId) {
+          return { ...selectedItem, quantity: selectedItem.quantity + 1 };
         }
-        return item;
+        return selectedItem;
       });
     });
   };
 
   const handleDecrement = (index) => {
-    const productId = cartItems[index].product_id;
-    decrementQuantity(productId);
+    const item = cartItems[index];
+    decrementQuantity(item.cartItemId);
 
     // Update quantity in selectedCartItems if item is selected
     setSelectedCartItems(prevSelected => {
-      return prevSelected.map(item => {
-        if (item.product_id === productId && item.quantity > 1) {
-          return { ...item, quantity: item.quantity - 1 };
+      return prevSelected.map(selectedItem => {
+        if (selectedItem.cartItemId === item.cartItemId && selectedItem.quantity > 1) {
+          return { ...selectedItem, quantity: selectedItem.quantity - 1 };
         }
-        return item;
+        return selectedItem;
       });
     });
   };
 
   const handleRemove = (index) => {
-  const product = cartItems[index];
-
-  if (product.quantity > 1) {
-    decrementQuantity(product.product_id);
-  } else {
-    removeFromCart(product.product_id);
-    setSelectedCartItems(prev => prev.filter(item => item.product_id !== product.product_id));
-  }
-};
+    const item = cartItems[index];
+    removeFromCart(item.cartItemId);
+    setSelectedCartItems(prev => prev.filter(selectedItem => selectedItem.cartItemId !== item.cartItemId));
+  };
 
   const calculateTotal = (item) => {
   const basePrice = item.ProductPrice || 0;
@@ -254,7 +254,7 @@ const Cart = () => {
             <input
               type="checkbox"
               onChange={(e) => handleCheckboxChange(item, e.target.checked)}
-              checked={selectedCartItems.some(ci => ci.product_id === item.product_id)}
+              checked={selectedCartItems.some(ci => ci.cartItemId === item.cartItemId)}
             />
           </td>
           <td>

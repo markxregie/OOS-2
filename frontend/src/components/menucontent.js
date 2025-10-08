@@ -27,9 +27,10 @@ const MenuContent = () => {
   // 1. New state for selected add-ons and total
   const [selectedAddOns, setSelectedAddOns] = useState([]);
   const [addOnsTotal, setAddOnsTotal] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
 
 
-  const { addToCart: addToContextCart } = useContext(CartContext);
+  const { cartItems, addToCart: addToContextCart } = useContext(CartContext);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -66,7 +67,7 @@ const MenuContent = () => {
           const apiProducts = await productsResponse.json();
           const apiProductsDetails = await productsDetailsResponse.json();
 
-          // ✅ Fetch all add-ons in one request
+          // Fetch all add-ons in one request
           const allAddOnsResponse = await fetch(`${PRODUCTS_BASE_URL}/is_products/products/all_addons`, { headers });
           const allAddOnsMap = allAddOnsResponse.ok ? await allAddOnsResponse.json() : {};
 
@@ -88,11 +89,11 @@ const MenuContent = () => {
           );
 
           const transformedProducts = filteredProducts.map((product) => {
-            const details = apiProductsDetails.find(d => d.ProductID === product.ProductID);
+            // const details = apiProductsDetails.find(d => d.ProductID === product.ProductID); // unused
             return {
               ...product,
               Status: productStatusMap[product.ProductName],
-              AddOns: allAddOnsMap[product.ProductID] || []  // ✅ attach add-ons directly from map
+              AddOns: allAddOnsMap[product.ProductID] || []  // attach add-ons directly from map
             };
           });
 
@@ -151,6 +152,10 @@ const MenuContent = () => {
           if (!publicResponse.ok) throw new Error("Failed to fetch public product data.");
           const publicProducts = await publicResponse.json();
 
+          // Fetch all add-ons in one request for public
+          const allAddOnsResponse = await fetch(`${PRODUCTS_BASE_URL}/is_products/public/products/all_addons`);
+          const allAddOnsMap = allAddOnsResponse.ok ? await allAddOnsResponse.json() : {};
+
           // Fetch merchandise after other API calls
           const merchandiseResponse = await fetch(`${MERCH_BASE_URL}/merchandise/public/menu`);
           let apiMerchandise = [];
@@ -166,7 +171,8 @@ const MenuContent = () => {
             if (!grouped[typeName][category]) grouped[typeName][category] = [];
             grouped[typeName][category].push({
               ...product,
-              Status: product.Status || "Available", // ✅ use backend Status, fallback to "Available"
+              Status: product.Status || "Available", // use backend Status, fallback to "Available"
+              AddOns: allAddOnsMap[product.ProductID] || []  // attach add-ons directly from map
             });
           });
 
@@ -217,7 +223,6 @@ const MenuContent = () => {
   }, []);
 
 
-
   const handleCategoryClick = (category, subcategory) => {
     setSelectedCategory(category);
     setSelectedSubcategory(subcategory);
@@ -229,11 +234,11 @@ const MenuContent = () => {
     // Reset add-ons and notes before showing the modal
     setSelectedAddOns([]);
     setAddOnsTotal(0);
-    setOrderNotes(''); 
+    setOrderNotes('');
     showSweetAlertItemDetails(item);
   };
 
-  const handleAddToCart = (item, notes, addOns, addOnsTotal) => {
+  const handleAddToCart = async (item, notes, addOns, addOnsTotal) => {
     if (!item) return;
 
     const token = localStorage.getItem("authToken");
@@ -241,13 +246,48 @@ const MenuContent = () => {
       toast.error("You must be logged in to add to cart.");
       return;
     }
-    
+
     // Check if the item is available before adding to cart
     if (item.Status !== 'Available') {
       toast.error(`${item.ProductName} is currently unavailable.`);
       return;
     }
-    
+
+    // Normalize addOns for comparison
+    const normalizedAddOns = (addOns || []).map(a => ({ addon_name: a.name, price: a.price })).sort((a, b) => a.addon_name.localeCompare(b.addon_name));
+
+    // Find existing item in cart
+    const existingItemIndex = cartItems.findIndex(ci => {
+      const itemNormalizedAddOns = (ci.addons || []).sort((a, b) => a.addon_name.localeCompare(b.addon_name));
+      return ci.product_id === item.ProductID && JSON.stringify(normalizedAddOns) === JSON.stringify(itemNormalizedAddOns) && (ci.orderNotes || '') === (notes || '');
+    });
+
+    let currentQty = 0;
+    if (existingItemIndex !== -1) {
+      currentQty = cartItems[existingItemIndex].quantity;
+    }
+
+    // Fetch max quantity
+    try {
+      const res = await fetch(`${PRODUCTS_BASE_URL}/is_products/products/${item.ProductID}/max-quantity`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const maxQty = data.maxQuantity;
+        if (currentQty + 1 > maxQty) {
+          toast.error(`Cannot add more. Max quantity is ${maxQty}.`);
+          return;
+        }
+      } else {
+        // If fetch fails, proceed (optional: could show warning)
+        console.warn("Failed to fetch max quantity, proceeding without check.");
+      }
+    } catch (err) {
+      console.error("Error fetching max quantity:", err);
+      // Proceed without check
+    }
+
     addToContextCart({
       product_id: item.ProductID,
       ProductName: item.ProductName,
@@ -256,9 +296,9 @@ const MenuContent = () => {
       ProductType: item.ProductTypeName,
       ProductCategory: item.ProductCategory,
       orderType: "Pick Up",
-      // 3. Include notes and add-ons in the cart item
+      // Include notes and add-ons in the cart item
       orderNotes: notes,
-      addOns: addOns,
+      addons: addOns.map(a => ({ addon_name: a.name, price: a.price })), // Correct structure for cart context
     });
 
     const finalPrice = (item.ProductPrice ?? 0) + addOnsTotal;
@@ -277,9 +317,8 @@ const MenuContent = () => {
       ? item.ProductImage.startsWith('http')
         ? item.ProductImage
         : `${item.ProductTypeName === "Merchandise" ? "http://127.0.0.1:8002" : "http://127.0.0.1:8001"}${item.ProductImage}`
-
       : 'URL_TO_DEFAULT_IMAGE_OR_BLANK';
-      
+
     // HTML for add-ons section
     const addOnsHtml = (item.AddOns || []).map((addon, index) => `
       <div class="form-check d-flex justify-content-between align-items-center mb-1">
@@ -290,7 +329,7 @@ const MenuContent = () => {
             data-price="${addon.Price}"
             ${addon.Status !== 'Available' ? 'disabled' : ''}>
           <label class="form-check-label" for="addon-${index}">
-            ${addon.AddOnName} (${addon.Status})
+            ${addon.AddOnName} ${addon.Status !== 'Available' ? `(${addon.Status})` : ''}
           </label>
         </div>
         <span class="text-muted small">₱${addon.Price.toFixed(2)}</span>
@@ -316,7 +355,7 @@ const MenuContent = () => {
               <div class="mt-3">
                 <h5 class="mb-2">Add-ons</h5>
                 <div class="addons-list" style="border: 1px solid #eee; padding: 10px; border-radius: 5px; max-height: 150px; overflow-y: auto;">
-                    ${addOnsHtml}
+                    ${addOnsHtml || '<p class="text-muted small">No add-ons available.</p>'}
                 </div>
               </div>
 
@@ -340,9 +379,9 @@ const MenuContent = () => {
         confirmButton: 'btn btn-outline-primary me-2',
         denyButton: 'btn btn-primary',
         
-        cancelButton: 'btn btn-outline-secondary ms-2', 
+        cancelButton: 'btn btn-outline-secondary ms-2',
         popup: 'custom-sweetalert-popup',
-        htmlContainer: 'swal2-html-container-tight' 
+        htmlContainer: 'swal2-html-container-tight'
       },
       didOpen: () => {
         const checkboxes = Swal.getPopup().querySelectorAll('.addon-checkbox');
@@ -491,10 +530,8 @@ const MenuContent = () => {
       focusConfirm: false,
       customClass: {
         confirmButton: 'btn btn-primary',
-        // 🚀 ADDED 'ms-2' (margin-start: 2) to push it away from the Confirm/Buy Now button
-        cancelButton: 'btn btn-outline-secondary ms-2', 
+        cancelButton: 'btn btn-outline-secondary ms-2',
         popup: 'custom-sweetalert-popup',
-        // htmlContainer is intentionally omitted here to preserve default spacing
       },
       buttonsStyling: false,
       preConfirm: () => {
@@ -524,16 +561,17 @@ const MenuContent = () => {
             ProductType: item.ProductTypeName,
             ProductCategory: item.ProductCategory,
             quantity: 1,
-            // 5. Include add-ons in the cart item for checkout
             orderNotes: notes,
-            addOns: addOns,
+            // FIX: Changed 'addOns' to 'addons' (lowercase) to match state structure
+            addons: addOns.map(a => ({ addon_name: a.name, price: a.price })), // Ensure correct structure for checkout
+            // -----------------------
           }],
           orderType: delivery,
           paymentMethod: payment,
           orderNotes: notes
         }
       });
-      // Reset temporary states after successful navigation
+      // Reset temporary states
       setOrderNotes('');
       setSelectedAddOns([]);
       setAddOnsTotal(0);
@@ -541,7 +579,6 @@ const MenuContent = () => {
       setPaymentMethod('Cash');
     }
   };
-
   const subcategories = products[selectedCategory] ? Object.keys(products[selectedCategory]) : [];
 
   useEffect(() => {
@@ -560,6 +597,7 @@ const MenuContent = () => {
   }, [selectedCategory, products, selectedSubcategory, subcategories]);
 
   const currentItems = (products[selectedCategory] && products[selectedCategory][selectedSubcategory]) || [];
+  const filteredItems = currentItems.filter(item => item.ProductName.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
     <section className="menu-content-section">
@@ -592,7 +630,7 @@ const MenuContent = () => {
         <div className="menu-items">
           <div className="search-container w-100">
             <div className="input-group" style={{ maxWidth: '500px' }}>
-              <input type="text" className="form-control" placeholder="Search Our Coffee, Merch" />
+              <input type="text" className="form-control" placeholder="Search Our Coffee, Merch" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
               <button className="btn btn-primary" type="button">🔍</button>
             </div>
           </div>
@@ -606,7 +644,7 @@ const MenuContent = () => {
           </nav>
 
           <div className="items-grid">
-            {currentItems.map((item) => {
+            {filteredItems.map((item) => {
               const isAvailable = item.Status === 'Available';
               return (
                 <div
@@ -623,7 +661,7 @@ const MenuContent = () => {
                   </div>
                   
                   <div className="item-name-placeholder">{item.ProductName}</div>
-                  
+                  <div className="item-price-placeholder">₱{item.ProductPrice?.toFixed(2)}</div>
                   {!isAvailable && (
                     <div className="unavailable-overlay">
                       <span>Unavailable</span>

@@ -5,15 +5,14 @@ import Swal from 'sweetalert2';
 import './OrderHistory.css';
 
 const OrderHistory = () => {
-  const [activeTab, setActiveTab] = useState('active'); 
+  const [activeTab, setActiveTab] = useState('active');
   const [searchTerm, setSearchTerm] = useState('');
   const [ordersData, setOrdersData] = useState({
-    active: [], 
+    active: [],
     completed: [],
     cancelled: [],
   });
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-
 
   const token = localStorage.getItem('authToken');
 
@@ -28,7 +27,7 @@ const OrderHistory = () => {
 
     // Cleanup listener on component unmount
     return () => window.removeEventListener('resize', handleResize);
-  }, []); // Empty dependency array means this runs once on mount and cleanup on unmount
+  }, []);
 
   useEffect(() => {
     const getUsernameFromToken = (jwtToken) => {
@@ -44,7 +43,7 @@ const OrderHistory = () => {
         return null;
       }
     };
-    
+
     const username = getUsernameFromToken(token);
 
     const fetchOrders = async () => {
@@ -56,7 +55,7 @@ const OrderHistory = () => {
         });
 
         if (!response.ok) {
-            throw new Error(`Failed to fetch orders: ${response.statusText}`);
+          throw new Error(`Failed to fetch orders: ${response.statusText}`);
         }
 
         const data = await response.json();
@@ -66,10 +65,12 @@ const OrderHistory = () => {
         const cancelledOrders = [];
 
         data.forEach(order => {
+          // Resolved merge conflict: Use robust add-on price check
           const total = order.products.reduce((sum, p) => {
-            const addonSum = p.addons ? p.addons.reduce((s, a) => s + a.price, 0) : 0;
+            const addonSum = p.addons ? p.addons.reduce((s, a) => s + (a.price || a.Price || 0), 0) : 0;
             return sum + (p.price + addonSum) * p.quantity;
           }, 0) + (order.orderType === 'Delivery' ? 50 : 0);
+
           const orderData = {
             id: order.id,
             orderType: order.orderType,
@@ -103,7 +104,7 @@ const OrderHistory = () => {
 
     fetchOrders();
     const interval = setInterval(fetchOrders, 5000); // Refresh orders every 5 seconds
-    return () => clearInterval(interval); 
+    return () => clearInterval(interval);
 
   }, [token]);
 
@@ -143,14 +144,16 @@ const OrderHistory = () => {
           </thead>
           <tbody>
             ${order.products.map(p => {
-              const productSubtotal = (p.price + (p.addons ? p.addons.reduce((s, ao) => s + ao.price, 0) : 0)) * p.quantity;
+              // Ensure we use the correct structure for add-on price
+              const addonSum = p.addons ? p.addons.reduce((s, ao) => s + (ao.price || ao.Price || 0), 0) : 0;
+              const productSubtotal = (p.price + addonSum) * p.quantity;
               return `
                 <tr>
                   <td style="border: 1px solid #ddd; padding: 8px;">
                     ${p.name}
                     ${p.addons && p.addons.length > 0 ? `
                       <ul style="margin:0; padding-left:15px; font-size:0.85em; color:#666;">
-                        ${p.addons.map(ao => `<li>+ ${ao.addon_name || ao.name} (₱${ao.price.toFixed(2)})</li>`).join('')}
+                        ${p.addons.map(ao => `<li>+ ${ao.addon_name || ao.AddOnName || ao.name} (₱${(ao.price || ao.Price || 0).toFixed(2)})</li>`).join('')}
                       </ul>
                     ` : ""}
                   </td>
@@ -200,6 +203,8 @@ const OrderHistory = () => {
     if (!order || !token) return;
 
     try {
+      // NOTE: This endpoint seems to be an ADMIN endpoint (`/cart/admin/orders...`).
+      // Assuming the user has the necessary token/permissions to cancel their own order via this route.
       const response = await fetch(`http://localhost:7004/cart/admin/orders/${order.id}/status`, {
         method: 'PATCH',
         headers: {
@@ -227,7 +232,6 @@ const OrderHistory = () => {
       Swal.fire('Error', 'There was an error cancelling the order. Please try again.', 'error');
     }
   };
-
 
 
   const renderDesktopTable = (orders) => {
@@ -260,7 +264,8 @@ const OrderHistory = () => {
                     {p.addons && p.addons.length > 0 && (
                       <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.85em", color: "#666" }}>
                         {p.addons.map((addon, i) => (
-                          <li key={i}>+ {addon.addon_name || addon.name} (₱{addon.price.toFixed(2)})</li>
+                          // Unified add-on name and price access
+                          <li key={i}>+ {addon.addon_name || addon.AddOnName || addon.name} (₱{(addon.price || addon.Price || 0).toFixed(2)})</li>
                         ))}
                       </ul>
                     )}
@@ -271,6 +276,7 @@ const OrderHistory = () => {
               <td>{new Date(order.date).toLocaleDateString()}</td>
               <td>{getStatusBadge(order.status)}</td>
               <td>
+                {/* Fixed the inline function issue by using the dedicated showInvoice function */}
                 <button className="action-btn view" title="View Invoice" onClick={() => showInvoice(order)}>
                   <EyeFill />
                 </button>
