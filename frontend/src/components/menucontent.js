@@ -29,7 +29,7 @@ const MenuContent = () => {
   const [addOnsTotal, setAddOnsTotal] = useState(0);
 
 
-  const { addToCart: addToContextCart } = useContext(CartContext);
+  const { cartItems, addToCart: addToContextCart } = useContext(CartContext);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -233,7 +233,7 @@ const MenuContent = () => {
     showSweetAlertItemDetails(item);
   };
 
-  const handleAddToCart = (item, notes, addOns, addOnsTotal) => {
+  const handleAddToCart = async (item, notes, addOns, addOnsTotal) => {
     if (!item) return;
 
     const token = localStorage.getItem("authToken");
@@ -241,13 +241,48 @@ const MenuContent = () => {
       toast.error("You must be logged in to add to cart.");
       return;
     }
-    
+
     // Check if the item is available before adding to cart
     if (item.Status !== 'Available') {
       toast.error(`${item.ProductName} is currently unavailable.`);
       return;
     }
-    
+
+    // Normalize addOns for comparison
+    const normalizedAddOns = (addOns || []).map(a => ({ addon_name: a.name, price: a.price })).sort((a, b) => a.addon_name.localeCompare(b.addon_name));
+
+    // Find existing item in cart
+    const existingItemIndex = cartItems.findIndex(ci => {
+      const itemNormalizedAddOns = (ci.addons || []).sort((a, b) => a.addon_name.localeCompare(b.addon_name));
+      return ci.product_id === item.ProductID && JSON.stringify(normalizedAddOns) === JSON.stringify(itemNormalizedAddOns) && (ci.orderNotes || '') === (notes || '');
+    });
+
+    let currentQty = 0;
+    if (existingItemIndex !== -1) {
+      currentQty = cartItems[existingItemIndex].quantity;
+    }
+
+    // Fetch max quantity
+    try {
+      const res = await fetch(`${PRODUCTS_BASE_URL}/is_products/products/${item.ProductID}/max-quantity`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const maxQty = data.maxQuantity;
+        if (currentQty + 1 > maxQty) {
+          toast.error(`Cannot add more. Max quantity is ${maxQty}.`);
+          return;
+        }
+      } else {
+        // If fetch fails, proceed (optional: could show warning)
+        console.warn("Failed to fetch max quantity, proceeding without check.");
+      }
+    } catch (err) {
+      console.error("Error fetching max quantity:", err);
+      // Proceed without check
+    }
+
     addToContextCart({
       product_id: item.ProductID,
       ProductName: item.ProductName,

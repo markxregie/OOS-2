@@ -84,6 +84,11 @@ const Cart = () => {
 
   const handleIncrement = (index) => {
     const item = cartItems[index];
+    const maxQty = maxQuantities[item.product_id]?.maxQuantity ?? 999;
+    if (item.quantity + 1 > maxQty) {
+      toast.error(`Cannot add more. Max quantity is ${maxQty}.`);
+      return;
+    }
     incrementQuantity(item.cartItemId);
 
     // Update quantity in selectedCartItems if item is selected
