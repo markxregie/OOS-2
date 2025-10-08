@@ -111,6 +111,7 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
     cursor = await conn.cursor()
 
     try:
+        # Update SQL query to include CashierName
         await cursor.execute("""
             SELECT
                 o.OrderID,
@@ -122,14 +123,13 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
                 o.DeliveryNotes,
                 o.Status,
                 o.ReferenceNumber,
-
+                o.CashierName,  -- CashierName included here
                 di.EmailAddress,
                 di.PhoneNumber,
                 di.Address,
                 di.City,
                 di.Province,
                 di.Landmark
-
             FROM Orders o
                 LEFT JOIN (
                     SELECT FirstName, EmailAddress, PhoneNumber, Address, City, Province, Landmark,
@@ -147,7 +147,7 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
 
             # Get item details with price
             await cursor.execute("""
-                SELECT OrderItemID, ProductName, Quantity, Price
+                SELECT OrderItemID, ProductName, Quantity, Price, ProductCategory
                 FROM OrderItems
                 WHERE OrderID = ?
             """, (order_id,))
@@ -175,11 +175,13 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
                     "name": item[1],
                     "quantity": item[2],
                     "price": float(item[3]),
+                    "category": item[4],
                     "addons": addons_list
                 })
 
             delivery_address = ", ".join(filter(None, [row[11], row[12], row[13], row[14]]))
 
+            # Include the CashierName in the response
             orders.append({
                 "order_id": row[0],
                 "customer_name": row[1],
@@ -190,8 +192,9 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
                 "deliveryNotes": row[6],
                 "order_status": row[7],
                 "reference_number": row[8],
-                "emailAddress": row[9],
-                "phoneNumber": row[10],
+                "cashier_name": row[9],  # Add the CashierName here
+                "emailAddress": row[10],
+                "phoneNumber": row[11],
                 "deliveryAddress": delivery_address,
                 "items": item_list
             })
@@ -204,6 +207,7 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
     finally:
         await cursor.close()
         await conn.close()
+
 
 @router.get("/admin/orders/today_count")
 async def get_todays_orders_count(token: str = Depends(oauth2_scheme)):
@@ -294,36 +298,63 @@ async def get_user_orders(token: str = Depends(oauth2_scheme)):
     cursor = await conn.cursor()
 
     await cursor.execute("""
-        SELECT o.OrderID, o.OrderDate, o.OrderType, o.Status, oi.ProductName, oi.Quantity, oi.Price
+        SELECT o.OrderID, o.OrderDate, o.OrderType, o.Status
         FROM Orders o
-        JOIN OrderItems oi ON o.OrderID = oi.OrderID
         WHERE o.UserName = ?
         ORDER BY o.OrderDate DESC
     """, (username,))
 
-    rows = await cursor.fetchall()
+    order_rows = await cursor.fetchall()
+
+    orders = []
+    for order_row in order_rows:
+        order_id = order_row[0]
+
+        # Get items for this order
+        await cursor.execute("""
+            SELECT OrderItemID, ProductName, Quantity, Price
+            FROM OrderItems
+            WHERE OrderID = ?
+        """, (order_id,))
+        item_rows = await cursor.fetchall()
+
+        products = []
+        for item in item_rows:
+            order_item_id = item[0]
+            # Get add-ons for this item
+            await cursor.execute("""
+                SELECT AddOnName, Price, AddOnID
+                FROM OrderItemAddOns
+                WHERE OrderItemID = ?
+            """, (order_item_id,))
+            addon_rows = await cursor.fetchall()
+            addons_list = [
+                {
+                    "addon_name": addon[0],
+                    "price": float(addon[1]),
+                    "addon_id": addon[2]
+                }
+                for addon in addon_rows
+            ]
+            products.append({
+                "name": item[1],
+                "quantity": item[2],
+                "price": float(item[3]),
+                "addons": addons_list
+            })
+
+        orders.append({
+            "id": order_id,
+            "date": order_row[1],
+            "orderType": order_row[2],
+            "status": order_row[3],
+            "products": products,
+        })
+
     await cursor.close()
     await conn.close()
 
-    # Structure the data by order
-    orders = {}
-    for row in rows:
-        order_id = row[0]
-        if order_id not in orders:
-            orders[order_id] = {
-                "id": order_id,
-                "date": row[1],
-                "orderType": row[2],
-                "status": row[3],
-                "products": [],
-            }
-        orders[order_id]["products"].append({
-            "name": row[4],
-            "quantity": row[5],
-            "price": float(row[6])
-        })
-
-    return list(orders.values())
+    return orders
 
 @router.put("/update-payment")
 async def update_payment_details(payload: UpdatePaymentDetails, token: str = Depends(oauth2_scheme)):
@@ -494,34 +525,35 @@ async def add_to_cart(item: CartItem, token: str = Depends(oauth2_scheme)):
 
         if existing_item:
             order_item_id, current_qty = existing_item
-            # Do not update quantity to avoid doubling
-            # Insert new add-ons if not already present
             if item.addons:
                 logger.info(f"Processing addons for existing item {order_item_id}: {item.addons}")
                 for addon in item.addons:
                     try:
-                        logger.info(f"Checking addon: {addon}")
+                        # --- START of FIX #1 ---
+                        addon_name = addon.get("name") or addon.get("addon_name")
+                        if not addon_name:
+                            continue
+                        # --- END of FIX #1 ---
+                        
                         await cursor.execute("""
                             SELECT COUNT(*) FROM OrderItemAddOns WHERE OrderItemID = ? AND AddOnName = ?
-                        """, (order_item_id, addon.get("addon_name")))
+                        """, (order_item_id, addon_name)) # Use corrected variable
                         exists = await cursor.fetchone()
-                        logger.info(f"Addon exists check: {exists}")
+                        
                         if exists and exists[0] == 0:
-                            logger.info(f"Inserting addon: {addon}")
                             await cursor.execute("""
                                 INSERT INTO OrderItemAddOns (OrderItemID, AddOnName, Price, AddOnID)
                                 VALUES (?, ?, ?, ?)
                             """, (
                                 order_item_id,
-                                addon.get("addon_name"),
+                                addon_name, # Use corrected variable
                                 addon.get("price", 0),
                                 addon.get("addon_id")
                             ))
-                            logger.info(f"Successfully inserted addon {addon.get('addon_name')} for item {order_item_id}")
-                        else:
-                            logger.info(f"Addon {addon.get('addon_name')} already exists for item {order_item_id}")
+                            logger.info(f"Successfully inserted addon {addon_name} for item {order_item_id}")
+
                     except Exception as e:
-                        logger.error(f"Error inserting addon {addon.get('addon_name')} for existing item {order_item_id}: {e}")
+                        logger.error(f"Error inserting addon for existing item {order_item_id}: {e}")
                         raise
         else:
             await cursor.execute("""
@@ -529,33 +561,34 @@ async def add_to_cart(item: CartItem, token: str = Depends(oauth2_scheme)):
                 OUTPUT INSERTED.OrderItemID
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (
-                order_id,
-                item.product_name,
-                item.product_type or '',
-                item.product_category or '',
-                item.quantity,
-                item.price
+                order_id, item.product_name, item.product_type or '',
+                item.product_category or '', item.quantity, item.price
             ))
             row = await cursor.fetchone()
             order_item_id = row[0] if row else None
-            # Insert add-ons
+            
             if item.addons:
                 logger.info(f"Processing addons for new item {order_item_id}: {item.addons}")
                 for addon in item.addons:
                     try:
-                        logger.info(f"Inserting addon for new item: {addon}")
+                        # --- START of FIX #2 ---
+                        addon_name = addon.get("name") or addon.get("addon_name")
+                        if not addon_name:
+                            continue
+                        # --- END of FIX #2 ---
+
                         await cursor.execute("""
                             INSERT INTO OrderItemAddOns (OrderItemID, AddOnName, Price, AddOnID)
                             VALUES (?, ?, ?, ?)
                         """, (
                             order_item_id,
-                            addon.get("addon_name"),
+                            addon_name, # Use corrected variable
                             addon.get("price", 0),
                             addon.get("addon_id")
                         ))
-                        logger.info(f"Successfully inserted addon {addon.get('addon_name')} for new item {order_item_id}")
+                        logger.info(f"Successfully inserted addon {addon_name} for new item {order_item_id}")
                     except Exception as e:
-                        logger.error(f"Error inserting addon {addon.get('addon_name')} for new item {order_item_id}: {e}")
+                        logger.error(f"Error inserting addon for new item {order_item_id}: {e}")
                         raise
 
         await conn.commit()
@@ -690,10 +723,11 @@ async def update_addons_for_item(order_item_id: int, addons: List[dict], token: 
     return {"message": "Addons updated successfully"}
 
 @router.patch("/admin/orders/{order_id}/status", status_code=status.HTTP_200_OK)
-async def update_order_status(order_id: int, request: UpdateStatusRequest, token: str = Depends(oauth2_scheme)):
-    """
-    Updates the status of a specific online order.
-    """
+async def update_order_status(
+    order_id: int, 
+    request: UpdateStatusRequest, 
+    token: str = Depends(oauth2_scheme)
+):
     user_data = await validate_token_and_roles(token, ["admin", "staff", "cashier", "user"])
     username = user_data.get("username")
     user_role = user_data.get("userRole")
@@ -701,7 +735,7 @@ async def update_order_status(order_id: int, request: UpdateStatusRequest, token
     conn = await get_db_connection()
     cursor = await conn.cursor()
     try:
-        # Check if the order exists and get the owner
+        # Check if the order exists
         await cursor.execute("SELECT OrderID, UserName FROM Orders WHERE OrderID = ?", (order_id,))
         order = await cursor.fetchone()
         if not order:
@@ -711,13 +745,23 @@ async def update_order_status(order_id: int, request: UpdateStatusRequest, token
 
         # If user is not admin/staff/cashier, check ownership
         if user_role == "user" and order_owner != username:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only update your own orders")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="You can only update your own orders"
+            )
 
-        # Update the status
-        await cursor.execute(
-            "UPDATE Orders SET Status = ? WHERE OrderID = ?",
-            (request.new_status, order_id)
-        )
+        # ✅ Update status AND cashier name when accepting order
+        if request.new_status == "PREPARING":
+            await cursor.execute(
+                "UPDATE Orders SET Status = ?, CashierName = ? WHERE OrderID = ?",
+                (request.new_status, username, order_id)
+            )
+        else:
+            await cursor.execute(
+                "UPDATE Orders SET Status = ? WHERE OrderID = ?",
+                (request.new_status, order_id)
+            )
+        
         await conn.commit()
 
         logger.info(f"Updated status for order {order_id} to {request.new_status}")
@@ -726,7 +770,10 @@ async def update_order_status(order_id: int, request: UpdateStatusRequest, token
     except Exception as e:
         await conn.rollback()
         logger.error(f"Error updating order status for OrderID {order_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update order status.")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail="Failed to update order status."
+        )
     finally:
         await cursor.close()
         await conn.close()

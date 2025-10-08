@@ -53,7 +53,7 @@ const OrderHistory = () => {
 
         data.forEach(order => {
   const total = order.products.reduce((sum, p) => {
-    const addonSum = p.addons ? p.addons.reduce((s, a) => s + a.price, 0) : 0;
+    const addonSum = p.addons ? p.addons.reduce((s, a) => s + (a.price || a.Price || 0), 0) : 0;
     return sum + (p.price + addonSum) * p.quantity;
   }, 0) + (order.orderType === 'Delivery' ? 50 : 0);
           const orderData = {
@@ -194,7 +194,7 @@ const OrderHistory = () => {
                     {p.addons && p.addons.length > 0 && (
                       <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.85em", color: "#666" }}>
                         {p.addons.map((addon, i) => (
-                          <li key={i}>+ {addon.addon_name || addon.name} (₱{addon.price})</li>
+                          <li key={i}>+ {addon.addon_name || addon.AddOnName || addon.name} (₱{addon.price || addon.Price || 0})</li>
                         ))}
                       </ul>
                     )}
@@ -226,14 +226,14 @@ const OrderHistory = () => {
                                 ${p.name}
                                 ${p.addons && p.addons.length > 0 ? `
                                   <ul style="margin:0; padding-left:15px; font-size:0.85em; color:#666;">
-                                    ${p.addons.map(ao => `<li>+ ${ao.addon_name || ao.name} (₱${ao.price})</li>`).join('')}
+                                    ${p.addons.map(ao => `<li>+ ${ao.addon_name || ao.AddOnName || ao.name} (₱${ao.price || ao.Price || 0})</li>`).join('')}
                                   </ul>
                                 ` : ""}
                               </td>
                               <td style="border: 1px solid #ddd; padding: 8px;">${p.quantity}</td>
                               <td style="border: 1px solid #ddd; padding: 8px;">${p.price.toFixed(2)}</td>
                               <td style="border: 1px solid #ddd; padding: 8px;">
-                                ${((p.price + (p.addons ? p.addons.reduce((s, ao) => s + ao.price, 0) : 0)) * p.quantity).toFixed(2)}
+                                ${((p.price + (p.addons ? p.addons.reduce((s, ao) => s + (ao.price || ao.Price || 0), 0) : 0)) * p.quantity).toFixed(2)}
                               </td>
                             </tr>
                           `).join('')}

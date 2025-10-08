@@ -28,6 +28,7 @@ const MenuContent = () => {
   const [selectedAddOns, setSelectedAddOns] = useState([]);
   const [addOnsTotal, setAddOnsTotal] = useState(0);
 
+
   const { addToCart: addToContextCart } = useContext(CartContext);
   const navigate = useNavigate();
 
@@ -330,7 +331,7 @@ const MenuContent = () => {
       `,
       width: 800,
       showCloseButton: true,
-      showCancelButton: true,
+      showCancelButton: false,
       showDenyButton: true,
       confirmButtonText: 'Add to cart',
       denyButtonText: 'Buy Now',
@@ -338,7 +339,7 @@ const MenuContent = () => {
       customClass: {
         confirmButton: 'btn btn-outline-primary me-2',
         denyButton: 'btn btn-primary',
-        // 🚀 ADDED 'ms-2' (margin-start: 2) to push it away from the Deny/Buy Now button
+        
         cancelButton: 'btn btn-outline-secondary ms-2', 
         popup: 'custom-sweetalert-popup',
         htmlContainer: 'swal2-html-container-tight' 
@@ -428,10 +429,6 @@ const MenuContent = () => {
       html: `
         <div style="text-align: left;">
           <h5 class="mb-2">Item: ${item.ProductName}</h5>
-          <div class="mb-3">
-            <h6>Add-ons:</h6>
-            ${addOns.length > 0 ? `<ul>${addOns.map(addon => `<li>${addon.name} - ₱${addon.price.toFixed(2)}</li>`).join('')}</ul>` : '<p>No add-ons selected.</p>'}
-          </div>
           <h5 class="mb-3">Total Payable: ₱${((item.ProductPrice ?? 0) + addOnsTotal).toFixed(2)}</h5>
           <div class="mb-3">
             <label class="form-label">Delivery Method</label>
@@ -516,35 +513,35 @@ const MenuContent = () => {
 
   // Updated handler to accept add-ons details
   const handleConfirmBuyNow = (item, notes, addOns, addOnsTotal, delivery, payment) => {
-    if (item) {
-      navigate('/checkout', {
-        state: {
-          cartItems: [{
-            product_id: item.ProductID,
-            ProductName: item.ProductName,
-            ProductPrice: item.ProductPrice,
-            ProductImage: item.ProductImage,
-            ProductType: item.ProductTypeName,
-            ProductCategory: item.ProductCategory,
-            quantity: 1,
-            // 5. Include add-ons in the cart item for checkout
-            orderNotes: notes,
-            addons: addOns,
-          }],
-          orderType: delivery,
-          paymentMethod: payment,
-          orderNotes: notes
-        }
-      });
-      // Reset temporary states after successful navigation
-      setOrderNotes('');
-      setSelectedAddOns([]);
-      setAddOnsTotal(0);
-      setDeliveryMethod('Pick-up');
-      setPaymentMethod('Cash');
-    }
-  };
-
+  if (item) {
+    navigate('/checkout', {
+      state: {
+        cartItems: [{
+          product_id: item.ProductID,
+          ProductName: item.ProductName,
+          ProductPrice: item.ProductPrice,
+          ProductImage: item.ProductImage,
+          ProductType: item.ProductTypeName,
+          ProductCategory: item.ProductCategory,
+          quantity: 1,
+          orderNotes: notes,
+          // --- THIS IS THE FIX ---
+          addons: addOns, // Change 'addOns' to 'addons' (lowercase)
+          // -----------------------
+        }],
+        orderType: delivery,
+        paymentMethod: payment,
+        orderNotes: notes
+      }
+    });
+    // Reset temporary states
+    setOrderNotes('');
+    setSelectedAddOns([]);
+    setAddOnsTotal(0);
+    setDeliveryMethod('Pick-up');
+    setPaymentMethod('Cash');
+  }
+};
   const subcategories = products[selectedCategory] ? Object.keys(products[selectedCategory]) : [];
 
   useEffect(() => {
@@ -625,6 +622,7 @@ const MenuContent = () => {
                     }
                   </div>
                   <div className="item-name-placeholder">{item.ProductName}</div>
+                  <div className="item-price-placeholder">₱{item.ProductPrice?.toFixed(2)}</div>
                   {!isAvailable && (
                     <div className="unavailable-overlay">
                       <span>Unavailable</span>
