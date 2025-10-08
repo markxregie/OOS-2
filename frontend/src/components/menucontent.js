@@ -27,6 +27,7 @@ const MenuContent = () => {
   // 1. New state for selected add-ons and total
   const [selectedAddOns, setSelectedAddOns] = useState([]);
   const [addOnsTotal, setAddOnsTotal] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
 
 
   const { cartItems, addToCart: addToContextCart } = useContext(CartContext);
@@ -151,6 +152,10 @@ const MenuContent = () => {
           if (!publicResponse.ok) throw new Error("Failed to fetch public product data.");
           const publicProducts = await publicResponse.json();
 
+          // ✅ Fetch all add-ons in one request for public
+          const allAddOnsResponse = await fetch(`${PRODUCTS_BASE_URL}/is_products/public/products/all_addons`);
+          const allAddOnsMap = allAddOnsResponse.ok ? await allAddOnsResponse.json() : {};
+
           // Fetch merchandise after other API calls
           const merchandiseResponse = await fetch(`${MERCH_BASE_URL}/merchandise/public/menu`);
           let apiMerchandise = [];
@@ -167,6 +172,7 @@ const MenuContent = () => {
             grouped[typeName][category].push({
               ...product,
               Status: product.Status || "Available", // ✅ use backend Status, fallback to "Available"
+              AddOns: allAddOnsMap[product.ProductID] || []  // ✅ attach add-ons directly from map
             });
           });
 
@@ -595,6 +601,7 @@ const MenuContent = () => {
   }, [selectedCategory, products, selectedSubcategory, subcategories]);
 
   const currentItems = (products[selectedCategory] && products[selectedCategory][selectedSubcategory]) || [];
+  const filteredItems = currentItems.filter(item => item.ProductName.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
     <section className="menu-content-section">
@@ -627,7 +634,7 @@ const MenuContent = () => {
         <div className="menu-items">
           <div className="search-container w-100">
             <div className="input-group" style={{ maxWidth: '500px' }}>
-              <input type="text" className="form-control" placeholder="Search Our Coffee, Merch" />
+              <input type="text" className="form-control" placeholder="Search Our Coffee, Merch" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
               <button className="btn btn-primary" type="button">🔍</button>
             </div>
           </div>
@@ -641,7 +648,7 @@ const MenuContent = () => {
           </nav>
 
           <div className="items-grid">
-            {currentItems.map((item) => {
+            {filteredItems.map((item) => {
               const isAvailable = item.Status === 'Available';
               return (
                 <div
