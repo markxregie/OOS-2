@@ -66,6 +66,7 @@ function RiderDashboard() {
   }, []);
 
   const [toggle, setToggle] = useState("active");
+  const [earningsFilter, setEarningsFilter] = useState("Daily");
   const [orders, setOrders] = useState([]);
 
   useEffect(() => {
@@ -228,6 +229,34 @@ function RiderDashboard() {
       }
       return true;
     });
+
+  const calculateEarnings = () => {
+    const now = new Date();
+    let startDate;
+
+    if (earningsFilter === "Daily") {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      return orders
+        .filter(order => ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"].includes(order.currentStatus) && new Date(order.orderedAt) >= startDate)
+        .reduce((sum, order) => sum + (order.total || 0), 0)
+        .toFixed(2);
+    } else if (earningsFilter === "Weekly") {
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    } else if (earningsFilter === "Monthly") {
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    } else {
+      // All-Time
+      return orders
+        .filter(order => ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit", "delivered"].includes(order.currentStatus))
+        .reduce((sum, order) => sum + (order.total || 0), 0)
+        .toFixed(2);
+    }
+
+    return orders
+      .filter(order => ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"].includes(order.currentStatus) && new Date(order.orderedAt) >= startDate)
+      .reduce((sum, order) => sum + (order.total || 0), 0)
+      .toFixed(2);
+  };
 
   const updateOrderStatus = async (orderId, status) => {
     try {
@@ -451,12 +480,27 @@ function RiderDashboard() {
                 {orders.filter(order => order.currentStatus === "delivered").length} orders
               </span>
             </Card>
-            <Card className="summary-card">
+            <Card className="summary-card" style={{ position: 'relative' }}>
+              <Form.Select
+                size="sm"
+                value={earningsFilter}
+                onChange={(e) => setEarningsFilter(e.target.value)}
+                style={{
+                  position: 'absolute',
+                  top: '10px',
+                  right: '10px',
+                  width: '120px',
+                  fontSize: '12px',
+                  padding: '2px 6px'
+                }}
+              >
+                <option value="Daily">Daily</option>
+                <option value="Weekly">Weekly</option>
+                <option value="Monthly">Monthly</option>
+              </Form.Select>
               <FaDollarSign size={32} color="#fd7e14" />
               <span className="card-title">Earnings</span>
-              <span className="card-value">
-                ₱{orders.filter(order => order.currentStatus === "delivered").reduce((sum, order) => sum + order.total, 0).toFixed(2)}
-              </span>
+              <span className="card-value">₱{calculateEarnings()}</span>
             </Card>
           </div>
         </Container>
