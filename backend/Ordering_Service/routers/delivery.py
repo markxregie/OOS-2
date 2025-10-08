@@ -276,13 +276,14 @@ async def get_delivery_orders(token: str = Depends(oauth2_scheme)):
 
     try:
         await cursor.execute("""
-            SELECT 
-                o.OrderID, o.UserName, o.OrderDate, o.Status, o.PaymentMethod, 
+            SELECT
+                o.OrderID, o.UserName, o.OrderDate, o.Status, o.PaymentMethod,
                 o.TotalAmount, di.FirstName, di.MiddleName, di.LastName,
                 di.PhoneNumber, di.Address, di.City, di.Province, di.Notes, di.Landmark,
                              o.AssignedRiderID
             FROM Orders o
             LEFT JOIN DeliveryInfo di ON o.OrderID = di.OrderID
+            WHERE o.OrderType = 'Delivery'
             ORDER BY o.OrderDate DESC
         """)
         rows = await cursor.fetchall()
@@ -294,16 +295,36 @@ async def get_delivery_orders(token: str = Depends(oauth2_scheme)):
 
             # Fetch items
             await cursor.execute("""
-                SELECT ProductName, Quantity, Price
+                SELECT OrderItemID, ProductName, Quantity, Price
                 FROM OrderItems
                 WHERE OrderID = ?
             """, (order_id,))
             items = await cursor.fetchall()
 
-            item_list = [
-                {"name": i[0], "quantity": i[1], "price": float(i[2])}
-                for i in items
-            ]
+            item_list = []
+            for item in items:
+                order_item_id = item[0]
+                # Get add-ons for this item
+                await cursor.execute("""
+                    SELECT AddOnName, Price, AddOnID
+                    FROM OrderItemAddOns
+                    WHERE OrderItemID = ?
+                """, (order_item_id,))
+                addon_rows = await cursor.fetchall()
+                addons_list = [
+                    {
+                        "addon_name": addon[0],
+                        "price": float(addon[1]),
+                        "addon_id": addon[2]
+                    }
+                    for addon in addon_rows
+                ]
+                item_list.append({
+                    "name": item[1],
+                    "quantity": item[2],
+                    "price": float(item[3]),
+                    "addons": addons_list
+                })
 
             rider_info = None
             if assigned_rider_id:
