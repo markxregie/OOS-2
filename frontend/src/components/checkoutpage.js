@@ -238,50 +238,6 @@ const CheckoutPage = () => {
     }
   }
 
-  // Add items to cart
-  try {
-    for (const item of cartItems) {
-      const addonsPayload = item.addons ? item.addons.map(addon => ({
-        addon_name: addon.addon_name || addon.AddOnName || addon.name,
-        price: addon.price || addon.Price || 0,
-        addon_id: addon.addon_id || addon.AddOnID || 0
-      })) : [];
-
-      const addToCartPayload = {
-        username: userData.username,
-        product_id: item.product_id,
-        product_name: item.ProductName,
-        quantity: item.quantity,
-        price: item.ProductPrice,
-        product_type: item.ProductType || '',
-        product_category: item.ProductCategory || '',
-        order_type: orderType,
-        addons: addonsPayload
-      };
-
-      const addToCartResponse = await fetch("http://localhost:7004/cart/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(addToCartPayload),
-      });
-
-      if (!addToCartResponse.ok) {
-        throw new Error(`Failed to add item ${item.ProductName} to cart`);
-      }
-    }
-  } catch (error) {
-    console.error("Error adding items to cart:", error);
-    Swal.fire({
-      icon: 'error',
-      title: 'Error',
-      text: 'Failed to add items to cart. Please try again.',
-    });
-    return;
-  }
-
   const currentUserData = { ...userData };
 
   // **CHECK PAYMENT METHOD HERE**
@@ -295,7 +251,7 @@ const CheckoutPage = () => {
       deliveryNotes,
       reference_number
     };
-    
+
     await confirmPayment(savedData);
   } else {
     // Handle online payment via PayMongo

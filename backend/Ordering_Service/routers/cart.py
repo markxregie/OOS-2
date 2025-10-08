@@ -523,39 +523,22 @@ async def add_to_cart(item: CartItem, token: str = Depends(oauth2_scheme)):
         ))
         existing_item = await cursor.fetchone()
 
+        merge = False
         if existing_item:
             order_item_id, current_qty = existing_item
-            if item.addons:
-                logger.info(f"Processing addons for existing item {order_item_id}: {item.addons}")
-                for addon in item.addons:
-                    try:
-                        # --- START of FIX #1 ---
-                        addon_name = addon.get("name") or addon.get("addon_name")
-                        if not addon_name:
-                            continue
-                        # --- END of FIX #1 ---
-                        
-                        await cursor.execute("""
-                            SELECT COUNT(*) FROM OrderItemAddOns WHERE OrderItemID = ? AND AddOnName = ?
-                        """, (order_item_id, addon_name)) # Use corrected variable
-                        exists = await cursor.fetchone()
-                        
-                        if exists and exists[0] == 0:
-                            await cursor.execute("""
-                                INSERT INTO OrderItemAddOns (OrderItemID, AddOnName, Price, AddOnID)
-                                VALUES (?, ?, ?, ?)
-                            """, (
-                                order_item_id,
-                                addon_name, # Use corrected variable
-                                addon.get("price", 0),
-                                addon.get("addon_id")
-                            ))
-                            logger.info(f"Successfully inserted addon {addon_name} for item {order_item_id}")
+            # Get existing addons
+            await cursor.execute("""
+                SELECT AddOnName FROM OrderItemAddOns WHERE OrderItemID = ? ORDER BY AddOnName
+            """, (order_item_id,))
+            existing_addons = [row[0] for row in await cursor.fetchall()]
+            incoming_addons = sorted([a.get("name") or a.get("addon_name") for a in item.addons or []])
+            if existing_addons == incoming_addons:
+                merge = True
+                await cursor.execute("""
+                    UPDATE OrderItems SET Quantity = Quantity + ? WHERE OrderItemID = ?
+                """, (item.quantity, order_item_id))
 
-                    except Exception as e:
-                        logger.error(f"Error inserting addon for existing item {order_item_id}: {e}")
-                        raise
-        else:
+        if not merge:
             await cursor.execute("""
                 INSERT INTO OrderItems (OrderID, ProductName, ProductType, ProductCategory, Quantity, Price)
                 OUTPUT INSERTED.OrderItemID
@@ -566,23 +549,21 @@ async def add_to_cart(item: CartItem, token: str = Depends(oauth2_scheme)):
             ))
             row = await cursor.fetchone()
             order_item_id = row[0] if row else None
-            
+
             if item.addons:
                 logger.info(f"Processing addons for new item {order_item_id}: {item.addons}")
                 for addon in item.addons:
                     try:
-                        # --- START of FIX #2 ---
                         addon_name = addon.get("name") or addon.get("addon_name")
                         if not addon_name:
                             continue
-                        # --- END of FIX #2 ---
 
                         await cursor.execute("""
                             INSERT INTO OrderItemAddOns (OrderItemID, AddOnName, Price, AddOnID)
                             VALUES (?, ?, ?, ?)
                         """, (
                             order_item_id,
-                            addon_name, # Use corrected variable
+                            addon_name,
                             addon.get("price", 0),
                             addon.get("addon_id")
                         ))
