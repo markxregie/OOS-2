@@ -153,7 +153,7 @@ const Report = () => {
 
     const fetchOrders = async () => {
       try {
-        const response = await fetch("http://localhost:7004/cart/admin/orders/manage", {
+        const response = await fetch("http://localhost:7004/admin/orders/manage", {
           headers: {
             Authorization: `Bearer ${authToken}`
           }
@@ -180,7 +180,7 @@ const Report = () => {
           deliveryNotes: order.deliveryNotes,
           adminNotes: order.adminNotes || "",
           statusHistory: order.statusHistory || [],
-          items: order.items || [],
+          items: order.items ? JSON.parse(order.items) : [],
           referenceNo: order.reference_number
         }));
 

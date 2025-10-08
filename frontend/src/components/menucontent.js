@@ -621,8 +621,9 @@ const MenuContent = () => {
                       : 'Image'
                     }
                   </div>
+                  
                   <div className="item-name-placeholder">{item.ProductName}</div>
-                  <div className="item-price-placeholder">₱{item.ProductPrice?.toFixed(2)}</div>
+                  
                   {!isAvailable && (
                     <div className="unavailable-overlay">
                       <span>Unavailable</span>
