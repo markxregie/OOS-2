@@ -428,6 +428,10 @@ const MenuContent = () => {
       html: `
         <div style="text-align: left;">
           <h5 class="mb-2">Item: ${item.ProductName}</h5>
+          <div class="mb-3">
+            <h6>Add-ons:</h6>
+            ${addOns.length > 0 ? `<ul>${addOns.map(addon => `<li>${addon.name} - ₱${addon.price.toFixed(2)}</li>`).join('')}</ul>` : '<p>No add-ons selected.</p>'}
+          </div>
           <h5 class="mb-3">Total Payable: ₱${((item.ProductPrice ?? 0) + addOnsTotal).toFixed(2)}</h5>
           <div class="mb-3">
             <label class="form-label">Delivery Method</label>
@@ -525,7 +529,7 @@ const MenuContent = () => {
             quantity: 1,
             // 5. Include add-ons in the cart item for checkout
             orderNotes: notes,
-            addOns: addOns,
+            addons: addOns,
           }],
           orderType: delivery,
           paymentMethod: payment,
