@@ -4,15 +4,29 @@ import { EyeFill, XCircle } from 'react-bootstrap-icons';
 import Swal from 'sweetalert2';
 import './OrderHistory.css';
 
+// Define the breakpoint for switching to the mobile/card view
+const MOBILE_BREAKPOINT = 992; 
+
 const OrderHistory = () => {
-  const [activeTab, setActiveTab] = useState('active'); 
+  const [activeTab, setActiveTab] = useState('active');
   const [searchTerm, setSearchTerm] = useState('');
   const [ordersData, setOrdersData] = useState({
-    active: [], 
+    active: [],
     completed: [],
     cancelled: [],
   });
+  // Use the new breakpoint for mobile detection
+  const [isMobileOrTablet, setIsMobileOrTablet] = useState(window.innerWidth <= MOBILE_BREAKPOINT); 
 
+  // Function to update the isMobileOrTablet state on resize
+  const handleResize = () => {
+    setIsMobileOrTablet(window.innerWidth <= MOBILE_BREAKPOINT);
+  };
+
+  useEffect(() => {
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const token = localStorage.getItem('authToken');
 
@@ -30,7 +44,7 @@ const OrderHistory = () => {
         return null;
       }
     };
-    
+
     const username = getUsernameFromToken(token);
 
     const fetchOrders = async () => {
@@ -42,7 +56,7 @@ const OrderHistory = () => {
         });
 
         if (!response.ok) {
-            throw new Error(`Failed to fetch orders: ${response.statusText}`);
+          throw new Error(`Failed to fetch orders: ${response.statusText}`);
         }
 
         const data = await response.json();
@@ -52,10 +66,10 @@ const OrderHistory = () => {
         const cancelledOrders = [];
 
         data.forEach(order => {
-  const total = order.products.reduce((sum, p) => {
-    const addonSum = p.addons ? p.addons.reduce((s, a) => s + (a.price || a.Price || 0), 0) : 0;
-    return sum + (p.price + addonSum) * p.quantity;
-  }, 0) + (order.orderType === 'Delivery' ? 50 : 0);
+          const total = order.products.reduce((sum, p) => {
+            const addonSum = p.addons ? p.addons.reduce((s, a) => s + (a.price || a.Price || 0), 0) : 0;
+            return sum + (p.price + addonSum) * p.quantity;
+          }, 0) + (order.orderType === 'Delivery' ? 50 : 0);
           const orderData = {
             id: order.id,
             orderType: order.orderType,
@@ -89,7 +103,7 @@ const OrderHistory = () => {
 
     fetchOrders();
     const interval = setInterval(fetchOrders, 5000); // Refresh orders every 5 seconds
-    return () => clearInterval(interval); 
+    return () => clearInterval(interval);
 
   }, [token]);
 
@@ -111,6 +125,52 @@ const OrderHistory = () => {
     else if (status === 'completed') className += " status-completed";
     else if (status === 'cancelled') className += " status-cancelled";
     return <span className={className}>{capitalizedStatus}</span>;
+  };
+
+  const handleShowInvoice = (order) => {
+    const invoiceHtml = `
+      <div>
+        <p><strong>Date:</strong> ${new Date(order.date).toLocaleString()}</p>
+        <p><strong>Order Type:</strong> ${order.orderType}</p>
+        <table style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="background-color: #f2f2f2;">
+              <th style="border: 1px solid #ddd; padding: 8px;">Product</th>
+              <th style="border: 1px solid #ddd; padding: 8px;">Quantity</th>
+              <th style="border: 1px solid #ddd; padding: 8px;">Price (₱)</th>
+              <th style="border: 1px solid #ddd; padding: 8px;">Subtotal (₱)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${order.products.map(p => `
+              <tr>
+                <td style="border: 1px solid #ddd; padding: 8px;">
+                  ${p.name}
+                  ${p.addons && p.addons.length > 0 ? `
+                    <ul style="margin:0; padding-left:15px; font-size:0.85em; color:#666;">
+                      ${p.addons.map(ao => `<li>+ ${ao.addon_name || ao.AddOnName || ao.name} (₱${(ao.price || ao.Price || 0).toFixed(2)})</li>`).join('')}
+                    </ul>
+                  ` : ""}
+                </td>
+                <td style="border: 1px solid #ddd; padding: 8px;">${p.quantity}</td>
+                <td style="border: 1px solid #ddd; padding: 8px;">${p.price.toFixed(2)}</td>
+                <td style="border: 1px solid #ddd; padding: 8px;">
+                  ${((p.price + (p.addons ? p.addons.reduce((s, ao) => s + (ao.price || ao.Price || 0), 0) : 0)) * p.quantity).toFixed(2)}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <h5 style="text-align: right; margin-top: 10px;">Total: ₱${order.total.toFixed(2)}</h5>
+      </div>
+    `;
+    Swal.fire({
+      title: `Invoice for Order #${order.id}`,
+      html: invoiceHtml,
+      showConfirmButton: true,
+      confirmButtonText: 'Close',
+      width: '90%', 
+    });
   };
 
   const handleCancelClick = async (order) => {
@@ -162,110 +222,128 @@ const OrderHistory = () => {
     }
   };
 
+  const renderProductDetails = (products) => (
+    <ul style={{ margin: 0, paddingLeft: '15px', fontSize: '0.9em', listStyle: 'none' }}>
+      {products.map((p, idx) => (
+        <li key={idx} style={{ marginBottom: '5px', fontWeight: 'bold' }}>
+          {p.name} (x{p.quantity})
+          {p.addons && p.addons.length > 0 && (
+            <ul style={{ margin: 0, paddingLeft: "15px", fontSize: "0.85em", color: "#666", fontWeight: 'normal' }}>
+              {p.addons.map((addon, i) => (
+                <li key={i}>+ {addon.addon_name || addon.AddOnName || addon.name} (₱{(addon.price || addon.Price || 0).toFixed(2)})</li>
+              ))}
+            </ul>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
 
+  const renderMobileOrderCard = (order) => (
+    <div className="order-card" key={order.id}>
+      <div className="card-header">
+        <span style={{ fontWeight: 'bold' }}>Order #{order.id}</span>
+        {getStatusBadge(order.status)}
+      </div>
+      <div className="card-body">
+        <p><strong>Type:</strong> {order.orderType}</p>
+        <p><strong>Date:</strong> {new Date(order.date).toLocaleDateString()}</p>
+        <p>
+          <strong>Products:</strong>
+          {renderProductDetails(order.products)}
+        </p>
+        <p className="card-total"><strong>Total:</strong> ₱{order.total.toFixed(2)}</p>
+      </div>
+      <div className="card-actions">
+        <button className="action-btn view" title="View Invoice" onClick={() => handleShowInvoice(order)}>
+          <EyeFill /> View
+        </button>
+        {order.status === 'pending' && (
+          <button
+            className="action-btn cancel"
+            title="Cancel Order"
+            onClick={() => handleCancelClick(order)}
+          >
+            <XCircle /> Cancel
+          </button>
+        )}
+      </div>
+    </div>
+  );
 
   const renderTable = (orders) => {
-    if (orders.length === 0) {
+    const ordersToRender = filteredOrders(orders);
+
+    if (ordersToRender.length === 0) {
       return <div className="orderhistory-no-orders">No orders found</div>;
     }
 
-    return (
-      <Table className="orders-table">
-        <thead>
-          <tr>
-            <th>Order ID</th>
-            <th>Order Type</th>
-            <th>Products</th>
-            <th>Total</th>
-            <th>Date</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredOrders(orders).map((order) => (
-            <tr key={order.id}>
-              <td>#{order.id}</td>
-              <td>{order.orderType}</td>
-              <td>
-                {order.products.map((p, idx) => (
-                  <div key={idx}>
-                    {p.name} (x{p.quantity})
-                    {p.addons && p.addons.length > 0 && (
-                      <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.85em", color: "#666" }}>
-                        {p.addons.map((addon, i) => (
-                          <li key={i}>+ {addon.addon_name || addon.AddOnName || addon.name} (₱{addon.price || addon.Price || 0})</li>
-                        ))}
-                      </ul>
+    // Render mobile/tablet card list if isMobileOrTablet is true
+    if (isMobileOrTablet) {
+      return (
+        <div className="orders-mobile-list">
+          {ordersToRender.map(renderMobileOrderCard)}
+        </div>
+      );
+    } else {
+      // Desktop View: Render a full table
+      return (
+        <div className="table-responsive">
+          <Table className="orders-table">
+            <thead>
+              <tr>
+                <th>Order ID</th>
+                <th>Order Type</th>
+                <th>Products</th>
+                <th>Total</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ordersToRender.map((order) => (
+                <tr key={order.id}>
+                  <td>#{order.id}</td>
+                  <td>{order.orderType}</td>
+                  <td>
+                    {order.products.map((p, idx) => (
+                      <div key={idx}>
+                        {p.name} (x{p.quantity})
+                        {p.addons && p.addons.length > 0 && (
+                          <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.85em", color: "#666" }}>
+                            {p.addons.map((addon, i) => (
+                              <li key={i}>+ {addon.addon_name || addon.AddOnName || addon.name} (₱{(addon.price || addon.Price || 0).toFixed(2)})</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ))}
+                  </td>
+                  <td>₱{order.total.toFixed(2)}</td>
+                  <td>{new Date(order.date).toLocaleDateString()}</td>
+                  <td>{getStatusBadge(order.status)}</td>
+                  <td>
+                    <button className="action-btn view" title="View Invoice" onClick={() => handleShowInvoice(order)}>
+                      <EyeFill />
+                    </button>
+                    {order.status === 'pending' && (
+                      <button
+                        className="action-btn cancel"
+                        title="Cancel Order"
+                        onClick={() => handleCancelClick(order)}
+                      >
+                        <XCircle />
+                      </button>
                     )}
-                  </div>
-                ))}
-              </td>
-              <td>₱{order.total.toFixed(2)}</td>
-              <td>{new Date(order.date).toLocaleDateString()}</td>
-              <td>{getStatusBadge(order.status)}</td>
-              <td>
-                <button className="action-btn view" title="View Invoice" onClick={() => {
-                  const invoiceHtml = `
-                    <div>
-                      <p><strong>Date:</strong> ${new Date(order.date).toLocaleString()}</p>
-                      <p><strong>Order Type:</strong> ${order.orderType}</p>
-                      <table style="width: 100%; border-collapse: collapse;">
-                        <thead>
-                          <tr style="background-color: #f2f2f2;">
-                            <th style="border: 1px solid #ddd; padding: 8px;">Product</th>
-                            <th style="border: 1px solid #ddd; padding: 8px;">Quantity</th>
-                            <th style="border: 1px solid #ddd; padding: 8px;">Price (₱)</th>
-                            <th style="border: 1px solid #ddd; padding: 8px;">Subtotal (₱)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          ${order.products.map(p => `
-                            <tr>
-                              <td style="border: 1px solid #ddd; padding: 8px;">
-                                ${p.name}
-                                ${p.addons && p.addons.length > 0 ? `
-                                  <ul style="margin:0; padding-left:15px; font-size:0.85em; color:#666;">
-                                    ${p.addons.map(ao => `<li>+ ${ao.addon_name || ao.AddOnName || ao.name} (₱${ao.price || ao.Price || 0})</li>`).join('')}
-                                  </ul>
-                                ` : ""}
-                              </td>
-                              <td style="border: 1px solid #ddd; padding: 8px;">${p.quantity}</td>
-                              <td style="border: 1px solid #ddd; padding: 8px;">${p.price.toFixed(2)}</td>
-                              <td style="border: 1px solid #ddd; padding: 8px;">
-                                ${((p.price + (p.addons ? p.addons.reduce((s, ao) => s + (ao.price || ao.Price || 0), 0) : 0)) * p.quantity).toFixed(2)}
-                              </td>
-                            </tr>
-                          `).join('')}
-                        </tbody>
-                      </table>
-                      <h5 style="text-align: right; margin-top: 10px;">Total: ₱${order.total.toFixed(2)}</h5>
-                    </div>
-                  `;
-                  Swal.fire({
-                    title: `Invoice for Order #${order.id}`,
-                    html: invoiceHtml,
-                    showConfirmButton: true,
-                    confirmButtonText: 'Close',
-                  });
-                }}>
-                  <EyeFill />
-                </button>
-                {order.status === 'pending' && (
-                  <button
-                    className="action-btn cancel"
-                    title="Cancel Order"
-                    onClick={() => handleCancelClick(order)}
-                  >
-                    <XCircle />
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
-    );
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </div>
+      );
+    }
   };
 
   return (
@@ -274,7 +352,7 @@ const OrderHistory = () => {
         <h5 style={{ color: '#4a9ba5' }}>Order History</h5>
         <Form.Control
           type="text"
-          placeholder="Search..."
+          placeholder="Search Order ID or Status..."
           className="search-input"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}

@@ -41,6 +41,7 @@
     pointer-events: none;
     transform: translateY(8%); /* Adjust this to fine-tune position */
   }
+
   
   /* Responsive adjustments */
   @media (max-width: 768px) {
