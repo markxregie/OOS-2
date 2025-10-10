@@ -1,0 +1,59 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Delivery Service",
+      "type": "shell",
+      "command": "cd backend/delivery_service; python main.py",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Start Ordering Service",
+      "type": "shell",
+      "command": "cd backend/ordering_service; python main.py",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Start Payment Service",
+      "type": "shell",
+      "command": "cd backend/payment_Service; python main.py",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    
+    
+    
+    {
+      "label": "Start Frontend",
+      "type": "shell",
+      "command": "cd frontend; npm start",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Start All Services",
+      "dependsOn": [
+        
+        "Start Delivery Service",
+        "Start Ordering Service",
+        "Start Payment Service",
+        "Start Frontend"
+      ],
+      "dependsOrder": "parallel"
+    }
+  ]
+}
