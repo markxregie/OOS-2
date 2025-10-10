@@ -266,6 +266,8 @@ const ManageOrders = () => {
         return <span className="status-badge status-preparing">Preparing</span>;
       case 'delivering':
         return <span className="status-badge status-delivering">Delivering</span>;
+      case 'waiting for pick up':
+        return <span className="status-badge status-waiting-for-pickup">Waiting for Pickup</span>;
       default:
         return <span className="status-badge">{status}</span>;
     }
@@ -492,9 +494,11 @@ const ManageOrders = () => {
               >
                 <option value="all">All Statuses</option>
                 <option value="pending">Pending</option>
-                <option value="processing">Processing</option>
+                
                 <option value="completed">Completed</option>
                 <option value="cancelled">Cancelled</option>
+
+                <option value="waiting for pickup">Waiting for Pickup</option>
               </Form.Select>
             </div>
           </div>

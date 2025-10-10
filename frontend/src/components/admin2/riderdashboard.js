@@ -113,6 +113,8 @@ function RiderDashboard() {
         return { color: "#198754", backgroundColor: "#d1e7dd", text: "Confirmed" };
       case "preparing":
         return { color: "#2980b9", backgroundColor: "#cfe2ff", text: "Preparing" };
+      case "waitingforpickup":
+        return { color: "#ffffff", backgroundColor: "#9c27b0", text: "Waiting for Pickup" };
       case "readyToPickup":
         return { color: "#8e44ad", backgroundColor: "#e5dbff", text: "Ready to Pickup" };
       case "pickedUp":
@@ -185,6 +187,7 @@ function RiderDashboard() {
     pending: <FaClock />,
     confirmed: <FaCheckCircle />,
     preparing: <FaBox />,
+    waitingforpickup: <FaClock />,
     readyToPickup: <FaTruckPickup />,
     pickedUp: <FaTruckMoving />,
     pickedup: <FaTruckMoving />,

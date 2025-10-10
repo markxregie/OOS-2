@@ -5,6 +5,8 @@ import 'react-toastify/dist/ReactToastify.css';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2'; // 1. Import SweetAlert2
 
+import Lottie from "lottie-react";
+import coffeeTime from "../assets/Coffee Time.json";
 import './menu.css';
 import { CartContext } from '../contexts/CartContext';
 
@@ -28,6 +30,7 @@ const MenuContent = () => {
   const [selectedAddOns, setSelectedAddOns] = useState([]);
   const [addOnsTotal, setAddOnsTotal] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
 
   const { cartItems, addToCart: addToContextCart } = useContext(CartContext);
@@ -46,7 +49,7 @@ const MenuContent = () => {
 
   useEffect(() => {
     const fetchAllData = async () => {
-      toast.info("Loading menu, please wait...", { autoClose: 1500 });
+      setIsLoading(true);
       const token = localStorage.getItem("authToken");
 
       try {
@@ -216,11 +219,60 @@ const MenuContent = () => {
       } catch (error) {
         console.error("Error fetching products:", error);
         toast.error("Failed to load products");
+      } finally {
+        setIsLoading(false);
       }
     };
 
     fetchAllData();
   }, []);
+
+  const subcategories = products[selectedCategory] ? Object.keys(products[selectedCategory]) : [];
+
+  useEffect(() => {
+    if (!selectedCategory && Object.keys(products).length > 0) {
+      const firstCategory = Object.keys(products)[0];
+      setSelectedCategory(firstCategory);
+    }
+  }, [products, selectedCategory]);
+
+  useEffect(() => {
+    if (selectedCategory && products[selectedCategory]) {
+      if (!selectedSubcategory || !subcategories.includes(selectedSubcategory)) {
+        setSelectedSubcategory(subcategories[0] || '');
+      }
+    }
+  }, [selectedCategory, products, selectedSubcategory, subcategories]);
+
+  if (isLoading) {
+    return (
+      <div style={{ 
+          position: 'fixed', 
+          top: 0, 
+          left: 0, 
+          width: '100%', 
+          height: '100%', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          backgroundColor: 'rgba(240, 249, 250, 0.85)', 
+          backdropFilter: 'blur(5px)',
+          zIndex: 9999 
+        }}>
+        <div>
+          <div style={{ width: '250px', height: '250px' }}>
+            <Lottie animationData={coffeeTime} loop={true} />
+          </div>
+          <div className="wavy-text">
+            {'Brewing Your Menu...'.split('').map((char, index) => (
+              <span key={index} style={{'--i': index + 1}}>{char === ' ' ? '\u00A0' : char}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
 
 
@@ -583,23 +635,6 @@ const MenuContent = () => {
     setPaymentMethod('Cash');
   }
 };
-  const subcategories = products[selectedCategory] ? Object.keys(products[selectedCategory]) : [];
-
-  useEffect(() => {
-    if (!selectedCategory && Object.keys(products).length > 0) {
-      const firstCategory = Object.keys(products)[0];
-      setSelectedCategory(firstCategory);
-    }
-  }, [products, selectedCategory]);
-
-  useEffect(() => {
-    if (selectedCategory && products[selectedCategory]) {
-      if (!selectedSubcategory || !subcategories.includes(selectedSubcategory)) {
-        setSelectedSubcategory(subcategories[0] || '');
-      }
-    }
-  }, [selectedCategory, products, selectedSubcategory, subcategories]);
-
   const currentItems = (products[selectedCategory] && products[selectedCategory][selectedSubcategory]) || [];
   const filteredItems = currentItems.filter(item => item.ProductName.toLowerCase().includes(searchQuery.toLowerCase()));
 

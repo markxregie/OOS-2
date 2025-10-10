@@ -486,3 +486,29 @@
     text-align: center;
   }
 }
+
+/* Wavy text animation for loading screen */
+.wavy-text {
+  position: relative;
+  font-weight: 600;
+  color: #4b929d;
+  font-size: 1.5em;
+  margin-top: -4rem;
+  text-align: center;
+}
+
+.wavy-text span {
+  position: relative;
+  display: inline-block;
+  animation: wave 1.5s ease-in-out infinite;
+  animation-delay: calc(0.1s * var(--i));
+}
+
+@keyframes wave {
+  0%, 40%, 100% {
+    transform: translateY(0);
+  }
+  20% {
+    transform: translateY(-15px);
+  }
+}

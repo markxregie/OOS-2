@@ -462,10 +462,12 @@ const Dashboard = () => {
                       display: 'inline-block',
                       backgroundColor: order.status.toLowerCase() === 'pending' ? '#fff3cd' :
                                          order.status.toLowerCase() === 'processing' ? '#cce5ff' :
+                                         order.status.toLowerCase() === 'waiting for pick up' ? '#9c27b0' :
                                          order.status.toLowerCase() === 'completed' ? '#d4edda' :
                                          order.status.toLowerCase() === 'cancelled' ? '#f8d7da' : '#e9ecef',
                       color: order.status.toLowerCase() === 'pending' ? '#856404' :
                              order.status.toLowerCase() === 'processing' ? '#004085' :
+                             order.status.toLowerCase() === 'waiting for pick up' ? '#ffffff' :
                              order.status.toLowerCase() === 'completed' ? '#155724' :
                              order.status.toLowerCase() === 'cancelled' ? '#721c24' : '#495057',
                       flex: 1,
