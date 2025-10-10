@@ -24,6 +24,7 @@ const Cart = () => {
       const results = {};
 
       for (const item of cartItems) {
+        if (!item.product_id) continue;
         try {
           const res = await fetch(
             `${PRODUCTS_BASE_URL}/is_products/products/${item.product_id}/max-quantity`,
@@ -84,7 +85,13 @@ const Cart = () => {
 
   const handleIncrement = (index) => {
     const item = cartItems[index];
-    const maxQty = maxQuantities[item.product_id]?.maxQuantity ?? 999;
+    const maxQty = item.MerchandiseQuantity ?? maxQuantities[item.product_id]?.maxQuantity ?? 999;
+    const isMerchandise = item.MerchandiseQuantity !== undefined;
+    const isUnavailable = isMerchandise && (maxQty === 0 || item.Status === "Not Available");
+    if (isUnavailable) {
+      toast.error("Item is unavailable.");
+      return;
+    }
     if (item.quantity + 1 > maxQty) {
       toast.error(`Cannot add more. Max quantity is ${maxQty}.`);
       return;
@@ -288,15 +295,25 @@ const Cart = () => {
               <button
                 className="btn btn-sm rounded-circle"
                 onClick={() => handleIncrement(i)}
-                disabled={item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 999)}
+                disabled={item.quantity >= (item.MerchandiseQuantity ?? maxQuantities[item.product_id]?.maxQuantity ?? 999) || (item.MerchandiseQuantity !== undefined && (item.MerchandiseQuantity === 0 || item.Status === "Not Available"))}
               >
                 +
               </button>
-              {(maxQuantities[item.product_id]?.maxQuantity ?? 999) !== 999 && (
-  <div className="max-info text-warning small">
-    Max: {maxQuantities[item.product_id]?.maxQuantity ?? 999}
-  </div>
-)}
+              {(() => {
+                const isMerchandise = item.MerchandiseQuantity !== undefined;
+                const maxQty = isMerchandise ? item.MerchandiseQuantity : (maxQuantities[item.product_id]?.maxQuantity ?? 999);
+                const isUnavailable = isMerchandise && (maxQty === 0 || item.Status === "Not Available");
+                const showMax = isMerchandise || (!isMerchandise && maxQty !== 999);
+                if (showMax) {
+                  return (
+                    <div className="max-info text-warning small">
+                      Max: {maxQty}
+                      {isUnavailable && <span className="text-danger ms-1"> (Unavailable)</span>}
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
           </td>
           <td style={{ textAlign: 'right' }}>₱{item.ProductPrice.toFixed(2)}</td>
