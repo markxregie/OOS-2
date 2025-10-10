@@ -180,10 +180,15 @@ body {
 
   .mobile-cart-icon {
     position: absolute;
-    right: 3.5rem; /* Adjust to place left of toggle */
-    top: 1.6rem;
+    right: 2rem; /* Adjust to place left of toggle */
+    top: -4px;
     z-index: 1050;
     display: inline-block;
+  }
+
+  .cart-badge {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
   }
 
   /* Style for the hamburger to 'X' transformation */

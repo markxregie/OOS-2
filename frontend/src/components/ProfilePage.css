@@ -144,3 +144,124 @@
 .save-btn:hover {
   background-color: #3a7276;
 }
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .profile-container {
+    flex-direction: column;
+    padding: 1rem;
+    margin-top: 4rem;
+  }
+
+  /* Hide sidebar container on mobile */
+  .profile-sidebar-container {
+    display: none !important;
+  }
+
+  .card {
+    max-width: 100%;
+    margin-bottom: 1rem;
+    padding: 1rem;
+  }
+   .profile-picture-card {
+    margin-top: 1.5rem;
+  }
+
+  .profile-picture-card h3 {
+    font-size: 1.2rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .profile-image-wrapper {
+    width: 100px;
+    height: 100px;
+    margin: 0.5rem 0;
+  }
+
+  .image-info {
+    font-size: 0.8rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .account-details-card h3 {
+    font-size: 1.2rem;
+    margin-bottom: 0.8rem;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+    margin-bottom: 0.5rem;
+  }
+
+  .form-row.city-province-row {
+    margin-bottom: 0.5rem;
+    flex-direction: row;
+    gap: 0.5rem;
+  }
+
+  /* Adjust form groups for mobile */
+  .form-group {
+    width: 100%;
+  }
+
+  .form-label {
+    font-size: 0.8rem;
+    margin-bottom: 0.1rem !important;
+  }
+
+  .form-input {
+    font-size: 1.3rem;
+    padding: 0.5rem 3rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  #firstName.form-input,
+  #lastName.form-input {
+    margin-bottom: -0.8rem;
+    font-size: 0.9rem;
+  }
+
+  #blockStreetSubdivision.form-input {
+    margin-bottom: -0.8rem;
+    font-size: 0.9rem;
+  }
+
+  select.form-input {
+    font-size: 0.9rem;
+    margin-bottom: -0.8rem;
+    padding: 0.5rem 0.5rem;
+    
+  }
+
+  #landmark.form-input {
+    margin-bottom: -0.8rem;
+    font-size: 0.9rem;
+  }
+
+  #phone.form-input,
+  #birthday.form-input {
+    font-size: 0.9rem;
+    margin-bottom: -0.8rem;
+    padding: 0.5rem 0.5rem;
+  }
+
+  #email.form-input {
+    font-size: 0.9rem;
+  }
+
+  #username.form-input {
+    font-size: 0.9rem;
+  }
+
+  .profile-btn {
+    font-size: 0.9rem;
+    padding: 0.4rem 0.8rem;
+  }
+
+  .save-btn {
+    align-self: stretch;
+    padding: 0.5rem 1rem;
+  }
+  
+}

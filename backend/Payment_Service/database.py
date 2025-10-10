@@ -1,12 +1,11 @@
 import aioodbc
 import os
 # database config
-server = 'DESKTOP-FH6B6B4\SQLEXPRESS'
+server = 'DESKTOP-D84FNH8'
 database = 'OOS'
-username = 'imsadmin'
-password = 'imsadmin'
+username = 'sa'
+password = 'markregie123'
 driver = 'ODBC Driver 17 for SQL Server'
-
 
 # async function to get db connection
 async def get_db_connection():
