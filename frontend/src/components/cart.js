@@ -51,8 +51,7 @@ const Cart = () => {
   const [receiptFile, setReceiptFile] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('cash');
-  const [paymentMethodMain, setPaymentMethodMain] = useState('Cash');
+  const [paymentMethodMain, setPaymentMethodMain] = useState('E-Wallet');
   const [orderTypeMain, setOrderTypeMain] = useState('Pick Up');
 
   const [formData, setFormData] = useState({
@@ -428,18 +427,8 @@ const Cart = () => {
                       <div className="btn-group-toggle mt-2" style={{ margin: '0 auto' }}>
                         <button
                           type="button"
-                          className={`d-flex align-items-center justify-content-center ${paymentMethodMain === 'Cash' ? 'btn-active-custom' : ''}`}
+                          className="d-flex align-items-center justify-content-center btn-active-custom"
                           style={{ minWidth: '120px' }}
-                          onClick={() => setPaymentMethodMain('Cash')}
-                        >
-                          <i className="bi bi-cash-stack"></i>
-                          Cash
-                        </button>
-                        <button
-                          type="button"
-                          className={`d-flex align-items-center justify-content-center ${paymentMethodMain === 'E-Wallet' ? 'btn-active-custom' : ''}`}
-                          style={{ minWidth: '120px' }}
-                          onClick={() => setPaymentMethodMain('E-Wallet')}
                         >
                           <i className="bi bi-wallet2"></i>
                           E-Wallet

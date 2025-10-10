@@ -25,7 +25,7 @@ const MenuContent = () => {
   const [selectedItem, setSelectedItem] = useState(null);
   const [orderNotes, setOrderNotes] = useState('');
   const [deliveryMethod, setDeliveryMethod] = useState('Pick-up');
-  const [paymentMethod, setPaymentMethod] = useState('Cash');
+  const [paymentMethod, setPaymentMethod] = useState('E-Wallet');
   // 1. New state for selected add-ons and total
   const [selectedAddOns, setSelectedAddOns] = useState([]);
   const [addOnsTotal, setAddOnsTotal] = useState(0);
@@ -565,23 +565,12 @@ const MenuContent = () => {
                 type="radio"
                 class="btn-check"
                 name="paymentMethodSwal"
-                id="cashSwal"
+                id="ewalletSwal"
                 autocomplete="off"
-                value="Cash"
-                ${paymentMethod === 'Cash' ? 'checked' : ''}
+                value="E-Wallet"
+                checked
               />
-              <label class="btn btn-outline-secondary rounded-start-pill" for="cashSwal">Cash</label>
-
-              <input
-                type="radio"
-                class="btn-check"
-                name="paymentMethodSwal"
-                id="gcashSwal"
-                autocomplete="off"
-                value="Gcash"
-                ${paymentMethod === 'Gcash' ? 'checked' : ''}
-              />
-              <label class="btn btn-outline-secondary rounded-end-pill" for="gcashSwal">Gcash</label>
+              <label class="btn btn-outline-secondary w-100" for="ewalletSwal">E-Wallet</label>
             </div>
           </div>
         </div>
@@ -648,7 +637,7 @@ const MenuContent = () => {
     setSelectedAddOns([]);
     setAddOnsTotal(0);
     setDeliveryMethod('Pick-up');
-    setPaymentMethod('Cash');
+    setPaymentMethod('E-Wallet');
   }
 };
   const currentItems = (products[selectedCategory] && products[selectedCategory][selectedSubcategory]) || [];
