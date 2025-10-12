@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Table, Badge, Nav } from 'react-bootstrap';
-import { FaChevronDown, FaBell, FaSignOutAlt, FaUndo, FaEye, FaTrashAlt, FaTag, FaEnvelope, FaUser, FaClock, FaCommentDots } from "react-icons/fa"; // Added new icons for modal content
+import { FaChevronDown, FaBell, FaSignOutAlt, FaUndo, FaEye, FaTrashAlt, FaTag, FaEnvelope, FaUser, FaClock, FaCommentDots, FaAngleLeft, FaAngleRight, FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa"; // Added new icons for modal content
 import Swal from 'sweetalert2';
 import './concerns.css'; // Assuming this file contains the necessary styles for header, etc.
 
@@ -24,14 +24,39 @@ const Concerns = () => {
     weekday: "long", year: "numeric", month: "long", day: "numeric"
   });
 
-  // Updated Placeholder data for concerns with new columns
-  const [concernsData, setConcernsData] = useState([
-    { id: 1, name: 'John Doe', email: 'john.doe@example.com', subject: 'Service Feedback', message: 'Service was slow and my order was wrong. I waited for 30 minutes just for a glass of water, and when the food finally came, the chicken was undercooked. This is highly disappointing for a place of your reputation.', status: 'Pending', dateSubmitted: '2023-10-01 14:30' },
-    { id: 2, name: 'Jane Smith', email: 'jane.smith@example.com', subject: 'Product Inquiry', message: 'Is the new dish gluten-free? I couldn\'t find the ingredients listed anywhere on the menu or your website. I have a severe allergy, so this information is critical before I can order it.', status: 'Resolved', dateSubmitted: '2023-10-02 09:15' },
-    { id: 3, name: 'Alex Johnson', email: 'alex.j@example.com', subject: 'Billing Issue', message: 'I was double-charged on my last visit. The receipt shows two transactions for the same amount. Please check your system and process a refund immediately.', status: 'In Progress', dateSubmitted: '2023-10-03 11:00' },
-    { id: 4, name: 'Maria Garcia', email: 'maria.g@example.com', subject: 'General Compliment', message: 'I loved the atmosphere and the coffee was excellent! Your barista, Sarah, was incredibly kind and made a beautiful latte. Keep up the fantastic work!', status: 'Resolved', dateSubmitted: '2023-10-03 16:45' },
-    // Add more as needed
-  ]);
+  const [concernsData, setConcernsData] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  useEffect(() => {
+    fetchConcerns();
+  }, []);
+
+  const fetchConcerns = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:7007/concerns');
+      if (response.ok) {
+        const data = await response.json();
+        setConcernsData(data.map(concern => {
+          let formatted = new Date(concern.submitted_at).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
+          formatted = formatted.replace('AM', 'am').replace('PM', 'pm');
+          return {
+            ...concern,
+            dateSubmitted: formatted
+          };
+        }));
+      } else {
+        console.error('Failed to fetch concerns');
+      }
+    } catch (error) {
+      console.error('Error fetching concerns:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusClass = (status) => {
     switch (status) {
@@ -52,7 +77,31 @@ const Concerns = () => {
     return true;
   });
 
-  const handleView = (id) => {
+  // Calculate pagination
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentConcerns = filteredConcerns.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredConcerns.length / itemsPerPage);
+
+  const paginate = (pageNumber) => setCurrentPage(pageNumber);
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) setCurrentPage(currentPage - 1);
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+  };
+
+  const handleFirstPage = () => {
+    setCurrentPage(1);
+  };
+
+  const handleLastPage = () => {
+    setCurrentPage(totalPages);
+  };
+
+  const handleView = async (id) => {
     const concern = concernsData.find(c => c.id === id);
     if (!concern) return;
 
@@ -64,7 +113,7 @@ const Concerns = () => {
         statusColor = '#28a745'; // Green for Resolved
     }
 
-    Swal.fire({
+    const result = await Swal.fire({
       title: `Concern ${id} Details`,
       // Custom HTML structure for a cleaner look with icons and clear labels
       html: `
@@ -99,25 +148,45 @@ const Concerns = () => {
       didOpen: () => {
         // You can add focus or other DOM manipulations here if needed
       }
-    }).then((result) => {
-      if (result.isConfirmed && concern.status !== 'Resolved') {
-        // Mark as resolved only if it wasn't already
-        setConcernsData(prev => prev.map(c => c.id === id ? { ...c, status: 'Resolved' } : c));
-        Swal.fire({
+    });
+
+    if (result.isConfirmed && concern.status !== 'Resolved') {
+      try {
+        const response = await fetch(`http://127.0.0.1:7007/concerns/${id}/status`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ status: 'Resolved' }),
+        });
+        if (response.ok) {
+          setConcernsData(prev => prev.map(c => c.id === id ? { ...c, status: 'Resolved' } : c));
+          Swal.fire({
             title: 'Resolved!',
             text: 'The concern has been marked as resolved.',
             icon: 'success',
             confirmButtonColor: '#4a9ba5'
+          });
+        } else {
+          Swal.fire({
+            title: 'Error!',
+            text: 'Failed to update status.',
+            icon: 'error',
+          });
+        }
+      } catch (error) {
+        console.error('Error updating status:', error);
+        Swal.fire({
+          title: 'Error!',
+          text: 'An error occurred while updating status.',
+          icon: 'error',
         });
-      } else if (result.isConfirmed && concern.status === 'Resolved') {
-          // If already resolved, just close the modal
-          Swal.close();
       }
-    });
+    }
   };
 
-  const handleDelete = (id) => {
-    Swal.fire({
+  const handleDelete = async (id) => {
+    const result = await Swal.fire({
       title: 'Are you sure?',
       text: "You won't be able to revert this!",
       icon: 'warning',
@@ -125,16 +194,36 @@ const Concerns = () => {
       confirmButtonColor: '#dc3545',
       cancelButtonColor: '#6c757d',
       confirmButtonText: 'Yes, delete it!'
-    }).then((result) => {
-      if (result.isConfirmed) {
-        setConcernsData(prev => prev.filter(c => c.id !== id));
+    });
+
+    if (result.isConfirmed) {
+      try {
+        const response = await fetch(`http://127.0.0.1:7007/concerns/${id}`, {
+          method: 'DELETE',
+        });
+        if (response.ok) {
+          setConcernsData(prev => prev.filter(c => c.id !== id));
+          Swal.fire(
+            'Deleted!',
+            `Concern ID: ${id} has been deleted.`,
+            'success'
+          );
+        } else {
+          Swal.fire(
+            'Error!',
+            'Failed to delete the concern.',
+            'error'
+          );
+        }
+      } catch (error) {
+        console.error('Error deleting concern:', error);
         Swal.fire(
-          'Deleted!',
-          `Concern ID: ${id} has been deleted.`,
-          'success'
+          'Error!',
+          'An error occurred while deleting the concern.',
+          'error'
         );
       }
-    });
+    }
   };
 
   return (
@@ -207,7 +296,7 @@ const Concerns = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredConcerns.map((concern) => (
+              {currentConcerns.map((concern) => (
                 <tr key={concern.id}>
                   <td>{concern.id}</td>
                   <td>{concern.name}</td>
@@ -220,29 +309,68 @@ const Concerns = () => {
                   </td>
                   <td>{concern.dateSubmitted}</td>
                   <td>
-                    <div className="d-flex gap-2">
-                      <button
-                        className="btn btn-sm btn-outline-primary"
-                        title="View Details"
-                        onClick={() => handleView(concern.id)}
-                        style={{ border: 'none' }}
-                      >
-                        <FaEye />
-                      </button>
-                      <button
-                        className="btn btn-sm btn-outline-danger"
-                        title="Delete Concern"
-                        onClick={() => handleDelete(concern.id)}
-                        style={{ border: 'none' }}
-                      >
-                        <FaTrashAlt />
-                      </button>
-                    </div>
+                    <button
+                      className="btn btn-sm btn-outline-primary"
+                      title="View Details"
+                      onClick={() => handleView(concern.id)}
+                      style={{ border: 'none' }}
+                    >
+                      <FaEye />
+                    </button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </Table>
+          {/* Pagination Controls */}
+          {filteredConcerns.length > itemsPerPage && (
+            <div className="d-flex justify-content-between align-items-center mt-3">
+              <div>
+                Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredConcerns.length)} of {filteredConcerns.length} entries
+              </div>
+              <div className="d-flex align-items-center">
+                <button
+                  className="pagination-btn"
+                  onClick={handleFirstPage}
+                  disabled={currentPage === 1}
+                >
+                  <FaAngleDoubleLeft />
+                </button>
+                <button
+                  className="pagination-btn"
+                  onClick={handlePrevPage}
+                  disabled={currentPage === 1}
+                >
+                  <FaAngleLeft />
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(number => (
+                  <button
+                    key={number}
+                    className={`pagination-btn ${currentPage === number ? 'active' : ''}`}
+                    onClick={() => paginate(number)}
+                  >
+                    {number}
+                  </button>
+                ))}
+
+                <button
+                  className="pagination-btn"
+                  onClick={handleNextPage}
+                  disabled={currentPage === totalPages}
+                >
+                  <FaAngleRight />
+                </button>
+                <button
+                  className="pagination-btn"
+                  onClick={handleLastPage}
+                  disabled={currentPage === totalPages}
+                >
+                  <FaAngleDoubleRight />
+                </button>
+              </div>
+            </div>
+          )}
           {filteredConcerns.length === 0 && (
             <div className="text-center text-muted p-4 border rounded">
               No concerns found.

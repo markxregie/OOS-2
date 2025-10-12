@@ -65,6 +65,11 @@
   color: #155724;
 }
 
+.status-delivered {
+  background-color: rgb(25, 135, 84);
+  color: #ffffff;
+}
+
 .status-cancelled {
   background-color: #f8d7da;
   color: #721c24;

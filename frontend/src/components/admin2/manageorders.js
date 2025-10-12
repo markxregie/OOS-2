@@ -260,6 +260,8 @@ const ManageOrders = () => {
         return <span className="status-badge status-processing">Processing</span>;
       case 'completed':
         return <span className="status-badge status-completed">Completed</span>;
+      case 'delivered':
+        return <span className="status-badge status-delivered">Delivered</span>;
       case 'cancelled':
         return <span className="status-badge status-cancelled">Cancelled</span>;
       case 'preparing':
