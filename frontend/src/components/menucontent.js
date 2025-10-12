@@ -25,7 +25,7 @@ const MenuContent = () => {
   const [selectedItem, setSelectedItem] = useState(null);
   const [orderNotes, setOrderNotes] = useState('');
   const [deliveryMethod, setDeliveryMethod] = useState('Pick-up');
-  const [paymentMethod, setPaymentMethod] = useState('Cash');
+  const [paymentMethod, setPaymentMethod] = useState('E-Wallet');
   // 1. New state for selected add-ons and total
   const [selectedAddOns, setSelectedAddOns] = useState([]);
   const [addOnsTotal, setAddOnsTotal] = useState(0);
@@ -122,6 +122,7 @@ const MenuContent = () => {
             ProductTypeName: "Merchandise",
             ProductCategory: "All Items",
             Status: item.Status,
+            MerchandiseQuantity: item.MerchandiseQuantity,
           }));
 
           // Add to grouped
@@ -188,6 +189,7 @@ const MenuContent = () => {
             ProductTypeName: "Merchandise",
             ProductCategory: "All Items",
             Status: item.Status,
+            MerchandiseQuantity: item.MerchandiseQuantity,
           }));
 
           // Add to grouped
@@ -301,7 +303,7 @@ const MenuContent = () => {
     }
 
     // Check if the item is available before adding to cart
-    if (item.Status !== 'Available') {
+    if (item.Status !== 'Available' || (item.ProductTypeName === 'Merchandise' && item.MerchandiseQuantity <= 0)) {
       toast.error(`${item.ProductName} is currently unavailable.`);
       return;
     }
@@ -320,25 +322,31 @@ const MenuContent = () => {
       currentQty = cartItems[existingItemIndex].quantity;
     }
 
-    // Fetch max quantity
-    try {
-      const res = await fetch(`${PRODUCTS_BASE_URL}/is_products/products/${item.ProductID}/max-quantity`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const maxQty = data.maxQuantity;
-        if (currentQty + 1 > maxQty) {
-          toast.error(`Cannot add more. Max quantity is ${maxQty}.`);
-          return;
+    // Get max quantity
+    let maxQty;
+    if (item.ProductTypeName === 'Merchandise') {
+      maxQty = item.MerchandiseQuantity;
+    } else {
+      try {
+        const res = await fetch(`${PRODUCTS_BASE_URL}/is_products/products/${item.ProductID}/max-quantity`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          maxQty = data.maxQuantity;
+        } else {
+          console.warn("Failed to fetch max quantity, proceeding without check.");
+          maxQty = Infinity;
         }
-      } else {
-        // If fetch fails, proceed (optional: could show warning)
-        console.warn("Failed to fetch max quantity, proceeding without check.");
+      } catch (err) {
+        console.error("Error fetching max quantity:", err);
+        maxQty = Infinity;
       }
-    } catch (err) {
-      console.error("Error fetching max quantity:", err);
-      // Proceed without check
+    }
+
+    if (currentQty + 1 > maxQty) {
+      toast.error(`Cannot add more. Max quantity is ${maxQty}.`);
+      return;
     }
 
     addToContextCart({
@@ -352,6 +360,7 @@ const MenuContent = () => {
       // 3. Include notes and add-ons in the cart item
       orderNotes: notes,
       addOns: addOns,
+      MerchandiseQuantity: item.MerchandiseQuantity,
     });
 
     const finalPrice = (item.ProductPrice ?? 0) + addOnsTotal;
@@ -556,23 +565,12 @@ const MenuContent = () => {
                 type="radio"
                 class="btn-check"
                 name="paymentMethodSwal"
-                id="cashSwal"
+                id="ewalletSwal"
                 autocomplete="off"
-                value="Cash"
-                ${paymentMethod === 'Cash' ? 'checked' : ''}
+                value="E-Wallet"
+                checked
               />
-              <label class="btn btn-outline-secondary rounded-start-pill" for="cashSwal">Cash</label>
-
-              <input
-                type="radio"
-                class="btn-check"
-                name="paymentMethodSwal"
-                id="gcashSwal"
-                autocomplete="off"
-                value="Gcash"
-                ${paymentMethod === 'Gcash' ? 'checked' : ''}
-              />
-              <label class="btn btn-outline-secondary rounded-end-pill" for="gcashSwal">Gcash</label>
+              <label class="btn btn-outline-secondary w-100" for="ewalletSwal">E-Wallet</label>
             </div>
           </div>
         </div>
@@ -607,6 +605,12 @@ const MenuContent = () => {
   // Updated handler to accept add-ons details
   const handleConfirmBuyNow = (item, notes, addOns, addOnsTotal, delivery, payment) => {
   if (item) {
+    // Check availability for Buy Now as well
+    if (item.Status !== 'Available' || (item.ProductTypeName === 'Merchandise' && item.MerchandiseQuantity <= 0)) {
+      toast.error(`${item.ProductName} is currently unavailable.`);
+      return;
+    }
+
     navigate('/checkout', {
       state: {
         cartItems: [{
@@ -621,6 +625,7 @@ const MenuContent = () => {
           // --- THIS IS THE FIX ---
           addons: addOns, // Change 'addOns' to 'addons' (lowercase)
           // -----------------------
+          MerchandiseQuantity: item.MerchandiseQuantity,
         }],
         orderType: delivery,
         paymentMethod: payment,
@@ -632,7 +637,7 @@ const MenuContent = () => {
     setSelectedAddOns([]);
     setAddOnsTotal(0);
     setDeliveryMethod('Pick-up');
-    setPaymentMethod('Cash');
+    setPaymentMethod('E-Wallet');
   }
 };
   const currentItems = (products[selectedCategory] && products[selectedCategory][selectedSubcategory]) || [];
@@ -684,7 +689,7 @@ const MenuContent = () => {
 
           <div className="items-grid">
             {filteredItems.map((item) => {
-              const isAvailable = item.Status === 'Available';
+              const isAvailable = item.Status === 'Available' && (item.ProductTypeName !== 'Merchandise' || item.MerchandiseQuantity > 0);
               return (
                 <div
                   className={`item-card ${!isAvailable ? 'unavailable' : ''}`}
