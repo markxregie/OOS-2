@@ -652,7 +652,7 @@ const MenuContent = () => {
           <div className="menu-category">
             {Object.keys(products).map((productType) => (
               <div key={productType}>
-                <h3>{productType}</h3>
+                <h3 className={productType === 'Merchandise' ? 'merchandise-title' : ''}>{productType}</h3>
                 <ul>
                   {products[productType] &&
                     Object.keys(products[productType]).map((subcat) => (

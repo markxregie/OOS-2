@@ -424,6 +424,10 @@
     font-size: 1rem;
   }
 
+  .merchandise-title {
+    font-size: 0.65rem !important;
+  }
+
   .menu-sidebar .menu-category li {
     font-size: 0.7rem;
   }
