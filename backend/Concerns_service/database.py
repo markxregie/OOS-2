@@ -1,10 +1,10 @@
 import aioodbc
 import os
 # database config
-server = 'DESKTOP-OD6PU2O'
+server = 'DESKTOP-VQQ0NIU\SQLEXPRESS'
 database = 'OOS'
 username = 'sa'
-password = 'speedmabagal69'
+password = 'imsadmin'
 driver = 'ODBC Driver 17 for SQL Server'
 
 
