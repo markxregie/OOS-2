@@ -80,6 +80,11 @@
   color: #ffffff;
 }
 
+.status-waiting-for-pickup {
+  background-color: #9c27b0;
+  color: #ffffff;
+}
+
 /* Action Buttons */
 .action-btn {
   border: none;

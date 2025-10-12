@@ -293,6 +293,7 @@ function DeliveryManagement() {
       )
     );
   };
+  
 
   const getStatusStyle = (status) => {
     const normalizedStatus = status ? status.toLowerCase() : "";
@@ -303,13 +304,15 @@ function DeliveryManagement() {
         return { color: "#198754", backgroundColor: "#d1e7dd" };
       case "preparing":
         return { color: "#2980b9", backgroundColor: "#cfe2ff" };
+      case "waitingforpickup":
+        return { color: "#ffffff", backgroundColor: "#9c27b0" };
       case "readytopickup":
         return { color: "#8e44ad", backgroundColor: "#e5dbff" };
       case "pickedup":
         return { color: "#0d6efd", backgroundColor: "#cfe2ff" };
       case "intransit":
-      case "delivering": 
-        return { color: "#3f51b5", backgroundColor: "#e5dbff" }; 
+      case "delivering":
+        return { color: "#3f51b5", backgroundColor: "#e5dbff" };
       case "delivered":
         return { color: "#198754", backgroundColor: "#d1e7dd" };
       case "completed":
@@ -402,9 +405,7 @@ function DeliveryManagement() {
           {(() => {
             const statusCounts = {
               pending: 0,
-              confirmed: 0,
               preparing: 0,
-              pickedUp: 0,
               inTransit: 0,
               delivered: 0,
               cancelled: 0,
@@ -428,19 +429,9 @@ function DeliveryManagement() {
                   <span style={{ fontSize: "1.2rem", fontWeight: "700", textAlign: "center" }}>{pendingOrdersCount}</span>
                 </Card>
                 <Card style={{ flex: "1", minWidth: "150px", padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
-                  <FaCheckCircle color="#198754" size={32} />
-                  <span style={{ fontSize: "1rem", fontWeight: "400" }}>Confirmed</span>
-                  <span style={{ fontSize: "1.2rem", fontWeight: "700", textAlign: "center" }}>{statusCounts.confirmed}</span>
-                </Card>
-                <Card style={{ flex: "1", minWidth: "150px", padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
                   <FaSpinner color="#2980b9" size={32} />
                   <span style={{ fontSize: "1rem", fontWeight: "400" }}>Preparing</span>
                   <span style={{ fontSize: "1.2rem", fontWeight: "700", textAlign: "center" }}>{statusCounts.preparing}</span>
-                </Card>
-                <Card style={{ flex: "1", minWidth: "150px", padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
-                  <FaTruckPickup color="#0d6efd" size={32} />
-                  <span style={{ fontSize: "1rem", fontWeight: "400" }}>Picked up</span>
-                  <span style={{ fontSize: "1.2rem", fontWeight: "700", textAlign: "center" }}>{statusCounts.pickedUp}</span>
                 </Card>
                 <Card style={{ flex: "1", minWidth: "150px", padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
                   <FaTruckMoving color="#6610f2" size={32} />
@@ -475,9 +466,7 @@ function DeliveryManagement() {
             >
               <option value="all">All Statuses</option>
               <option value="pending">Pending</option>
-              <option value="confirmed">Confirmed</option>
               <option value="preparing">Preparing</option>
-              <option value="pickedUp">Picked Up</option>
               <option value="inTransit">Delivering</option>
               <option value="delivered">Delivered</option>
               <option value="cancelled">Cancelled</option>
@@ -525,6 +514,7 @@ function DeliveryManagement() {
                     pending: "Pending",
                     confirmed: "Confirmed",
                     preparing: "Preparing",
+                    waitingforpickup: "Waiting for Pickup",
                     readytopickup: "Ready to Pickup",
                     pickedup: "Picked Up",
                     intransit: "Delivering", // This key already maps to "Delivering"
