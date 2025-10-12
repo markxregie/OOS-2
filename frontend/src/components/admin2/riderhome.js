@@ -205,12 +205,10 @@ function RiderDashboard() {
         return { color: "#2980b9", backgroundColor: "#cfe2ff", text: "Preparing" };
       case "waitingforpickup":
         return { color: "#ffffff", backgroundColor: "#9c27b0", text: "Waiting for Pickup" };
-      case "readyToPickup":
-        return { color: "#8e44ad", backgroundColor: "#e5dbff", text: "Ready to Pickup" };
-      case "pickedUp":
+      case "pickedup":
         return { color: "#0d6efd", backgroundColor: "#cfe2ff", text: "Picked Up" };
-      case "inTransit":
-        return { color: "#6610f2", backgroundColor: "#e5dbff", text: "In Transit" };
+      case "delivering":
+        return { color: "#6610f2", backgroundColor: "#e5dbff", text: "Delivering" };
       case "delivered":
         return { color: "#198754", backgroundColor: "#d1e7dd", text: "Delivered" };
       case "cancelled":
@@ -239,7 +237,7 @@ function RiderDashboard() {
     if (earningsFilter === "Daily") {
       startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       return orders
-        .filter(order => ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"].includes(order.currentStatus) && new Date(order.orderedAt) >= startDate)
+        .filter(order => ["pending", "confirmed", "preparing", "waitingforpickup", "pickedup", "delivering"].includes(order.currentStatus) && new Date(order.orderedAt) >= startDate)
         .reduce((sum, order) => sum + (order.total || 0), 0)
         .toFixed(2);
     } else if (earningsFilter === "Weekly") {
@@ -249,40 +247,78 @@ function RiderDashboard() {
     } else {
       // All-Time
       return orders
-        .filter(order => ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit", "delivered"].includes(order.currentStatus))
+        .filter(order => ["pending", "confirmed", "preparing", "waitingforpickup", "pickedup", "delivering", "delivered"].includes(order.currentStatus))
         .reduce((sum, order) => sum + (order.total || 0), 0)
         .toFixed(2);
     }
 
     return orders
-      .filter(order => ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"].includes(order.currentStatus) && new Date(order.orderedAt) >= startDate)
+      .filter(order => ["pending", "confirmed", "preparing", "waitingforpickup", "pickedup", "delivering"].includes(order.currentStatus) && new Date(order.orderedAt) >= startDate)
       .reduce((sum, order) => sum + (order.total || 0), 0)
       .toFixed(2);
   };
 
-  const updateOrderStatus = async (orderId, status) => {
+  const updateOrderStatus = async (orderId, newStatus) => {
     try {
-      const response = await fetch(`http://localhost:7004/delivery/orders/${orderId}/status`, {
+      // PATCH to cart/rider/orders
+      const cartResponse = await fetch(`http://localhost:7004/cart/rider/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ new_status: newStatus.toUpperCase() })
+      });
+      if (!cartResponse.ok) {
+        throw new Error(`Failed to update cart status: ${cartResponse.status}`);
+      }
+
+      // PUT to delivery/orders
+      const deliveryResponse = await fetch(`http://localhost:7004/delivery/orders/${orderId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
         },
-        body: JSON.stringify({ status })
+        body: JSON.stringify({ status: newStatus })
       });
-      if (!response.ok) {
-        throw new Error(`Failed to update status: ${response.status}`);
+      if (!deliveryResponse.ok) {
+        throw new Error(`Failed to update delivery status: ${deliveryResponse.status}`);
       }
-      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, currentStatus: status } : o));
+
+      // If delivered, update POS
+      if (newStatus === 'delivered') {
+        const posResponse = await fetch(`http://127.0.0.1:9000/auth/purchase_orders/online/${orderId}/status`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ newStatus: "completed" })
+        });
+        if (!posResponse.ok) {
+          throw new Error(`Failed to update POS status: ${posResponse.status}`);
+        }
+      }
+
+      // Update local state
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, currentStatus: newStatus } : o));
+
+      // Success message
+      Swal.fire("Success", "Order marked as " + newStatus, "success");
     } catch (e) {
       Swal.fire('Error', e.message, 'error');
     }
   };
 
   const handleProgressiveStatusChange = (orderId, currentStatus) => {
-    if (currentStatus === 'pickedUp' || currentStatus === 'inTransit') {
-      // For 'Delivered' status, show the modal
-      setCurrentOrderToDeliver(orderId);
+    let nextStatus;
+    if (currentStatus === 'waitingforpickup') nextStatus = 'pickedup';
+    else if (currentStatus === 'pickedup') nextStatus = 'delivering';
+    else if (currentStatus === 'delivering') nextStatus = 'delivered';
+    else return;
+
+    if (nextStatus === 'delivered') {
       Swal.fire({
         title: 'Proof of Delivery',
         html: '<input type="file" id="delivery-photo" accept="image/*" class="swal2-file-input">',
@@ -296,10 +332,8 @@ function RiderDashboard() {
             Swal.showValidationMessage('Please upload a photo.');
             return false;
           }
-          // Simulate an API call for file upload
           return new Promise((resolve) => {
             setTimeout(() => {
-              // Here you would handle the file upload to your server
               console.log('File uploaded:', file.name);
               resolve();
             }, 1000);
@@ -307,20 +341,11 @@ function RiderDashboard() {
         }
       }).then((result) => {
         if (result.isConfirmed) {
-          // If a file was uploaded and confirmed, update the order status
           updateOrderStatus(orderId, 'delivered');
-          Swal.fire(
-            'Delivered!',
-            'The order has been marked as delivered.',
-            'success'
-          );
         }
       });
     } else {
-      // For other statuses, use the existing confirmation dialog
-      let newStatus = 'pickedUp';
-      let confirmationText = 'Are you sure you want to mark this order as Picked Up?';
-
+      let confirmationText = `Are you sure you want to mark this order as ${nextStatus.charAt(0).toUpperCase() + nextStatus.slice(1)}?`;
       Swal.fire({
         title: 'Confirm Status Change',
         text: confirmationText,
@@ -331,12 +356,7 @@ function RiderDashboard() {
         confirmButtonText: 'Yes, change it!'
       }).then((result) => {
         if (result.isConfirmed) {
-          updateOrderStatus(orderId, newStatus);
-          Swal.fire(
-            'Updated!',
-            'The order status has been changed.',
-            'success'
-          );
+          updateOrderStatus(orderId, nextStatus);
         }
       });
     }
@@ -346,9 +366,9 @@ function RiderDashboard() {
     pending: <FaClock />,
     confirmed: <FaCheckCircle />,
     preparing: <FaBox />,
-    readyToPickup: <FaTruckPickup />,
-    pickedUp: <FaTruckMoving />,
-    inTransit: <FaTruckMoving />,
+    waitingforpickup: <FaTruckPickup />,
+    pickedup: <FaTruckMoving />,
+    delivering: <FaTruckMoving />,
     delivered: <FaCheckCircle />,
     cancelled: <FaTimesCircle />,
     returned: <FaUndo />,
@@ -358,28 +378,21 @@ function RiderDashboard() {
 
   // Helper function to render the correct button text
   const getButtonText = (currentStatus) => {
-    if (["pending", "confirmed", "preparing", "readyToPickup"].includes(currentStatus)) {
-      return 'Picked Up';
-    } else if (["pickedUp", "inTransit"].includes(currentStatus)) {
-      return 'Delivered';
-    } else {
-      return ''; // For other statuses like 'delivered' or 'cancelled'
-    }
+    if (currentStatus === 'waitingforpickup') return 'Picked Up';
+    else if (currentStatus === 'pickedup') return 'Delivering';
+    else if (currentStatus === 'delivering') return 'Delivered';
+    return '';
   };
 
   // Helper function to determine if the button should be rendered at all
   const shouldRenderButton = (currentStatus) => {
-    return ["readyToPickup", "pickedUp", "inTransit", "preparing", "confirmed", "pending"].includes(currentStatus);
+    return ['waitingforpickup', 'pickedup', 'delivering'].includes(currentStatus);
   };
 
   // Helper function to determine the button's class name
   const getButtonClass = (currentStatus) => {
-    if (currentStatus === 'pickedUp' || currentStatus === 'inTransit') {
-      return 'delivered';
-    } else if (currentStatus === 'readyToPickup' || currentStatus === 'pending' || currentStatus === 'confirmed' || currentStatus === 'preparing') {
-      return 'pickedUp';
-    }
-    return '';
+    if (currentStatus === 'delivering') return 'delivered';
+    else return 'pickedUp';
   };
 
   const navigateToDashboard = () => {
