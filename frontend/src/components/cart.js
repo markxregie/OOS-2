@@ -6,6 +6,123 @@ import 'react-toastify/dist/ReactToastify.css';
 import './cart.css';
 import { CartContext } from '../contexts/CartContext';
 
+// Modal component definition
+const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderTypeMain, handleCheckoutClick, setOrderTypeMain }) => {
+    // Helper to calculate total (copied from main component)
+    const calculateTotal = (item) => {
+        const basePrice = item.ProductPrice || 0;
+        const addonsTotal = (item.addons || []).reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0);
+        return (basePrice + addonsTotal) * item.quantity;
+    };
+
+    const subtotal = selectedCartItems.reduce((acc, item) => {
+        const basePrice = item.ProductPrice || 0;
+        const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || addon.Price || 0), 0);
+        return acc + (basePrice + addonsTotal) * item.quantity;
+    }, 0);
+
+    const deliveryFee = orderTypeMain === 'Delivery' ? 50 : 0;
+    const finalTotal = subtotal + deliveryFee;
+
+    if (!show) return null;
+
+    return (
+        <div className="modal-custom-backdrop" onClick={onClose}>
+            <div className="modal-custom-content" onClick={e => e.stopPropagation()}>
+                <div className="d-flex justify-content-between align-items-center modal-header-custom">
+                    <h5 className="fw-bold m-0">Order Details ({selectedCartItems.length} items)</h5>
+                    <button type="button" className="btn-close" onClick={onClose}></button>
+                </div>
+                
+                <div className="p-3">
+                    <div className="d-flex justify-content-center mb-3">
+                        <div className="btn-group-toggle" role="group" aria-label="Order Type Toggle">
+                            {/* BUTTONS ARE NOW CLICKABLE AND UPDATE STATE */}
+                            <button
+                                type="button"
+                                className={`${orderTypeMain === 'Pick Up' ? 'btn-active-custom' : ''}`}
+                                onClick={() => setOrderTypeMain('Pick Up')}
+                            >
+                                <i className="bi bi-bag-fill"></i> Pick Up
+                            </button>
+                            <button
+                                type="button"
+                                className={`${orderTypeMain === 'Delivery' ? 'btn-active-custom' : ''}`}
+                                onClick={() => setOrderTypeMain('Delivery')}
+                            >
+                                <i className="bi bi-truck"></i> Delivery
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="order-summary-mobile">
+                        <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white' }}>
+                            <thead>
+                                <tr>
+                                    <th style={{ textAlign: 'left', padding: '8px' }}>Product</th>
+                                    <th style={{ textAlign: 'center', padding: '8px' }}>Qty</th>
+                                    <th style={{ textAlign: 'right', padding: '8px' }}>Price</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {selectedCartItems.map((item, i) => (
+                                    <tr key={i}>
+                                        <td style={{ textAlign: 'left', padding: '8px', fontSize: '0.9rem' }}>
+                                            <div className="fw-semibold">{item.ProductName}</div>
+                                            {/* ADD-ONS INCLUDED */}
+                                            {item.addons && item.addons.length > 0 && (
+                                                <ul className="cart-addons mb-0 ps-3">
+                                                    {item.addons.map((addon, idx) => (
+                                                        <li key={idx} style={{ fontSize: "0.8em", color: addon.status === 'Unavailable' ? '#999' : '#666', fontStyle: addon.status === 'Unavailable' ? 'italic' : 'normal' }}>
+                                                            + {addon.addon_name || addon.AddOnName || addon.name} (₱{addon.price || addon.Price || 0})
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                        </td>
+                                        <td style={{ textAlign: 'center', padding: '8px', fontSize: '0.9rem' }}>{item.quantity}</td>
+                                        <td style={{ textAlign: 'right', padding: '8px', fontSize: '0.9rem' }}>₱{(item.ProductPrice || 0).toFixed(2)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                            <tfoot>
+                                <tr className="subtotal-row">
+                                    <td colSpan="2" style={{ padding: '8px', fontWeight: 'bold' }}>Subtotal</td>
+                                    <td style={{ textAlign: 'right', padding: '8px', fontWeight: 'bold' }}>₱{subtotal.toFixed(2)}</td>
+                                </tr>
+                                {orderTypeMain === 'Delivery' && (
+                                    <tr className="delivery-fee-row subtotal-row">
+                                        <td colSpan="2" style={{ padding: '8px', fontWeight: 'bold' }}>Delivery Fee</td>
+                                        <td style={{ textAlign: 'right', padding: '8px', fontWeight: 'bold' }}>₱{deliveryFee.toFixed(2)}</td>
+                                    </tr>
+                                )}
+                                <tr className="total-row modal-total-row">
+                                    <td colSpan="2" style={{ padding: '8px', fontWeight: 'bold' }}>Total</td>
+                                    <td style={{ textAlign: 'right', padding: '8px', fontWeight: 'bold' }}>₱{finalTotal.toFixed(2)}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    
+                    <div className="d-flex justify-content-center mt-4">
+                        <button
+                            type="button"
+                            className="btn btn-block w-100"
+                            style={{ backgroundColor: '#4B929D', color: 'white', padding: '10px' }}
+                            onClick={handleCheckoutClick}
+                            disabled={selectedCartItems.length === 0}
+                        >
+                            <i className="bi bi-cart-check me-2"></i>
+                            Checkout (₱{finalTotal.toFixed(2)})
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
 const Cart = () => {
   const navigate = useNavigate();
 
@@ -14,6 +131,7 @@ const Cart = () => {
   const { cartItems, incrementQuantity, decrementQuantity, removeFromCart, setCartItems } = useContext(CartContext);
 
   const [maxQuantities, setMaxQuantities] = useState({});
+  const [showOrderModal, setShowOrderModal] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("authToken");
@@ -47,12 +165,13 @@ const Cart = () => {
   console.log("🧾 Current cartItems:", cartItems);
 
   const [selectedCartItems, setSelectedCartItems] = useState([]);
-
+  
+  // Existing state variables...
   const [receiptFile, setReceiptFile] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [paymentMethodMain, setPaymentMethodMain] = useState('E-Wallet');
-  const [orderTypeMain, setOrderTypeMain] = useState('Pick Up');
+  const [orderTypeMain, setOrderTypeMain] = useState('Pick Up'); // Mutable state for Order Type
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -97,7 +216,6 @@ const Cart = () => {
     }
     incrementQuantity(item.cartItemId);
 
-    // Update quantity in selectedCartItems if item is selected
     setSelectedCartItems(prevSelected => {
       return prevSelected.map(selectedItem => {
         if (selectedItem.cartItemId === item.cartItemId) {
@@ -112,7 +230,6 @@ const Cart = () => {
     const item = cartItems[index];
     decrementQuantity(item.cartItemId);
 
-    // Update quantity in selectedCartItems if item is selected
     setSelectedCartItems(prevSelected => {
       return prevSelected.map(selectedItem => {
         if (selectedItem.cartItemId === item.cartItemId && selectedItem.quantity > 1) {
@@ -130,11 +247,31 @@ const Cart = () => {
   };
 
   const calculateTotal = (item) => {
-  const basePrice = item.ProductPrice || 0;
-  const addonsTotal = (item.addons || []).reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0);
-  return (basePrice + addonsTotal) * item.quantity;
-};
+    const basePrice = item.ProductPrice || 0;
+    const addonsTotal = (item.addons || []).reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0);
+    return (basePrice + addonsTotal) * item.quantity;
+  };
 
+  const handleCheckoutClick = async (e) => {
+    e.preventDefault();
+    if (selectedCartItems.length === 0) {
+      toast.error("Please select items to checkout.");
+      return;
+    }
+
+    // Close modal before navigating
+    setShowOrderModal(false);
+
+    // Proceed directly to checkout since stock limits are already handled
+    navigate('/checkout', {
+      state: {
+        cartItems: selectedCartItems,
+        orderType: orderTypeMain,
+        paymentMethod: paymentMethodMain
+      }
+    });
+  };
+  
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       setReceiptFile(e.target.files[0]);
@@ -187,23 +324,6 @@ const Cart = () => {
     return newErrors;
   };
 
-  const handleCheckoutClick = async (e) => {
-    e.preventDefault();
-    if (selectedCartItems.length === 0) {
-      toast.error("Please select items to checkout.");
-      return;
-    }
-
-    // Proceed directly to checkout since stock limits are already handled
-    navigate('/checkout', {
-      state: {
-        cartItems: selectedCartItems,
-        orderType: orderTypeMain,
-        paymentMethod: paymentMethodMain
-      }
-    });
-  };
-
   const handleConfirmOrder = () => {
     toast.success('Order confirmed! Redirecting...');
     setSelectedCartItems([]);
@@ -212,128 +332,229 @@ const Cart = () => {
     }, 2000);
   };
 
+  // Calculate total for the floating button preview
+  const subtotalForButton = selectedCartItems.reduce((acc, item) => {
+    const basePrice = item.ProductPrice || 0;
+    const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || addon.Price || 0), 0);
+    return acc + (basePrice + addonsTotal) * item.quantity;
+  }, 0);
+  const totalForButton = (subtotalForButton + (orderTypeMain === 'Delivery' ? 50 : 0)).toFixed(2);
+
+
   return (
-    <section className="container-fluid py-3 px-5 mt-5 pt-5" style={{ backgroundColor: '#eaf4f6', minHeight: '100vh' }}>
+    <section className="container-fluid py-3 px-2 px-md-5 mt-5 pt-5" style={{ backgroundColor: '#eaf4f6', minHeight: '100vh' }}>
       <div className="row">
-        {/* Cart Section */}
+        {/* Cart Section (Always visible) */}
         <div className="col-lg-8 mb-4">
           <div className="bg-white p-4 shadow-sm" style={{ borderRadius: '20px' }}>
             <div className="d-flex justify-content-between align-items-center mb-3">
               <h3 className="fw-bold" style={{ color: '#4B929D' }}>Cart</h3>
               <span className="fw-semibold">{cartItems.length} Items</span>
             </div>
-            <div className="table-responsive">
-  <table className="table align-middle" style={{ tableLayout: 'fixed' }}>
-    <colgroup>
-      <col style={{ width: '30px' }} />   {/* Checkbox */}
-      <col style={{ width: '18%' }} />   {/* Product */}
-      <col style={{ width: '14%' }} />   {/* Product Type */}
-      <col style={{ width: '14%' }} />   {/* Product Category */}
-      <col style={{ width: '10%' }} />   {/* Quantity */}
-      <col style={{ width: '10%' }} />   {/* Price */}
-      <col style={{ width: '10%' }} />   {/* Total */}
-      <col style={{ width: '10%' }} />   {/* Actions */}
-    </colgroup>
-    <thead>
-      <tr style={{ color: '#4B929D', verticalAlign: 'middle' }}>
-      <th style={{ textAlign: 'center' }}>
-          <input
-            type="checkbox"
-            style={{ margin: 0 }}
-            onChange={(e) => handleSelectAllChange(e.target.checked)}
-            checked={selectedCartItems.length === cartItems.length && cartItems.length > 0}
-          />
-        </th>
-        <th>Product</th>
-        <th>Product Type</th>
-        <th>Product Category</th>
-        <th style={{ textAlign: 'center' }}>Qty</th>
-        <th style={{ textAlign: 'right' }}>Price</th>
-        <th style={{ textAlign: 'right' }}>Total</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {cartItems.map((item, i) => (
-        <tr key={i}>
-          <td style={{ textAlign: 'center' }}>
-            <input
-              type="checkbox"
-              onChange={(e) => handleCheckboxChange(item, e.target.checked)}
-              checked={selectedCartItems.some(ci => ci.cartItemId === item.cartItemId)}
-            />
-          </td>
-          <td>
-            <div className="d-flex align-items-center">
-              <img
-                src={item.ProductImage ? (item.ProductImage.startsWith('http') ? item.ProductImage : `http://localhost:8001${item.ProductImage}`) : "https://via.placeholder.com/60"}
-                alt={item.ProductName}
-                className="img-fluid me-2 rounded"
-                style={{ height: '60px', width: '60px', objectFit: 'cover' }}
-              />
-              <div>
-                <div className="fw-semibold">{item.ProductName}</div>
-                {item.addons && item.addons.length > 0 && (
-                  <ul className="cart-addons mb-0 ps-3">
-                    {item.addons.map((addon, idx) => (
-                      <li key={idx} style={{ fontSize: "0.85em", color: addon.status === 'Unavailable' ? '#999' : '#666', fontStyle: addon.status === 'Unavailable' ? 'italic' : 'normal' }}>
-                        + {addon.addon_name || addon.AddOnName || addon.name} (₱{addon.price || addon.Price || 0})
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          </td>
-          <td style={{ verticalAlign: 'middle' }}>{item.ProductType || '-'}</td>
-          <td style={{ verticalAlign: 'middle' }}>{item.ProductCategory || '-'}</td>
-          <td style={{ textAlign: 'center' }}>
-            <div className="quantity-control">
-              <button className="btn btn-sm rounded-circle" onClick={() => handleDecrement(i)}>-</button>
-              <span className="mx-2">{item.quantity}</span>
-              <button
-                className="btn btn-sm rounded-circle"
-                onClick={() => handleIncrement(i)}
-                disabled={item.quantity >= (item.MerchandiseQuantity ?? maxQuantities[item.product_id]?.maxQuantity ?? 999) || (item.MerchandiseQuantity !== undefined && (item.MerchandiseQuantity === 0 || item.Status === "Not Available"))}
-              >
-                +
-              </button>
-              {(() => {
-                const isMerchandise = item.MerchandiseQuantity !== undefined;
-                const maxQty = isMerchandise ? item.MerchandiseQuantity : (maxQuantities[item.product_id]?.maxQuantity ?? 999);
-                const isUnavailable = isMerchandise && (maxQty === 0 || item.Status === "Not Available");
-                const showMax = isMerchandise || (!isMerchandise && maxQty !== 999);
-                if (showMax) {
-                  return (
-                    <div className="max-info text-warning small">
-                      Max: {maxQty}
-                      {isUnavailable && <span className="text-danger ms-1"> (Unavailable)</span>}
-                    </div>
-                  );
-                }
-                return null;
-              })()}
-            </div>
-          </td>
-          <td style={{ textAlign: 'right' }}>₱{item.ProductPrice.toFixed(2)}</td>
-          <td style={{ textAlign: 'right' }}>₱{calculateTotal(item).toFixed(2)}</td>
-          <td style={{ textAlign: 'center' }}>
-            <button className="btn btn-link text-danger p-0" onClick={() => handleRemove(i)}>
-              <i className="bi bi-trash" style={{ fontSize: '1.2rem' }}></i>
-            </button>
-          </td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
-</div>
 
+            {/* Desktop/Large Screen Cart Table (d-none d-lg-block to hide on mobile) */}
+            <div className="table-responsive d-none d-lg-block">
+              <table className="table align-middle" style={{ tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: '30px' }} /> 
+                  <col style={{ width: '18%' }} /> 
+                  <col style={{ width: '14%' }} /> 
+                  <col style={{ width: '14%' }} /> 
+                  <col style={{ width: '10%' }} /> 
+                  <col style={{ width: '10%' }} /> 
+                  <col style={{ width: '10%' }} /> 
+                  <col style={{ width: '10%' }} /> 
+                </colgroup>
+                <thead>
+                  <tr style={{ color: '#4B929D', verticalAlign: 'middle' }}>
+                    <th style={{ textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        style={{ margin: 0 }}
+                        onChange={(e) => handleSelectAllChange(e.target.checked)}
+                        checked={selectedCartItems.length === cartItems.length && cartItems.length > 0}
+                      />
+                    </th>
+                    <th>Product</th>
+                    <th>Product Type</th>
+                    <th>Product Category</th>
+                    <th style={{ textAlign: 'center' }}>Qty</th>
+                    <th style={{ textAlign: 'right' }}>Price</th>
+                    <th style={{ textAlign: 'right' }}>Total</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cartItems.map((item, i) => (
+                    <tr key={i}>
+                      <td style={{ textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          onChange={(e) => handleCheckboxChange(item, e.target.checked)}
+                          checked={selectedCartItems.some(ci => ci.cartItemId === item.cartItemId)}
+                        />
+                      </td>
+                      <td>
+                        <div className="d-flex align-items-center">
+                          <img
+                            src={item.ProductImage ? (item.ProductImage.startsWith('http') ? item.ProductImage : `http://localhost:8001${item.ProductImage}`) : "https://via.placeholder.com/60"}
+                            alt={item.ProductName}
+                            className="img-fluid me-2 rounded"
+                            style={{ height: '60px', width: '60px', objectFit: 'cover' }}
+                          />
+                          <div>
+                            <div className="fw-semibold">{item.ProductName}</div>
+                            {item.addons && item.addons.length > 0 && (
+                              <ul className="cart-addons mb-0 ps-3">
+                                {item.addons.map((addon, idx) => (
+                                  <li key={idx} style={{ fontSize: "0.85em", color: addon.status === 'Unavailable' ? '#999' : '#666', fontStyle: addon.status === 'Unavailable' ? 'italic' : 'normal' }}>
+                                    + {addon.addon_name || addon.AddOnName || addon.name} (₱{addon.price || addon.Price || 0})
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ verticalAlign: 'middle' }}>{item.ProductType || '-'}</td>
+                      <td style={{ verticalAlign: 'middle' }}>{item.ProductCategory || '-'}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <div className="quantity-control">
+                          <button className="btn btn-sm rounded-circle" onClick={() => handleDecrement(i)}>-</button>
+                          <span className="mx-2">{item.quantity}</span>
+                          <button
+                            className="btn btn-sm rounded-circle"
+                            onClick={() => handleIncrement(i)}
+                            disabled={item.quantity >= (item.MerchandiseQuantity ?? maxQuantities[item.product_id]?.maxQuantity ?? 999) || (item.MerchandiseQuantity !== undefined && (item.MerchandiseQuantity === 0 || item.Status === "Not Available"))}
+                          >
+                            +
+                          </button>
+                          {(() => {
+                            const isMerchandise = item.MerchandiseQuantity !== undefined;
+                            const maxQty = isMerchandise ? item.MerchandiseQuantity : (maxQuantities[item.product_id]?.maxQuantity ?? 999);
+                            const isUnavailable = isMerchandise && (maxQty === 0 || item.Status === "Not Available");
+                            const showMax = isMerchandise || (!isMerchandise && maxQty !== 999);
+                            if (showMax) {
+                              return (
+                                <div className="max-info text-warning small">
+                                  Max: {maxQty}
+                                  {isUnavailable && <span className="text-danger ms-1"> (Unavailable)</span>}
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>₱{item.ProductPrice.toFixed(2)}</td>
+                      <td style={{ textAlign: 'right' }}>₱{calculateTotal(item).toFixed(2)}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button className="btn btn-link text-danger p-0" onClick={() => handleRemove(i)}>
+                          <i className="bi bi-trash" style={{ fontSize: '1.2rem' }}></i>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile/Small Screen Cart List/Cards (d-lg-none to hide on desktop) */}
+            <div className="d-lg-none">
+              <div className="mb-3 d-flex align-items-center">
+                <input
+                  type="checkbox"
+                  className="me-2"
+                  onChange={(e) => handleSelectAllChange(e.target.checked)}
+                  checked={selectedCartItems.length === cartItems.length && cartItems.length > 0}
+                />
+                <label className="form-check-label fw-semibold">Select All</label>
+              </div>
+              {cartItems.map((item, i) => (
+                <div key={i} className="card mb-3 p-3 cart-item-mobile">
+                  {/* Outer flex container for checkbox, image, and details/total */}
+                  <div className="d-flex align-items-start flex-nowrap"> 
+                    <input
+                      type="checkbox"
+                      className="me-3 mt-1"
+                      onChange={(e) => handleCheckboxChange(item, e.target.checked)}
+                      checked={selectedCartItems.some(ci => ci.cartItemId === item.cartItemId)}
+                    />
+                    <img
+                      src={item.ProductImage ? (item.ProductImage.startsWith('http') ? item.ProductImage : `http://localhost:8001${item.ProductImage}`) : "https://via.placeholder.com/60"}
+                      alt={item.ProductName}
+                      className="img-fluid me-3 rounded"
+                      style={{ height: '70px', width: '70px', objectFit: 'cover' }}
+                    />
+                    {/* Inner container for product details and price (aligned vertically with image) */}
+                    <div className="flex-grow-1 product-details-mobile w-100">
+                      <div className="fw-bold mb-1 product-name-mobile">{item.ProductName}</div>
+                      <div className="text-muted small mobile-detail-text">Type: {item.ProductType || '-'} | Category: {item.ProductCategory || '-'}</div>
+                      {item.addons && item.addons.length > 0 && (
+                        <ul className="cart-addons mb-1 ps-3">
+                          {item.addons.map((addon, idx) => (
+                            <li key={idx} className="mobile-addon-text" style={{ color: addon.status === 'Unavailable' ? '#999' : '#666', fontStyle: addon.status === 'Unavailable' ? 'italic' : 'normal' }}>
+                              + {addon.addon_name || addon.AddOnName || addon.name} (₱{addon.price || addon.Price || 0})
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      
+                      {/* MOVED TOTAL PRICE HERE (Vertically aligned with image/details) */}
+                      <div className="text-end fw-bold total-price-mobile mt-2">
+                        <span className='total-label-mobile'>Total:</span>
+                        <span className='total-value-mobile'>₱{calculateTotal(item).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* New row for Quantity Control and Actions */}
+                  <div className="d-flex justify-content-end align-items-center pt-2 mt-2 cart-actions-row">
+                    
+                    {/* Quantity Control (Moved out of the main flex block) */}
+                    <div className="quantity-control me-3">
+                      <button className="btn btn-sm rounded-circle" onClick={() => handleDecrement(i)}>-</button>
+                      <span className="mx-2">{item.quantity}</span>
+                      <button
+                        className="btn btn-sm rounded-circle"
+                        onClick={() => handleIncrement(i)}
+                        disabled={item.quantity >= (item.MerchandiseQuantity ?? maxQuantities[item.product_id]?.maxQuantity ?? 999) || (item.MerchandiseQuantity !== undefined && (item.MerchandiseQuantity === 0 || item.Status === "Not Available"))}
+                      >
+                        +
+                      </button>
+                      {/* Max Info */}
+                      {(() => {
+                        const isMerchandise = item.MerchandiseQuantity !== undefined;
+                        const maxQty = isMerchandise ? item.MerchandiseQuantity : (maxQuantities[item.product_id]?.maxQuantity ?? 999);
+                        const isUnavailable = isMerchandise && (maxQty === 0 || item.Status === "Not Available");
+                        const showMax = isMerchandise || (!isMerchandise && maxQty !== 999);
+                        if (showMax) {
+                          return (
+                            <div className="max-info text-warning small text-center">
+                              Max: {maxQty}
+                              {isUnavailable && <span className="text-danger ms-1"> (Unavailable)</span>}
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
+                    
+                    {/* Trash Button (Action) */}
+                    <button className="btn btn-link text-danger p-0 remove-btn-mobile" onClick={() => handleRemove(i)}>
+                      <i className="bi bi-trash" style={{ fontSize: '1.2rem' }}></i>
+                    </button>
+                  </div>
+                  
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
 
-        {/* Pay Online Section */}
-        <div className="col-lg-4">
+        {/* Desktop Order Details Section (d-none d-lg-block) */}
+        <div className="col-lg-4 d-none d-lg-block">
           <div className="bg-white p-4 shadow-sm" style={{ borderRadius: '20px' }}>
             <h5 className="fw-bold mb-3 text-center">Order Details</h5>
             <div className="d-flex justify-content-center">
@@ -392,11 +613,7 @@ const Cart = () => {
                     <td style={{ padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>Subtotal</td>
                     <td></td>
                     <td style={{ textAlign: 'right', padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>
-                      ₱{selectedCartItems.reduce((acc, item) => {
-                        const basePrice = item.ProductPrice || 0;
-                        const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || addon.Price || 0), 0);
-                        return acc + (basePrice + addonsTotal) * item.quantity;
-                      }, 0).toFixed(2)}
+                      ₱{subtotalForButton.toFixed(2)}
                     </td>
                   </tr>
                   {orderTypeMain === 'Delivery' && (
@@ -412,11 +629,7 @@ const Cart = () => {
                     <td style={{ padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>Total</td>
                     <td></td>
                     <td style={{ textAlign: 'right', padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>
-                      ₱{(selectedCartItems.reduce((acc, item) => {
-                        const basePrice = item.ProductPrice || 0;
-                        const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || addon.Price || 0), 0);
-                        return acc + (basePrice + addonsTotal) * item.quantity;
-                      }, 0) + (orderTypeMain === 'Delivery' ? 50 : 0)).toFixed(2)}
+                      ₱{totalForButton}
                     </td>
                   </tr>
                   <tr className="payment-method-row">
@@ -458,6 +671,28 @@ const Cart = () => {
         </div>
       </div>
       <ToastContainer position="bottom-right" autoClose={3000} hideProgressBar={false} />
+
+      {/* FLOATING CHECKOUT BUTTON FOR MOBILE VIEW */}
+      <div className="d-lg-none d-block floating-checkout-container">
+        <button
+          className="btn floating-checkout-button w-100"
+          onClick={() => setShowOrderModal(true)}
+          disabled={selectedCartItems.length === 0}
+        >
+          View Order Summary (₱{totalForButton})
+        </button>
+      </div>
+      
+      {/* ORDER DETAILS MODAL (MOBILE ONLY) */}
+      <OrderDetailsModal
+        show={showOrderModal}
+        onClose={() => setShowOrderModal(false)}
+        cartItems={cartItems}
+        selectedCartItems={selectedCartItems}
+        orderTypeMain={orderTypeMain}
+        handleCheckoutClick={handleCheckoutClick}
+        setOrderTypeMain={setOrderTypeMain} // Passed the state setter
+      />
     </section>
   );
 };
