@@ -12,6 +12,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useState, useContext } from 'react';
 import Swal from 'sweetalert2';
 import { CartContext } from '../contexts/CartContext';
+import { AuthContext } from './AuthContext';
 
 export default function AppHeader() {
   const location = useLocation();
@@ -19,30 +20,23 @@ export default function AppHeader() {
   const isHomePage = location.pathname === '/';
   const [isToggled, setIsToggled] = useState(false);
 
-  // Remove AuthContext usage, use local state for login detection
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { isLoggedIn, login, logout } = useContext(AuthContext);
   const [profileImage, setProfileImage] = useState(null);
 
-  // Check URL query params for authorization token and store in localStorage
+  // Check URL query params for authorization token and login
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tokenFromUrl = params.get('authorization');
     console.log('Token from URL:', tokenFromUrl);
     if (tokenFromUrl) {
-      localStorage.setItem('authToken', tokenFromUrl);
-      setIsLoggedIn(true);
-      console.log('Set isLoggedIn to true');
+      login({ authToken: tokenFromUrl });
+      console.log('Logged in with token from URL');
       // Remove token from URL to clean up
       params.delete('authorization');
       const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
       window.history.replaceState({}, document.title, newUrl);
-    } else {
-      const token = localStorage.getItem('authToken');
-      console.log('Token from localStorage:', token);
-      setIsLoggedIn(!!token);
-      console.log('Set isLoggedIn to', !!token);
     }
-  }, []);
+  }, [login]);
 
   // New state for header visibility
   const [isVisible, setIsVisible] = useState(true);
@@ -166,8 +160,7 @@ export default function AppHeader() {
       cancelButtonText: 'Cancel'
     }).then((result) => {
       if (result.isConfirmed) {
-        localStorage.removeItem('authToken');
-        setIsLoggedIn(false);
+        logout();
         // Redirect to login page on frontend-auth at localhost:4002
         window.location.href = 'http://localhost:4002/';
       }

@@ -29,26 +29,7 @@ function DeliveryManagement() {
   const [currentPage, setCurrentPage] = useState(1);
   const ordersPerPage = 12; // 💡 NEW: Constant for orders per page
 
-  // Helper functions for localStorage persistence
-  const saveRiderAssignments = (updatedOrders) => {
-    const assignments = {};
-    updatedOrders.forEach(order => {
-      if (order.assignedRider) {
-        assignments[order.id] = order.assignedRider;
-      }
-    });
-    localStorage.setItem("riderAssignments", JSON.stringify(assignments));
-  };
 
-  const loadRiderAssignments = () => {
-    try {
-      const saved = localStorage.getItem("riderAssignments");
-      return saved ? JSON.parse(saved) : {};
-    } catch (error) {
-      console.error("Failed to load rider assignments:", error);
-      return {};
-    }
-  };
 
   useEffect(() => {
     if (!authToken) return;
@@ -68,11 +49,9 @@ function DeliveryManagement() {
         const data = await response.json();
         console.log("Fetched orders:", data); // ✅ debug
 
-        // Merge saved rider assignments with fetched orders
-        const savedAssignments = loadRiderAssignments();
         const ordersWithAssignments = data.map(order => ({
           ...order,
-          assignedRider: savedAssignments[order.id] || order.assignedRider || null
+          assignedRider: order.assignedRider ?? null
         }));
 
         setOrders(ordersWithAssignments);
@@ -188,14 +167,11 @@ function DeliveryManagement() {
   });
 
   const handleRiderChange = (orderId, newRider) => {
-    setOrders(prevOrders => {
-      const updatedOrders = prevOrders.map(order =>
+    setOrders(prevOrders =>
+      prevOrders.map(order =>
         order.id === orderId ? { ...order, assignedRider: newRider } : order
-      );
-      // Save to localStorage whenever a rider is assigned
-      saveRiderAssignments(updatedOrders);
-      return updatedOrders;
-    });
+      )
+    );
   };
 
   const handleRiderSelection = (orderId, riderId) => {

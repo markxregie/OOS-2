@@ -30,6 +30,7 @@ import NotFound from './components/NotFound';
 import Resetpassword from './components/Resetpassword';
 import Concerns from './components/concerns';
 import AdminConcerns from './components/admin2/concerns';
+import SessionManager from './components/SessionManager';  // <-- Import SessionManager
 
 import { BrowserRouter as Router, Routes, Route, useLocation, Outlet } from 'react-router-dom';
 import { AuthProvider } from './components/AuthContext';  // <-- Import AuthProvider
@@ -83,6 +84,7 @@ function MainApp() {
 
   return (
     <div className='App'>
+      <SessionManager /> {/* Global session management */}
       {!shouldHideHeader && !location.pathname.startsWith('/admin') && (
         <header id='header'>
           <AppHeader />

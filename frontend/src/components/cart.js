@@ -24,6 +24,7 @@ const Cart = () => {
       const results = {};
 
       for (const item of cartItems) {
+        if (!item.product_id) continue;
         try {
           const res = await fetch(
             `${PRODUCTS_BASE_URL}/is_products/products/${item.product_id}/max-quantity`,
@@ -50,8 +51,7 @@ const Cart = () => {
   const [receiptFile, setReceiptFile] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('cash');
-  const [paymentMethodMain, setPaymentMethodMain] = useState('Cash');
+  const [paymentMethodMain, setPaymentMethodMain] = useState('E-Wallet');
   const [orderTypeMain, setOrderTypeMain] = useState('Pick Up');
 
   const [formData, setFormData] = useState({
@@ -84,7 +84,13 @@ const Cart = () => {
 
   const handleIncrement = (index) => {
     const item = cartItems[index];
-    const maxQty = maxQuantities[item.product_id]?.maxQuantity ?? 999;
+    const maxQty = item.MerchandiseQuantity ?? maxQuantities[item.product_id]?.maxQuantity ?? 999;
+    const isMerchandise = item.MerchandiseQuantity !== undefined;
+    const isUnavailable = isMerchandise && (maxQty === 0 || item.Status === "Not Available");
+    if (isUnavailable) {
+      toast.error("Item is unavailable.");
+      return;
+    }
     if (item.quantity + 1 > maxQty) {
       toast.error(`Cannot add more. Max quantity is ${maxQty}.`);
       return;
@@ -288,15 +294,25 @@ const Cart = () => {
               <button
                 className="btn btn-sm rounded-circle"
                 onClick={() => handleIncrement(i)}
-                disabled={item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 999)}
+                disabled={item.quantity >= (item.MerchandiseQuantity ?? maxQuantities[item.product_id]?.maxQuantity ?? 999) || (item.MerchandiseQuantity !== undefined && (item.MerchandiseQuantity === 0 || item.Status === "Not Available"))}
               >
                 +
               </button>
-              {(maxQuantities[item.product_id]?.maxQuantity ?? 999) !== 999 && (
-  <div className="max-info text-warning small">
-    Max: {maxQuantities[item.product_id]?.maxQuantity ?? 999}
-  </div>
-)}
+              {(() => {
+                const isMerchandise = item.MerchandiseQuantity !== undefined;
+                const maxQty = isMerchandise ? item.MerchandiseQuantity : (maxQuantities[item.product_id]?.maxQuantity ?? 999);
+                const isUnavailable = isMerchandise && (maxQty === 0 || item.Status === "Not Available");
+                const showMax = isMerchandise || (!isMerchandise && maxQty !== 999);
+                if (showMax) {
+                  return (
+                    <div className="max-info text-warning small">
+                      Max: {maxQty}
+                      {isUnavailable && <span className="text-danger ms-1"> (Unavailable)</span>}
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
           </td>
           <td style={{ textAlign: 'right' }}>₱{item.ProductPrice.toFixed(2)}</td>
@@ -411,18 +427,8 @@ const Cart = () => {
                       <div className="btn-group-toggle mt-2" style={{ margin: '0 auto' }}>
                         <button
                           type="button"
-                          className={`d-flex align-items-center justify-content-center ${paymentMethodMain === 'Cash' ? 'btn-active-custom' : ''}`}
+                          className="d-flex align-items-center justify-content-center btn-active-custom"
                           style={{ minWidth: '120px' }}
-                          onClick={() => setPaymentMethodMain('Cash')}
-                        >
-                          <i className="bi bi-cash-stack"></i>
-                          Cash
-                        </button>
-                        <button
-                          type="button"
-                          className={`d-flex align-items-center justify-content-center ${paymentMethodMain === 'E-Wallet' ? 'btn-active-custom' : ''}`}
-                          style={{ minWidth: '120px' }}
-                          onClick={() => setPaymentMethodMain('E-Wallet')}
                         >
                           <i className="bi bi-wallet2"></i>
                           E-Wallet

@@ -216,3 +216,47 @@ async def confirm_payment(payload: ConfirmPaymentRequest, token: str = Depends(o
         except Exception as e:
             logger.error(f"Unexpected error confirming payment: {str(e)}")
             raise HTTPException(status_code=500, detail="Unexpected server error.")
+
+class UpdatePOSStatusRequest(BaseModel):
+    newStatus: str
+
+@router.patch("/auth/purchase_orders/online/{order_id}/status")
+async def update_pos_order_status(
+    order_id: int,
+    request: UpdatePOSStatusRequest,
+    token: str = Depends(oauth2_scheme)
+):
+    await validate_token_and_roles(token, ["rider", "admin", "staff", "cashier"])
+
+    from database import get_db_connection  # Assuming shared database.py
+
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+    try:
+        # Check if the order exists
+        await cursor.execute("SELECT OrderID FROM Orders WHERE OrderID = ?", (order_id,))
+        order = await cursor.fetchone()
+        if not order:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+        # Update status to completed
+        await cursor.execute(
+            "UPDATE Orders SET Status = ? WHERE OrderID = ?",
+            (request.newStatus, order_id)
+        )
+
+        await conn.commit()
+
+        logger.info(f"Updated POS order status for order {order_id} to {request.newStatus}")
+        return {"message": f"POS order status successfully updated to {request.newStatus}"}
+
+    except Exception as e:
+        await conn.rollback()
+        logger.error(f"Error updating POS order status for OrderID {order_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update POS order status."
+        )
+    finally:
+        await cursor.close()
+        await conn.close()

@@ -43,6 +43,9 @@ class DeliveryInfoRequest(BaseModel):
     EmailAddress: Optional[str] = None
     PhoneNumber: str
     Notes: Optional[str] = None
+
+class UpdateDeliveryStatusRequest(BaseModel):
+    status: str
 # --- ROUTE: Get Delivery Info by OrderID ---
 @router.get("/info/{order_id}")
 async def get_delivery_info(order_id: int, token: str = Depends(oauth2_scheme)):
@@ -184,6 +187,45 @@ async def add_delivery_info(delivery_info: DeliveryInfoRequest, token: str = Dep
         await conn.close()
 
     return {"message": "Delivery info added successfully", "order_id": order_id}
+
+@router.put("/orders/{order_id}/status", status_code=status.HTTP_200_OK)
+async def update_delivery_order_status(
+    order_id: int,
+    request: UpdateDeliveryStatusRequest,
+    token: str = Depends(oauth2_scheme)
+):
+    await validate_token_and_roles(token, ["rider", "admin", "staff"])
+
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+    try:
+        # Check if the order exists
+        await cursor.execute("SELECT OrderID FROM Orders WHERE OrderID = ?", (order_id,))
+        order = await cursor.fetchone()
+        if not order:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+        # Update status
+        await cursor.execute(
+            "UPDATE Orders SET Status = ? WHERE OrderID = ?",
+            (request.status, order_id)
+        )
+
+        await conn.commit()
+
+        logger.info(f"Updated delivery status for order {order_id} to {request.status}")
+        return {"message": f"Order status successfully updated to {request.status}"}
+
+    except Exception as e:
+        await conn.rollback()
+        logger.error(f"Error updating delivery order status for OrderID {order_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update order status."
+        )
+    finally:
+        await cursor.close()
+        await conn.close()
 
 @router.get("/rider/{rider_id}/orders")
 async def get_rider_orders(rider_id: int, token: str = Depends(oauth2_scheme)):

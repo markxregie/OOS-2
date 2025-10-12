@@ -705,8 +705,8 @@ async def update_addons_for_item(order_item_id: int, addons: List[dict], token: 
 
 @router.patch("/admin/orders/{order_id}/status", status_code=status.HTTP_200_OK)
 async def update_order_status(
-    order_id: int, 
-    request: UpdateStatusRequest, 
+    order_id: int,
+    request: UpdateStatusRequest,
     token: str = Depends(oauth2_scheme)
 ):
     user_data = await validate_token_and_roles(token, ["admin", "staff", "cashier", "user"])
@@ -727,7 +727,7 @@ async def update_order_status(
         # If user is not admin/staff/cashier, check ownership
         if user_role == "user" and order_owner != username:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, 
+                status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only update your own orders"
             )
 
@@ -742,7 +742,7 @@ async def update_order_status(
                 "UPDATE Orders SET Status = ? WHERE OrderID = ?",
                 (request.new_status, order_id)
             )
-        
+
         await conn.commit()
 
         logger.info(f"Updated status for order {order_id} to {request.new_status}")
@@ -752,7 +752,48 @@ async def update_order_status(
         await conn.rollback()
         logger.error(f"Error updating order status for OrderID {order_id}: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update order status."
+        )
+    finally:
+        await cursor.close()
+        await conn.close()
+
+@router.patch("/rider/orders/{order_id}/status", status_code=status.HTTP_200_OK)
+async def update_rider_order_status(
+    order_id: int,
+    request: UpdateStatusRequest,
+    token: str = Depends(oauth2_scheme)
+):
+    user_data = await validate_token_and_roles(token, ["rider"])
+    username = user_data.get("username")
+    rider_id = user_data.get("id") or user_data.get("userId")  # Assuming user_data has 'id' or 'userId'
+
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+    try:
+        # Check if the order exists and is assigned to this rider
+        await cursor.execute("SELECT OrderID FROM Orders WHERE OrderID = ? AND AssignedRiderID = ?", (order_id, rider_id))
+        order = await cursor.fetchone()
+        if not order:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found or not assigned to you")
+
+        # Update status
+        await cursor.execute(
+            "UPDATE Orders SET Status = ? WHERE OrderID = ?",
+            (request.new_status, order_id)
+        )
+
+        await conn.commit()
+
+        logger.info(f"Rider {username} updated status for order {order_id} to {request.new_status}")
+        return {"message": f"Order status successfully updated to {request.new_status}"}
+
+    except Exception as e:
+        await conn.rollback()
+        logger.error(f"Error updating rider order status for OrderID {order_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update order status."
         )
     finally:
