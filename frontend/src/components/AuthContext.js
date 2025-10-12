@@ -8,8 +8,8 @@ export const AuthContext = createContext({
 });
 
 // Utility function to validate token expiration using expires_at or JWT exp
-function isTokenValid(accessToken, expiresAt) {
-  if (!accessToken) return false;
+function isTokenValid(authToken, expiresAt) {
+  if (!authToken) return false;
 
   // First, check expires_at if available
   if (expiresAt) {
@@ -19,7 +19,7 @@ function isTokenValid(accessToken, expiresAt) {
 
   // Fallback to JWT decoding
   try {
-    const payload = JSON.parse(atob(accessToken.split('.')[1]));
+    const payload = JSON.parse(atob(authToken.split('.')[1]));
     const exp = payload.exp;
     if (!exp) return false;
     const now = Math.floor(Date.now() / 1000);
@@ -33,27 +33,27 @@ function isTokenValid(accessToken, expiresAt) {
 export const AuthProvider = ({ children }) => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // Check localStorage for access_token and expires_at on mount to set login state
+  // Check localStorage for authToken and expires_at on mount to set login state
   useEffect(() => {
-    const accessToken = localStorage.getItem('access_token');
+    const authToken = localStorage.getItem('authToken');
     const expiresAt = localStorage.getItem('expires_at');
-    if (accessToken && isTokenValid(accessToken, expiresAt)) {
+    if (authToken && isTokenValid(authToken, expiresAt)) {
       setIsLoggedIn(true);
     } else {
-      localStorage.removeItem('access_token');
+      localStorage.removeItem('authToken');
       localStorage.removeItem('expires_at');
       setIsLoggedIn(false);
     }
   }, []);
 
-  // Login function to set login state and store access_token and expires_at
+  // Login function to set login state and store authToken and expires_at
   const login = (data) => {
-    const { access_token, expires_at } = data;
-    localStorage.setItem('access_token', access_token);
+    const { authToken, expires_at } = data;
+    localStorage.setItem('authToken', authToken);
     let expTime = expires_at;
     if (!expTime) {
       try {
-        const payload = JSON.parse(atob(access_token.split('.')[1]));
+        const payload = JSON.parse(atob(authToken.split('.')[1]));
         const exp = payload.exp;
         if (exp) {
           expTime = new Date(exp * 1000).toISOString();
@@ -70,7 +70,7 @@ export const AuthProvider = ({ children }) => {
 
   // Logout function to clear login state and remove tokens
   const logout = () => {
-    localStorage.removeItem('access_token');
+    localStorage.removeItem('authToken');
     localStorage.removeItem('expires_at');
     setIsLoggedIn(false);
   };

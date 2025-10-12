@@ -29,7 +29,7 @@ export default function AppHeader() {
     const tokenFromUrl = params.get('authorization');
     console.log('Token from URL:', tokenFromUrl);
     if (tokenFromUrl) {
-      login({ access_token: tokenFromUrl });
+      login({ authToken: tokenFromUrl });
       console.log('Logged in with token from URL');
       // Remove token from URL to clean up
       params.delete('authorization');
@@ -122,7 +122,7 @@ export default function AppHeader() {
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
-        const token = localStorage.getItem('access_token');
+        const token = localStorage.getItem('authToken');
         if (!token) return;
 
         const response = await fetch('http://localhost:4000/users/profile', {
