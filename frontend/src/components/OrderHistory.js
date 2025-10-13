@@ -245,7 +245,7 @@ const OrderHistory = () => {
         <span style={{ fontWeight: 'bold' }}>Order #{order.id}</span>
         {getStatusBadge(order.status)}
       </div>
-      <div className="card-body">
+      <div className="card-body" style={{ textAlign: 'left' }}>
         <p><strong>Type:</strong> {order.orderType}</p>
         <p><strong>Date:</strong> {new Date(order.date).toLocaleDateString()}</p>
         <p>

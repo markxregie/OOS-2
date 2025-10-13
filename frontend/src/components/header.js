@@ -21,7 +21,7 @@ export default function AppHeader() {
   const [isToggled, setIsToggled] = useState(false);
 
   const { isLoggedIn, login, logout } = useContext(AuthContext);
-  const [profileImage, setProfileImage] = useState(null);
+  const [profileImage, setProfileImage] = useState("https://cdn-icons-png.flaticon.com/512/149/149071.png");
 
   // Check URL query params for authorization token and login
   useEffect(() => {
@@ -137,7 +137,7 @@ export default function AppHeader() {
         }
 
         const data = await response.json();
-        setProfileImage(data.profileImage || null);
+        setProfileImage(data.profileImage || "https://cdn-icons-png.flaticon.com/512/149/149071.png");
       } catch (error) {
         console.error('Error fetching user profile:', error);
       }
@@ -391,10 +391,11 @@ export default function AppHeader() {
                             className="p-0 border-0 bg-transparent"
                           >
                             <img
-                              src={profileImage || "https://cdn-icons-png.flaticon.com/512/149/149071.png"}
+                              src={profileImage}
                               alt="Profile"
                               className="profile-icon"
                               style={{ width: '40px', height: '40px', borderRadius: '50%' }}
+                              onError={(e) => { e.target.src = "https://cdn-icons-png.flaticon.com/512/149/149071.png"; }}
                             />
                           </Dropdown.Toggle>
 

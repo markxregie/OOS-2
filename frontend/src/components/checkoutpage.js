@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { CartContext } from '../contexts/CartContext';
 import Swal from 'sweetalert2';
-
+import './checkout.css';
 const CheckoutPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -302,95 +302,145 @@ const CheckoutPage = () => {
 
   return (
     <div className="container py-5" style={{ minHeight: '100vh', marginTop: '100px' }}>
-      <div className="bg-white p-4 rounded">
-        <h2 className="mb-4" style={{ color: '#4B929D', textAlign: 'left' }}>Checkout</h2>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Product</th>
-              <th>Type</th>
-              <th>Category</th>
-              <th>Quantity</th>
-              <th>Price</th>
-              <th>Total</th>
-              <th>Delivery Method</th>
-              <th>Payment Method</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cartItems.length === 0 ? (
-              <tr><td colSpan="8" className="text-center">No items in cart.</td></tr>
-            ) : (
-              cartItems.map((item, index) => (
-                <tr key={index}>
-                  <td>
-                    {item.ProductName}
-                    {item.addons && item.addons.length > 0 && (
-  <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.85em", color: "#666" }}>
-    {item.addons.map((addon, i) => (
-      <li key={i} style={{ color: (addon.status || addon.Status || 'Available') === 'Unavailable' ? '#999' : '#666', fontStyle: (addon.status || addon.Status || 'Available') === 'Unavailable' ? 'italic' : 'normal' }}>+ {addon.addon_name || addon.AddOnName || addon.name} (₱{addon.price || addon.Price || 0})</li>
-    ))}
-  </ul>
-)}
-                  </td>
-                  <td>{item.ProductType || '-'}</td>
-                  <td>{item.ProductCategory || '-'}</td>
-                  <td>{item.quantity}</td>
-                  <td>₱{item.ProductPrice.toFixed(2)}</td>
-                  <td>
-                    ₱{((item.ProductPrice + (item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0)) * item.quantity).toFixed(2)}
-                  </td>
-                  <td>{orderType}</td>
-                  <td>{paymentMethod}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colSpan="7" style={{ textAlign: 'right', fontWeight: 'bold' }}>Delivery Fee:</td>
-              <td>₱{orderType === 'Delivery' ? '50.00' : '0.00'}</td>
-            </tr>
-            <tr>
-              <td colSpan="7" style={{ textAlign: 'right', fontWeight: 'bold' }}>Grand Total:</td>
-              <td>₱{calculateTotal().toFixed(2)}</td>
-            </tr>
-          </tfoot>
-        </table>
+      <div className="checkout-card bg-white p-3 p-md-4 rounded">
+        <h2 className="mb-4 checkout-header">Checkout</h2>
+
+        {/* --- DESKTOP TABLE VIEW --- */}
+        <div className="table-responsive d-none d-md-block">
+          <table className="table checkout-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Type</th>
+                <th>Category</th>
+                <th>Quantity</th>
+                <th>Price</th>
+                <th>Total</th>
+                <th>Delivery Method</th>
+                <th>Payment Method</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cartItems.length === 0 ? (
+                <tr><td colSpan="8" className="text-center">No items in cart.</td></tr>
+              ) : (
+                cartItems.map((item, index) => (
+                  <tr key={index}>
+                    <td>
+                      {item.ProductName}
+                      {item.addons && item.addons.length > 0 && (
+                        <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.85em", color: "#666" }}>
+                          {item.addons.map((addon, i) => (
+                            <li key={i} style={{ color: (addon.status || addon.Status || 'Available') === 'Unavailable' ? '#999' : '#666', fontStyle: (addon.status || addon.Status || 'Available') === 'Unavailable' ? 'italic' : 'normal' }}>+ {addon.addon_name || addon.AddOnName || addon.name} (₱{addon.price || addon.Price || 0})</li>
+                          ))}
+                        </ul>
+                      )}
+                    </td>
+                    <td>{item.ProductType || '-'}</td>
+                    <td>{item.ProductCategory || '-'}</td>
+                    <td>{item.quantity}</td>
+                    <td>₱{item.ProductPrice.toFixed(2)}</td>
+                    <td>
+                      ₱{((item.ProductPrice + (item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0)) * item.quantity).toFixed(2)}
+                    </td>
+                    <td>{orderType}</td>
+                    <td>{paymentMethod}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* --- MOBILE CARD VIEW --- */}
+        <div className="d-md-none">
+          {cartItems.length === 0 ? (
+            <div className="text-center p-3">No items in cart.</div>
+          ) : (
+            cartItems.map((item, index) => (
+              <div key={index} className="checkout-item-card-mobile">
+                <div className="fw-bold">{item.ProductName}</div>
+                {item.addons && item.addons.length > 0 && (
+                  <ul className="checkout-addons-mobile">
+                    {item.addons.map((addon, i) => (
+                      <li key={i} style={{ color: (addon.status || addon.Status || 'Available') === 'Unavailable' ? '#999' : '#666', fontStyle: (addon.status || addon.Status || 'Available') === 'Unavailable' ? 'italic' : 'normal' }}>
+                        + {addon.addon_name || addon.AddOnName || addon.name} (₱{addon.price || addon.Price || 0})
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="checkout-details-mobile">
+                  <span>Qty: {item.quantity}</span>
+                  <span>Total: ₱{((item.ProductPrice + (item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0)) * item.quantity).toFixed(2)}</span>
+                </div>
+              </div>
+            ))
+          )}
+          <div className="checkout-summary-mobile">
+            <div><span>Order Type:</span> <strong>{orderType}</strong></div>
+            <div><span>Payment Method:</span> <strong>{paymentMethod}</strong></div>
+          </div>
+        </div>
+
+        {/* --- TOTALS SECTION (COMMON FOR BOTH) --- */}
+        <div className="checkout-totals-section">
+          <div className="total-row">
+            <span>Delivery Fee:</span>
+            <span>₱{orderType === 'Delivery' ? '50.00' : '0.00'}</span>
+          </div>
+          <div className="total-row grand-total">
+            <strong>Grand Total:</strong>
+            <strong>₱{calculateTotal().toFixed(2)}</strong>
+          </div>
+        </div>
 
         <div className="mt-4 p-3 bg-white rounded">
-          <h2 className="mb-4" style={{ color: '#4B929D', textAlign: 'left' }}>Delivery Information</h2>
-          <h6 style={{ color: '#4B929D', textAlign: 'left' }}>All fields are required</h6>
+          <h2 className="mb-4 checkout-header">Delivery Information</h2>
+          <h6 className="checkout-subheader">All fields are required</h6>
 
-          <div style={{ display: 'flex', gap: '10px', marginTop: '1rem' }}>
-            <div style={{ flex: 1, color: '#4B929D', textAlign: 'left', marginBottom: '5px' }}>First Name <span style={{ color: 'red' }}>*</span></div>
-            <div style={{ flex: 1, color: '#4B929D', textAlign: 'left', marginBottom: '5px' }}>Middle Name </div>
-            <div style={{ flex: 1, color: '#4B929D', textAlign: 'left', marginBottom: '5px' }}>Last Name <span style={{ color: 'red' }}>*</span></div>
+          <div className="checkout-form-row">
+            <div className="form-group">
+              <label>First Name <span className="text-danger">*</span></label>
+              <input type="text" placeholder="First Name" className="form-control" value={userData.firstName} readOnly />
+            </div>
+            <div className="form-group">
+              <label>Middle Name</label>
+              <input type="text" placeholder="Middle Name" className="form-control" value={userData.middleName} readOnly />
+            </div>
+            <div className="form-group">
+              <label>Last Name <span className="text-danger">*</span></label>
+              <input type="text" placeholder="Last Name" className="form-control" value={userData.lastName} readOnly />
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-            <input type="text" placeholder="First Name" style={{ flex: 1, padding: '8px', backgroundColor: '#d0e7f9' }} value={userData.firstName} readOnly />
-            <input type="text" placeholder="Middle Name" style={{ flex: 1, padding: '8px', backgroundColor: '#d0e7f9' }} value={userData.middleName} readOnly />
-            <input type="text" placeholder="Last Name" style={{ flex: 1, padding: '8px', backgroundColor: '#d0e7f9' }} value={userData.lastName} readOnly />
+
+          <div className="checkout-form-row">
+            <div className="form-group">
+              <label>Block, Street, Subdivision <span className="text-danger">*</span></label>
+              <input type="text" placeholder="Block, Street, Subdivision" className="form-control" value={userData.blockStreetSubdivision} onChange={e => handleInputChange('blockStreetSubdivision', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>City <span className="text-danger">*</span></label>
+              <input type="text" placeholder="City" className="form-control" value={userData.city} onChange={e => handleInputChange('city', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Baranggay <span className="text-danger">*</span></label>
+              <input type="text" placeholder="Baranggay" className="form-control" value={userData.province} onChange={e => handleInputChange('province', e.target.value)} />
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-            <div style={{ flex: 1, color: '#4B929D', textAlign: 'left', marginTop: '10px' }}>Block, Street, Subdivision <span style={{ color: 'red' }}>*</span></div>
-            <div style={{ flex: 1, color: '#4B929D', textAlign: 'left', marginTop: '10px' }}>City <span style={{ color: 'red' }}>*</span></div>
-            <div style={{ flex: 1, color: '#4B929D', textAlign: 'left', marginTop: '10px' }}>Baranggay <span style={{ color: 'red' }}>*</span></div>
-          </div>
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-            <input type="text" placeholder="Block, Street, Subdivision" style={{ flex: 1, padding: '8px' }} value={userData.blockStreetSubdivision} onChange={e => handleInputChange('blockStreetSubdivision', e.target.value)} />
-            <input type="text" placeholder="City" style={{ flex: 1, padding: '8px' }} value={userData.city} onChange={e => handleInputChange('city', e.target.value)} />
-            <input type="text" placeholder="Province" style={{ flex: 1, padding: '8px' }} value={userData.province} onChange={e => handleInputChange('province', e.target.value)} />
-          </div>
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-            <div style={{ flex: 1, color: '#4B929D', textAlign: 'left', marginTop: '10px' }}>Landmark <span style={{ color: 'red' }}>*</span></div>
-            <div style={{ flex: 1, color: '#4B929D', textAlign: 'left', marginTop: '10px' }}>Email Address <span style={{ color: 'red' }}>*</span></div>
-            <div style={{ flex: 1, color: '#4B929D', textAlign: 'left', marginTop: '10px' }}>Phone Number <span style={{ color: 'red' }}>*</span></div>
-          </div>
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-            <input type="text" placeholder="Landmark" style={{ flex: 1, padding: '8px' }} value={userData.landmark} onChange={e => handleInputChange('landmark', e.target.value)} />
-            <input type="email" placeholder="Email Address" style={{ flex: 1, padding: '8px' }} value={userData.email} onChange={e => handleInputChange('email', e.target.value)} />
-            <input type="text" placeholder="Phone Number" style={{ flex: 1, padding: '8px' }} value={userData.phone} onChange={e => handleInputChange('phone', e.target.value)} />
+
+          <div className="checkout-form-row">
+            <div className="form-group">
+              <label>Landmark <span className="text-danger">*</span></label>
+              <input type="text" placeholder="Landmark" className="form-control" value={userData.landmark} onChange={e => handleInputChange('landmark', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Email Address <span className="text-danger">*</span></label>
+              <input type="email" placeholder="Email Address" className="form-control" value={userData.email} onChange={e => handleInputChange('email', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Phone Number <span className="text-danger">*</span></label>
+              <input type="text" placeholder="Phone Number" className="form-control" value={userData.phone} onChange={e => handleInputChange('phone', e.target.value)} />
+            </div>
           </div>
 
           <div style={{ marginTop: '10px' }}>
@@ -408,12 +458,12 @@ const CheckoutPage = () => {
               }}
             />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '15px' }}>
+          <div className="d-flex justify-content-end mt-3">
             <button
               type="button"
-              className="btn btn-primary"
-              style={{ backgroundColor: '#4B929D', borderColor: '#4B929D', padding: '10px 20px' }}
+              className="btn btn-primary w-100 w-md-auto"
               onClick={handlePlaceOrder}
+              style={{ backgroundColor: '#4B929D', borderColor: '#4B929D' }}
             >
               Place Order
             </button>

@@ -57,8 +57,9 @@
 
 /* Status Colors */
 .status-pending {
-  background-color: #ffc107;
-  color: #000;
+  background-color: rgb(211, 158, 0);
+      color: #fff3cd;
+
 }
 
 .status-preparing {
