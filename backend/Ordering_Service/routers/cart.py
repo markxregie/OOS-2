@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from database import get_db_connection
 import httpx
 import logging
@@ -242,7 +242,7 @@ async def get_all_pending_orders(token: str = Depends(oauth2_scheme)):
 
     try:
         await cursor.execute("""
-            SELECT 
+            SELECT
                 o.OrderID,
                 o.UserName,
                 o.OrderDate,
@@ -280,6 +280,144 @@ async def get_all_pending_orders(token: str = Depends(oauth2_scheme)):
         })
 
     return orders
+
+@router.get("/admin/orders/yesterday_sales")
+async def get_yesterday_sales(token: str = Depends(oauth2_scheme)):
+    await validate_token_and_roles(token, ["admin", "staff"])
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+    try:
+        yesterday_str = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+        await cursor.execute("""
+            SELECT SUM(TotalAmount)
+            FROM Orders
+            WHERE CONVERT(date, OrderDate) = ? AND Status = 'Completed'
+        """, (yesterday_str,))
+        result = await cursor.fetchone()
+        sales = result[0] if result and result[0] else 0
+    finally:
+        await cursor.close()
+        await conn.close()
+    return {"yesterday_sales": float(sales)}
+
+@router.get("/admin/orders/last_week_total_orders")
+async def get_last_week_total_orders(token: str = Depends(oauth2_scheme)):
+    await validate_token_and_roles(token, ["admin", "staff"])
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+    try:
+        today = date.today()
+        last_week_start = today - timedelta(days=7)
+        last_week_end = today - timedelta(days=1)
+        await cursor.execute("""
+            SELECT COUNT(*)
+            FROM Orders
+            WHERE OrderDate >= ? AND OrderDate < ?
+        """, (last_week_start, today))
+        result = await cursor.fetchone()
+        count = result[0] if result else 0
+    finally:
+        await cursor.close()
+        await conn.close()
+    return {"last_week_total_orders": count}
+
+@router.get("/admin/orders/yesterday_orders_count")
+async def get_yesterday_orders_count(token: str = Depends(oauth2_scheme)):
+    await validate_token_and_roles(token, ["admin", "staff"])
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+    try:
+        yesterday_str = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+        await cursor.execute("""
+            SELECT COUNT(*)
+            FROM Orders
+            WHERE CONVERT(date, OrderDate) = ?
+        """, (yesterday_str,))
+        result = await cursor.fetchone()
+        count = result[0] if result else 0
+    finally:
+        await cursor.close()
+        await conn.close()
+    return {"yesterday_orders_count": count}
+
+@router.get("/admin/orders/yesterday_pending_count")
+async def get_yesterday_pending_count(token: str = Depends(oauth2_scheme)):
+    await validate_token_and_roles(token, ["admin", "staff"])
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+    try:
+        yesterday_str = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+        await cursor.execute("""
+            SELECT COUNT(*)
+            FROM Orders
+            WHERE CONVERT(date, OrderDate) = ? AND Status = 'Pending'
+        """, (yesterday_str,))
+        result = await cursor.fetchone()
+        count = result[0] if result else 0
+    finally:
+        await cursor.close()
+        await conn.close()
+    return {"yesterday_pending_count": count}
+
+@router.get("/admin/orders/last_week_delivered_count")
+async def get_last_week_delivered_count(token: str = Depends(oauth2_scheme)):
+    await validate_token_and_roles(token, ["admin", "staff"])
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+    try:
+        today = date.today()
+        last_week_start = today - timedelta(days=7)
+        await cursor.execute("""
+            SELECT COUNT(*)
+            FROM Orders
+            WHERE OrderDate >= ? AND OrderDate < ? AND Status = 'Completed' AND OrderType = 'Delivery'
+        """, (last_week_start, today))
+        result = await cursor.fetchone()
+        count = result[0] if result else 0
+    finally:
+        await cursor.close()
+        await conn.close()
+    return {"last_week_delivered_count": count}
+
+@router.get("/admin/orders/last_week_pickup_count")
+async def get_last_week_pickup_count(token: str = Depends(oauth2_scheme)):
+    await validate_token_and_roles(token, ["admin", "staff"])
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+    try:
+        today = date.today()
+        last_week_start = today - timedelta(days=7)
+        await cursor.execute("""
+            SELECT COUNT(*)
+            FROM Orders
+            WHERE OrderDate >= ? AND OrderDate < ? AND Status = 'Completed' AND OrderType = 'Pick Up'
+        """, (last_week_start, today))
+        result = await cursor.fetchone()
+        count = result[0] if result else 0
+    finally:
+        await cursor.close()
+        await conn.close()
+    return {"last_week_pickup_count": count}
+
+@router.get("/admin/orders/last_week_cancelled_count")
+async def get_last_week_cancelled_count(token: str = Depends(oauth2_scheme)):
+    await validate_token_and_roles(token, ["admin", "staff"])
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+    try:
+        today = date.today()
+        last_week_start = today - timedelta(days=7)
+        await cursor.execute("""
+            SELECT COUNT(*)
+            FROM Orders
+            WHERE OrderDate >= ? AND OrderDate < ? AND Status = 'Cancelled'
+        """, (last_week_start, today))
+        result = await cursor.fetchone()
+        count = result[0] if result else 0
+    finally:
+        await cursor.close()
+        await conn.close()
+    return {"last_week_cancelled_count": count}
 
 @router.get("cart/admin/orders/pending")
 async def get_pending_orders_count(token: str = Depends(oauth2_scheme)):
