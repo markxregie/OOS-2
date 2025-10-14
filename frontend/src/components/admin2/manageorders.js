@@ -203,7 +203,14 @@ const ManageOrders = () => {
           items: order.items || []  // ← DIRECTLY use the array
         }));
 
-        setOrders(transformedOrders);
+        // Filter orders to only include those from today
+        const today = new Date();
+        const recentOrders = transformedOrders.filter(order => {
+          const orderDate = new Date(order.date);
+          return orderDate.toDateString() === today.toDateString();
+        });
+
+        setOrders(recentOrders);
       } catch (error) {
         console.error("Failed to fetch orders:", error);
         setOrders(sampleOrders);

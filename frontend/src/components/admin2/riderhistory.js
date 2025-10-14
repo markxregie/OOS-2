@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from "react-router-dom";
 import { FaChevronDown, FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaUndo, FaSignOutAlt, FaTimesCircle, FaExchangeAlt, FaBars, FaHome, FaHistory, FaCog, FaCreditCard, FaUserTie, FaAngleLeft, FaAngleRight, FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa";
 import { Form, Container, Table, Card, Button } from "react-bootstrap";
 import riderImage from "../../assets/rider.jpg";
@@ -9,13 +10,35 @@ import "./riderdashboard.css";
 import Swal from 'sweetalert2';
 
 function RiderHistory() {
-  const userRole = "Admin";
-  const userName = "Lim Alcovendas";
+  const [userRole, setUserRole] = useState("");
+  const [userName, setUserName] = useState("");
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 991);
   const [sortConfig, setSortConfig] = useState({ key: 'orderedAt', direction: 'descending' });
+
+  const [authToken, setAuthToken] = useState(localStorage.getItem("authToken"));
+  const [riderId, setRiderId] = useState(localStorage.getItem("riderId") || "");
+  const [riderName, setRiderName] = useState(localStorage.getItem("riderName") || "");
+  const [riderPhone, setRiderPhone] = useState(localStorage.getItem("riderPhone") || "");
+  const [userLoading, setUserLoading] = useState(true); // New loading state for user info
+
+  const location = useLocation();
+
+  useEffect(() => {
+    const queryParams = new URLSearchParams(location.search);
+    const tokenFromUrl = queryParams.get("authorization");
+    const usernameFromUrl = queryParams.get("username");
+
+    if (tokenFromUrl) {
+      localStorage.setItem("authToken", tokenFromUrl);
+      setAuthToken(tokenFromUrl);
+    }
+    if (usernameFromUrl) {
+      localStorage.setItem("riderUsername", usernameFromUrl);
+    }
+  }, [location.search]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -43,125 +66,121 @@ function RiderHistory() {
   const [toggle, setToggle] = useState("completed");
   const [orders, setOrders] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [earningsFilter, setEarningsFilter] = useState("Monthly");
 
   const rowsPerPage = 10;
 
   useEffect(() => {
-    setOrders(sampleOrders);
-  }, []);
-
-
-
-  const sampleOrders = [
-    {
-      id: 1,
-      currentStatus: "delivered",
-      orderedAt: "2023-10-01 10:00 AM",
-      customerName: "Alice Johnson",
-      phone: "+1-1234567890",
-      address: "123 Main St, Springfield",
-      items: [
-        { quantity: 2, name: "Americano", price: 5.00 },
-        { quantity: 1, name: "Croissant", price: 3.50 }
-      ],
-      total: 13.50,
-      assignedRider: "rider1"
-    },
-    {
-      id: 2,
-      currentStatus: "delivered",
-      orderedAt: "2023-10-01 10:30 AM",
-      customerName: "Bob Smith",
-      phone: "+1-1234567891",
-      address: "456 Elm St, Springfield",
-      items: [
-        { quantity: 1, name: "Latte", price: 6.00 },
-        { quantity: 2, name: "Muffin", price: 4.00 }
-      ],
-      total: 14.00,
-      assignedRider: "rider1"
-    },
-    {
-      id: 3,
-      currentStatus: "delivered",
-      orderedAt: "2023-10-01 11:00 AM",
-      customerName: "Charlie Brown",
-      phone: "+1-1234567892",
-      address: "789 Oak Ave, Springfield",
-      items: [
-        { quantity: 3, name: "Espresso", price: 4.00 }
-      ],
-      total: 12.00,
-      assignedRider: "rider2"
-    },
-    {
-      id: 4,
-      currentStatus: "delivered",
-      orderedAt: "2023-10-01 11:30 AM",
-      customerName: "Diana Prince",
-      phone: "+1-1234567893",
-      address: "101 Justice Ln, Metropolis",
-      items: [
-        { quantity: 1, name: "Cappuccino", price: 6.50 },
-        { quantity: 1, name: "Danish", price: 4.50 }
-      ],
-      total: 11.00,
-      assignedRider: "rider2"
-    },
-    {
-      id: 5,
-      currentStatus: "delivered",
-      orderedAt: "2023-10-01 11:45 AM",
-      customerName: "Clark Kent",
-      phone: "+1-1234567894",
-      address: "300 Krypton Dr, Smallville",
-      items: [
-        { quantity: 2, name: "Hot Chocolate", price: 5.50 }
-      ],
-      total: 11.00,
-      assignedRider: "rider1"
-    },
-    {
-      id: 6,
-      currentStatus: "delivered",
-      orderedAt: "2023-10-01 12:00 PM",
-      customerName: "Bruce Wayne",
-      phone: "+1-1234567895",
-      address: "1007 Mountain Ln, Gotham",
-      items: [
-        { quantity: 1, name: "Americano", price: 5.00 },
-        { quantity: 1, name: "Muffin", price: 4.00 }
-      ],
-      total: 9.00,
-      assignedRider: "rider1"
-    },
-    {
-      id: 7,
-      currentStatus: "cancelled",
-      orderedAt: "2023-10-01 12:15 PM",
-      customerName: "Tony Stark",
-      phone: "+1-1234567896",
-      address: "10880 Malibu Point, Malibu",
-      items: [
-        { quantity: 1, name: "Iced Coffee", price: 7.00 }
-      ],
-      total: 7.00,
-      assignedRider: "rider1"
-    },
-    {
-      id: 8,
-      currentStatus: "returned",
-      orderedAt: "2023-10-01 12:30 PM",
-      customerName: "Steve Rogers",
-      phone: "+1-1234567897",
-      address: "569 Leaman Place, Brooklyn",
-      items: [
-        { quantity: 1, name: "Hot Tea", price: 3.00 }
-      ],
-      total: 3.00,
-      assignedRider: "rider2"
+    const fetchOrders = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`http://localhost:7004/delivery/rider/${riderId}/orders`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        // ✅ no remapping needed, backend already normalized
+        setOrders(data);
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (riderId && authToken) {
+      fetchOrders();
     }
-  ];
+  }, [riderId, authToken]);
+
+  // Fetch user info with loading and debug logging
+  useEffect(() => {
+    if (authToken) {
+      setUserLoading(true);
+      console.log("Fetching user info");
+      fetch("http://localhost:4000/auth/users/me", {
+        headers: { "Authorization": `Bearer ${authToken}` }
+      })
+        .then(res => {
+          if (res.status === 401) {
+            handleLogout();
+            return;
+          }
+          if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
+          }
+          return res.json();
+        })
+        .then(async data => {
+          console.log("User data:", data);
+          if (!data) return;
+          const userId = data.userId || "";
+          const userRoleData = data.userRole || "";
+          const fallbackName = (data.fullName && data.fullName.trim() !== "")
+            ? data.fullName
+            : (data.username && data.username.trim() !== "")
+              ? data.username
+              : "Rider";
+          const fallbackPhone = data.phone || "";
+
+          setRiderId(userId);
+          localStorage.setItem("riderId", userId);
+          setUserRole(userRoleData);
+          setUserName(fallbackName);
+
+          // Fetch rider details from riders endpoint
+          if (userId) {
+            try {
+              const riderRes = await fetch(`http://localhost:4000/users/riders/${userId}`, {
+                headers: { "Authorization": `Bearer ${authToken}` }
+              });
+              if (riderRes.ok) {
+                const riderData = await riderRes.json();
+                console.log("Rider data:", riderData);
+                const riderFullName = riderData.FullName || fallbackName;
+                const riderPhone = riderData.Phone || fallbackPhone;
+                setRiderName(riderFullName);
+                localStorage.setItem("riderName", riderFullName);
+                setRiderPhone(riderPhone);
+                localStorage.setItem("riderPhone", riderPhone);
+                setUserName(riderFullName);
+              } else {
+                // Fallback to user data
+                setRiderName(fallbackName);
+                localStorage.setItem("riderName", fallbackName);
+                setRiderPhone(fallbackPhone);
+                localStorage.setItem("riderPhone", fallbackPhone);
+              }
+            } catch (err) {
+              console.error("Failed to fetch rider info:", err);
+              // Fallback to user data
+              setRiderName(fallbackName);
+              localStorage.setItem("riderName", fallbackName);
+              setRiderPhone(fallbackPhone);
+              localStorage.setItem("riderPhone", fallbackPhone);
+            }
+          } else {
+            setRiderName(fallbackName);
+            localStorage.setItem("riderName", fallbackName);
+            setRiderPhone(fallbackPhone);
+            localStorage.setItem("riderPhone", fallbackPhone);
+          }
+          setUserLoading(false); // Done loading
+        })
+        .catch(err => {
+          console.error("Failed to fetch user info:", err);
+          setUserLoading(false); // Done loading even on error
+        });
+    }
+  }, [authToken]);
+
+
+
+
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -244,6 +263,43 @@ function RiderHistory() {
     }
     return '▼';
   };
+
+  const calculateEarnings = () => {
+    const now = new Date();
+    let startDate;
+
+    if (earningsFilter === "Daily") {
+      // Filter orders from today
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
+      return orders
+        .filter(order => activeStatuses.includes(order.currentStatus) && new Date(order.orderedAt) >= startOfDay)
+        .reduce((sum, order) => sum + (order.total || 0), 0)
+        .toFixed(2);
+    } else if (earningsFilter === "Weekly") {
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    } else if (earningsFilter === "Monthly") {
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    }
+
+    // For All-Time, include both 'pending' and 'delivered' statuses
+    if (earningsFilter === "All-Time") {
+      const validStatuses = ["pending", "delivered"];
+      return orders
+        .filter(order => validStatuses.includes(order.currentStatus))
+        .reduce((sum, order) => sum + (order.total || 0), 0)
+        .toFixed(2);
+    }
+
+    // For Weekly and Monthly filters, include active statuses and filter by date
+    const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
+    return orders
+      .filter(order => activeStatuses.includes(order.currentStatus) && new Date(order.orderedAt) >= startDate)
+      .reduce((sum, order) => sum + (order.total || 0), 0)
+      .toFixed(2);
+  };
+
+  const earnings = calculateEarnings();
 
 
 
@@ -349,8 +405,8 @@ function RiderHistory() {
         <Container fluid className="dashboard-summary-container" style={{ backgroundColor: "#a3d3d8" }}>
                   <div className="rider-selector-group">
                     <div className="rider-info-display">
-                      <img src={riderImage} alt="John Doe" className="rider-profile-pic" />
-                      <span className="rider-name-text">John Doe</span>
+                      <img src={riderImage} alt={userName} className="rider-profile-pic" />
+                      <span className="rider-name-text">{userName}</span>
                     </div>
                   </div>
                   <div className="summary-cards-container">
@@ -368,12 +424,27 @@ function RiderHistory() {
                         {orders.filter(order => order.currentStatus === "delivered").length} orders
                       </span>
                     </Card>
-                    <Card className="summary-card">
+                    <Card className="summary-card" style={{ position: 'relative' }}>
+                      <Form.Select
+                        size="sm"
+                        value={earningsFilter}
+                        onChange={(e) => setEarningsFilter(e.target.value)}
+                        style={{
+                          position: 'absolute',
+                          top: '10px',
+                          right: '10px',
+                          width: '120px',
+                          fontSize: '12px',
+                          padding: '2px 6px'
+                        }}
+                      >
+                        <option value="Daily">Daily</option>
+                        <option value="Weekly">Weekly</option>
+                        <option value="Monthly">Monthly</option>
+                      </Form.Select>
                       <FaDollarSign size={32} color="#fd7e14" />
                       <span className="card-title">Earnings</span>
-                      <span className="card-value">
-                        ₱{orders.filter(order => order.currentStatus === "delivered").reduce((sum, order) => sum + order.total, 0).toFixed(2)}
-                      </span>
+                      <span className="card-value">₱{earnings}</span>
                     </Card>
                   </div>
                 </Container>

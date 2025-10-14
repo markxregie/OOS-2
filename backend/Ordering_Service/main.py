@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import cart  # router module
-from routers import cart, delivery  # router module
+import sys
+import os
+sys.path.append(os.path.dirname(__file__))
+from routers import cart, delivery
 from database import get_db_connection  # connection checker (optional)
 
 app = FastAPI(title="Ordering Service")

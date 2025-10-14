@@ -86,6 +86,9 @@ const Dashboard = () => {
   const [recentOrders, setRecentOrders] = useState([]);
   const [allOrders, setAllOrders] = useState([]);
   const [riderEarningsData, setRiderEarningsData] = useState([]);
+  const [earningsFilter, setEarningsFilter] = useState("Weekly");
+  const [allDeliveryOrders, setAllDeliveryOrders] = useState([]);
+  const [riders, setRiders] = useState([]);
 
   // --- useEffects for Auth and Data Fetching ---
   useEffect(() => {
@@ -178,35 +181,64 @@ const Dashboard = () => {
       .then((res) => { if (!res.ok) { throw new Error(`HTTP error! status: ${res.status}`); } return res.json(); })
       .then((riders) => {
         console.log("Fetched riders:", riders);
-        // Initialize earnings map with all riders at 0
-        const earningsMap = {};
-        riders.forEach(rider => {
-          earningsMap[rider.FullName] = 0;
-        });
-        // Now fetch delivery orders
-        return fetch("http://localhost:7004/delivery/admin/delivery/orders", { headers: { Authorization: `Bearer ${authToken}`, }, })
-          .then((res) => { if (!res.ok) { throw new Error(`HTTP error! status: ${res.status}`); } return res.json(); })
-          .then((data) => {
-            console.log("Fetched delivery orders:", data);
-            // Filter active orders: not delivered, cancelled, returned
-            const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
-            const activeOrders = data.filter(order => activeStatuses.includes(order.currentStatus) && order.assignedRider);
-            // Sum totals for active orders
-            activeOrders.forEach(order => {
-              const riderName = order.assignedRider.fullName;
-              if (earningsMap.hasOwnProperty(riderName)) {
-                earningsMap[riderName] += order.total;
-              }
-            });
-            const transformedData = Object.entries(earningsMap).map(([name, earnings]) => ({
-              name,
-              earnings,
-            }));
-            setRiderEarningsData(transformedData);
-          });
+        setRiders(riders);
       })
-      .catch((err) => console.error("Failed to fetch riders or delivery orders:", err));
+      .catch((err) => console.error("Failed to fetch riders:", err));
   }, [authToken]);
+
+  useEffect(() => {
+    if (!authToken) { return; }
+    // Fetch all delivery orders
+    fetch("http://localhost:7004/delivery/admin/delivery/orders", { headers: { Authorization: `Bearer ${authToken}`, }, })
+      .then((res) => { if (!res.ok) { throw new Error(`HTTP error! status: ${res.status}`); } return res.json(); })
+      .then((data) => {
+        console.log("Fetched delivery orders:", data);
+        setAllDeliveryOrders(data);
+      })
+      .catch((err) => console.error("Failed to fetch delivery orders:", err));
+  }, [authToken]);
+
+  useEffect(() => {
+    if (!riders.length || !allDeliveryOrders.length) { return; }
+    // Initialize earnings map with all riders at 0
+    const earningsMap = {};
+    riders.forEach(rider => {
+      earningsMap[rider.FullName] = 0;
+    });
+
+    // Filter active orders: not delivered, cancelled, returned
+    const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
+    let activeOrders = allDeliveryOrders.filter(order => activeStatuses.includes(order.currentStatus) && order.assignedRider);
+
+    // Filter by date based on earningsFilter
+    const now = new Date();
+    if (earningsFilter === "Daily") {
+      const today = now.toISOString().split('T')[0];
+      activeOrders = activeOrders.filter(order => order.orderedAt.startsWith(today));
+    } else if (earningsFilter === "Weekly") {
+      const sevenDaysAgo = new Date(now);
+      sevenDaysAgo.setDate(now.getDate() - 7);
+      activeOrders = activeOrders.filter(order => new Date(order.orderedAt) >= sevenDaysAgo);
+    } else if (earningsFilter === "Monthly") {
+      const thirtyDaysAgo = new Date(now);
+      thirtyDaysAgo.setDate(now.getDate() - 30);
+      activeOrders = activeOrders.filter(order => new Date(order.orderedAt) >= thirtyDaysAgo);
+    }
+
+    // Sum totals for filtered active orders
+    activeOrders.forEach(order => {
+      const riderName = order.assignedRider.fullName;
+      if (earningsMap.hasOwnProperty(riderName)) {
+        earningsMap[riderName] += order.total;
+      }
+    });
+
+    const transformedData = Object.entries(earningsMap).map(([name, earnings]) => ({
+      name,
+      earnings,
+    }));
+    setRiderEarningsData(transformedData);
+  }, [riders, allDeliveryOrders, earningsFilter]);
   // --- End of useEffects ---
 
   const toggleDropdown = () => {
@@ -429,7 +461,12 @@ const Dashboard = () => {
           <div className="dashboard-charts" style={{ marginTop: '20px', display: 'block' }}>
               <div className="chart-box" style={{ width: '100%', margin: '0', padding: '20px' }}>
                   <div className="chart-header">
-                      <span>Rider Earnings - All-Time</span>
+                      <span>Rider Earnings - {earningsFilter}</span>
+                      <select className="chart-dropdown" value={earningsFilter} onChange={(e) => setEarningsFilter(e.target.value)}>
+                          <option value="Daily">Daily</option>
+                          <option value="Weekly">Weekly</option>
+                          <option value="Monthly">Monthly</option>
+                      </select>
                   </div>
                   <ResponsiveContainer width="100%" height={350}>
                       <BarChart data={riderEarningsData} margin={{ top: 10, right: 30, left: 20, bottom: 5 }}>
