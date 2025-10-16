@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaTimesCircle, FaExchangeAlt, FaBars, FaHome, FaHistory, FaCog, FaCreditCard, FaUserTie } from "react-icons/fa";
-import { Container, Card, Form } from "react-bootstrap";
+import { FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaTimesCircle, FaExchangeAlt, FaBars, FaHome, FaHistory, FaCog, FaCreditCard, FaUserTie, FaChevronDown, FaUndo, FaSignOutAlt } from "react-icons/fa";
+import { Container, Card, Form, Spinner } from "react-bootstrap";
 import riderImage from "../../assets/rider.jpg";
-import "./riderdashboard.css";
+import "./riderdashboard.css"; // Updated CSS import
 
 function RiderDashboard() {
   const userRole = "Admin";
@@ -12,13 +12,13 @@ function RiderDashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [toggle, setToggle] = useState("active");
   const [earningsFilter, setEarningsFilter] = useState("All-Time");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const [riders, setRiders] = useState([]);
   const [selectedRider, setSelectedRider] = useState(null);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [statusUpdating, setStatusUpdating] = useState({});
 
   const authToken = localStorage.getItem('authToken');
 
@@ -28,7 +28,6 @@ function RiderDashboard() {
 
   useEffect(() => {
     if (selectedRider) {
-      console.log(`🔄 Fetching orders for rider ID: ${selectedRider}`);
       fetchOrders(selectedRider);
     }
   }, [selectedRider]);
@@ -68,7 +67,6 @@ function RiderDashboard() {
     setLoading(true);
     setError(null);
     try {
-      console.log(`📡 Making request to: http://localhost:7004/delivery/rider/${riderId}/orders`);
       const response = await fetch(`http://localhost:7004/delivery/rider/${riderId}/orders`, {
         method: 'GET',
         headers: {
@@ -76,134 +74,15 @@ function RiderDashboard() {
           'Content-Type': 'application/json',
         },
       });
-      console.log(`Response status: ${response.status}`);
-      
       if (!response.ok) {
         throw new Error('Failed to fetch orders');
       }
       const data = await response.json();
-      console.log('✅ Orders fetched successfully! Total orders:', data.length);
-      console.log('═══════════════════════════════════════════');
-      console.log('COMPLETE ORDERS DATA:');
-      console.log('═══════════════════════════════════════════');
-      data.forEach((order, index) => {
-        console.log(`\n📦 ORDER ${index + 1}:`);
-        console.log('  id:', order.id);
-        console.log('  referenceNumber:', order.referenceNumber);
-        console.log('  customerName:', order.customerName);
-        console.log('  phone:', order.phone);
-        console.log('  address:', order.address);
-        console.log('  orderedAt:', order.orderedAt);
-        console.log('  currentStatus:', order.currentStatus);
-        console.log('  paymentMethod:', order.paymentMethod);
-        console.log('  total:', order.total);
-        console.log('  notes:', order.notes);
-        console.log('  items:', order.items);
-        console.log('  ─ Full object:', order);
-      });
-      console.log('\n═══════════════════════════════════════════');
-      console.log('FULL ARRAY:', data);
-      console.log('═══════════════════════════════════════════\n');
       setOrders(data);
     } catch (err) {
-      console.error('❌ Error fetching orders:', err);
       setError(err.message);
     } finally {
       setLoading(false);
-    }
-  };
-
-
-
-  // Send status update to POS service
-  const sendStatusToPOS = async (referenceNumber, newStatus) => {
-    try {
-      const response = await fetch(`http://127.0.0.1:9000/auth/purchase_orders/online/${referenceNumber}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          newStatus: newStatus,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update POS status');
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (err) {
-      console.error('Error sending status to POS:', err);
-      throw err;
-    }
-  };
-
-  // Main function: Update order status and sync with POS
-  const updateOrderStatusWithPOS = async (orderId, newStatus) => {
-    setStatusUpdating(prev => ({ ...prev, [orderId]: true }));
-    try {
-      // Step 1: Find the order and get its reference number from the order data
-      console.log(`\n========== POS SYNC START ==========`);
-      console.log(`Step 1: Finding order ${orderId}...`);
-      console.log('Current orders state:', orders);
-      
-      const order = orders.find(o => o.id === orderId);
-      
-      if (!order) {
-        console.error(`❌ Order ${orderId} not found in orders array`);
-        throw new Error(`Order ${orderId} not found`);
-      }
-
-      console.log('✅ Order found:', order);
-      console.log('Order ID:', order.id);
-      console.log('Order referenceNumber:', order.referenceNumber);
-
-      const referenceNumber = order.referenceNumber;
-      
-      if (!referenceNumber) {
-        console.error('❌ Reference number is missing from order');
-        throw new Error('Reference number not found in order data');
-      }
-      
-      console.log(`✅ Reference number extracted: ${referenceNumber}`);
-
-      // Step 2: Send status update to POS service
-      console.log(`\nStep 2: Sending status update to POS...`);
-      console.log(`Endpoint: http://127.0.0.1:9000/auth/purchase_orders/online/${referenceNumber}/status`);
-      console.log(`Payload: { newStatus: "${newStatus}" }`);
-      
-      let posResponse;
-      try {
-        posResponse = await sendStatusToPOS(referenceNumber, newStatus);
-        console.log('✅ POS status update successful:', posResponse);
-      } catch (err) {
-        console.error('❌ POS update failed:', err);
-        throw new Error(`POS sync failed: ${err.message}`);
-      }
-
-      // Step 3: Update local orders state
-      console.log(`\nStep 3: Updating local order state...`);
-      setOrders(prevOrders =>
-        prevOrders.map(order =>
-          order.id === orderId ? { ...order, currentStatus: newStatus } : order
-        )
-      );
-      console.log(`✅ Order status updated locally`);
-
-      // Show success message
-      console.log(`\n✅ SUCCESS: Order #${orderId} synced with POS`);
-      console.log(`========== POS SYNC END ==========\n`);
-      alert(`✅ Order #${orderId} status updated to "${newStatus}" and synced with POS\nReference: ${referenceNumber}`);
-
-    } catch (err) {
-      console.error('❌ Error updating order status:', err);
-      console.log(`========== POS SYNC END (ERROR) ==========\n`);
-      alert(`❌ Failed to update order status:\n${err.message}`);
-    } finally {
-      setStatusUpdating(prev => ({ ...prev, [orderId]: false }));
     }
   };
 
@@ -241,6 +120,8 @@ function RiderDashboard() {
         return { color: "#8e44ad", backgroundColor: "#e5dbff", text: "Ready to Pickup" };
       case "pickedUp":
         return { color: "#0d6efd", backgroundColor: "#cfe2ff", text: "Picked Up" };
+      case "completed":
+      return { color: "rgb(25, 135, 84)", backgroundColor: "rgb(209, 231, 221)", text: "COMPLETED"};
       case "inTransit":
         return { color: "#6610f2", backgroundColor: "#e5dbff", text: "In Transit" };
       case "delivered":
@@ -273,6 +154,7 @@ function RiderDashboard() {
     let startDate;
 
     if (earningsFilter === "Daily") {
+      // Filter orders from today
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
       return orders
@@ -285,6 +167,7 @@ function RiderDashboard() {
       startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     }
 
+    // For All-Time, include both 'pending' and 'delivered' statuses
     if (earningsFilter === "All-Time") {
       const validStatuses = ["pending", "delivered"];
       return orders
@@ -293,6 +176,7 @@ function RiderDashboard() {
         .toFixed(2);
     }
 
+    // For Weekly and Monthly filters, include active statuses and filter by date
     const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
     return orders
       .filter(order => activeStatuses.includes(order.currentStatus) && new Date(order.orderedAt) >= startDate)
@@ -310,15 +194,23 @@ function RiderDashboard() {
     readyToPickup: <FaTruckPickup />,
     pickedUp: <FaTruckMoving />,
     pickedup: <FaTruckMoving />,
+    delivering: <FaTruckMoving />,
+    completed: <FaCheckCircle />,
     inTransit: <FaTruckMoving />,
     delivered: <FaCheckCircle />,
     cancelled: <FaTimesCircle />,
   };
 
-  const cardColors = "#a3d3d8";
+  const cardColors = "#a3d3d8"; // Fixed color since riders are dynamic
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="d-flex justify-content-center align-items-center" style={{ height: '100vh' }}>
+        <Spinner animation="border" role="status">
+          <span className="visually-hidden">Loading...</span>
+        </Spinner>
+      </div>
+    );
   }
 
   if (error) {
@@ -330,22 +222,43 @@ function RiderDashboard() {
       <div className="main-content">
         <header className="manage-header">
           <div className="header-left">
-            <button className="menu-toggle" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
-              <FaBars />
-            </button>
+            
             <h2 className="page-title">Rider Dashboard</h2>
           </div>
           <div className="header-right">
-            <div className="header-date">{currentDateFormatted}</div>
-            <div className="header-profile">
-              <div className="bell-icon"><FaBell className="bell-outline" /></div>
-              <div className="profile-pic" style={{ backgroundImage: `url(${riderImage})` }}></div>
-              <div className="profile-info">
-                <div className="profile-role">{getGreeting()}! I'm {userRole}</div>
-                <div className="profile-name">{userName}</div>
-              </div>
-            </div>
-          </div>
+                      <div className="header-date">{currentDateFormatted}</div>
+                      <div className="header-profile">
+                        <div className="profile-pic"></div>
+                        <div className="profile-info">
+                          <div className="profile-role">Hi! I'm {userRole}</div>
+                          <div className="profile-name">Admin OOS</div>
+                        </div>
+                        <div className="dropdown-icon" onClick={() => setDropdownOpen(!dropdownOpen)}><FaChevronDown /></div>
+                        <div className="bell-icon"><FaBell className="bell-outline" /></div>
+                        {dropdownOpen && (
+                          <div className="profile-dropdown" style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "white", border: "1px solid #ccc", borderRadius: "4px", boxShadow: "0 2px 8px rgba(0,0,0,0.15)", zIndex: 1000, width: "150px" }}>
+                            <ul style={{ listStyle: "none", margin: 0, padding: "8px 0" }}>
+                              <li
+                                onClick={() => window.location.reload()}
+                                style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#4b929d" }}
+                                onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f0f0f0"}
+                                onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
+                              >
+                                <FaUndo /> Refresh
+                              </li>
+                              <li
+                                onClick={() => { localStorage.removeItem("access_token"); window.location.href = "http://localhost:4002/"; }}
+                                style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#dc3545" }}
+                                onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8d7da"}
+                                onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
+                              >
+                                <FaSignOutAlt /> Logout
+                              </li>
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
         </header>
 
         <Container fluid className="dashboard-summary-container" style={{ backgroundColor: cardColors }}>
@@ -464,43 +377,7 @@ function RiderDashboard() {
                   <span className="total-value">₱{order.total?.toFixed(2) || "0.00"}</span>
                 </div>
                 <div className="order-actions">
-                  <button
-                    className="status-button delivered"
-                    onClick={() => {
-                      console.log('');
-                      console.log('═══════════════════════════════════════════');
-                      console.log('📦 FULL ORDER DATA:');
-                      console.log('═══════════════════════════════════════════');
-                      console.log('ID:', order.id);
-                      console.log('Reference Number:', order.referenceNumber);
-                      console.log('Customer Name:', order.customerName);
-                      console.log('Phone:', order.phone);
-                      console.log('Address:', order.address);
-                      console.log('Ordered At:', order.orderedAt);
-                      console.log('Current Status:', order.currentStatus);
-                      console.log('Payment Method:', order.paymentMethod);
-                      console.log('Total:', order.total);
-                      console.log('Notes:', order.notes);
-                      console.log('Items:', order.items);
-                      console.log('─────────────────────────────────────────');
-                      console.log('Full Order Object:', order);
-                      console.log('═══════════════════════════════════════════');
-                      console.log('');
-                      updateOrderStatusWithPOS(order.id, "delivered");
-                    }}
-                    disabled={statusUpdating[order.id]}
-                  >
-                    {statusUpdating[order.id] ? "Updating..." : "Mark Delivered"}
-                  </button>
-                  <button
-                    className="status-button cancelled"
-                    onClick={() => {
-                      updateOrderStatusWithPOS(order.id, "cancelled");
-                    }}
-                    disabled={statusUpdating[order.id]}
-                  >
-                    {statusUpdating[order.id] ? "Updating..." : "Cancel Order"}
-                  </button>
+                  {/* Dropdowns removed as requested */}
                 </div>
               </Card>
             ))

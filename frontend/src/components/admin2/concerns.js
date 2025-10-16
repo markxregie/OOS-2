@@ -239,7 +239,7 @@ const Concerns = () => {
               <div className="profile-pic"></div>
               <div className="profile-info">
                 <div className="profile-role">Hi! I'm {userRole}</div>
-                <div className="profile-name">{userName}</div>
+                <div className="profile-name">Admin OOS</div>
               </div>
               <div className="dropdown-icon" onClick={() => setDropdownOpen(!dropdownOpen)}><FaChevronDown /></div>
               <div className="bell-icon"><FaBell className="bell-outline" /></div>
