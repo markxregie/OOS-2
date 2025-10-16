@@ -70,16 +70,17 @@ const OrderHistory = () => {
             const addonSum = p.addons ? p.addons.reduce((s, a) => s + (a.price || a.Price || 0), 0) : 0;
             return sum + (p.price + addonSum) * p.quantity;
           }, 0) + (order.orderType === 'Delivery' ? 50 : 0);
+          const originalStatus = order.status.toLowerCase();
+          const status = originalStatus === 'delivered' ? 'completed' : originalStatus;
           const orderData = {
             id: order.id,
             orderType: order.orderType,
             products: order.products,
-            status: order.status.toLowerCase(),
+            status: status,
             date: order.date,
             total,
           };
 
-          const status = order.status.toLowerCase();
           if (status === 'completed') {
             completedOrders.push(orderData);
           } else if (status === 'cancelled') {

@@ -118,8 +118,7 @@ const CheckoutPage = () => {
         addon_name: addon.addon_name || addon.AddOnName || addon.name,
         price: addon.price || addon.Price || 0,
         status: addon.status || addon.Status || 'Available'
-      })) : [],
-      ordernotes: item.orderNotes || ''
+      })) : []
     }));
 
     const deliveryInfoPayload = orderType === "Delivery" ? {
