@@ -503,7 +503,7 @@ function RiderHistory() {
                   <tbody>
                     {currentRows.map((order) => (
                       <tr key={order.id}>
-                        <td>#{order.id}</td>
+                        
                         <td>{order.customerName}</td>
                         <td>{order.orderedAt}</td>
                         <td>₱{order.total?.toFixed(2) || "0.00"}</td>
@@ -515,22 +515,63 @@ function RiderHistory() {
                         <td>
                           <button
                             className="action-btn view"
-                            onClick={() => Swal.fire({
-                              title: `Order #${order.id} Details`,
-                              html: `
-                                <p><strong>Customer:</strong> ${order.customerName}</p>
-                                <p><strong>Address:</strong> ${order.address}</p>
-                                <p><strong>Items:</strong></p>
-                                <ul>
-                                  ${order.items.map(item => `<li>${item.quantity}x ${item.name} (₱${item.price.toFixed(2)})</li>`).join('')}
-                                </ul>
-                                <p><strong>Total:</strong> ₱${order.total.toFixed(2)}</p>
-                                <p><strong>Status:</strong> ${getStatusStyle(order.currentStatus).text}</p>
-                              `,
-                              showCloseButton: true,
-                              focusConfirm: false,
-                              confirmButtonText: 'OK',
-                            })}
+                            onClick={() => {
+                              const statusStyle = getStatusStyle(order.currentStatus);
+                              Swal.fire({
+                                title: `Order #${order.id} Details`,
+                                html: `
+                                  <div style="text-align: left; font-family: Arial, sans-serif; max-width: 500px;">
+                                    <div style="margin-bottom: 15px;">
+                                      <strong style="color: #333;">Order Date:</strong> ${new Date(order.orderedAt).toLocaleString()}
+                                    </div>
+                                    <div style="margin-bottom: 15px;">
+                                      <strong style="color: #333;">Customer:</strong> ${order.customerName}
+                                    </div>
+                                    <div style="margin-bottom: 15px;">
+                                      <strong style="color: #333;">Delivery Address:</strong> ${order.address}
+                                    </div>
+                                    <div style="margin-bottom: 15px;">
+                                      <strong style="color: #333;">Items Ordered:</strong>
+                                      <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                                        <thead>
+                                          <tr style="background-color: #f8f9fa;">
+                                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Item</th>
+                                            <th style="border: 1px solid #ddd; padding: 8px; text-align: center;">Qty</th>
+                                            <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Price</th>
+                                            <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Subtotal</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          ${order.items.map(item => `
+                                            <tr>
+                                              <td style="border: 1px solid #ddd; padding: 8px;">${item.name}</td>
+                                              <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${item.quantity}</td>
+                                              <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">₱${item.price.toFixed(2)}</td>
+                                              <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">₱${(item.quantity * item.price).toFixed(2)}</td>
+                                            </tr>
+                                          `).join('')}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                    <div style="margin-bottom: 15px; text-align: right; font-size: 18px; font-weight: bold;">
+                                      <strong style="color: #333;">Total Amount:</strong> ₱${order.total.toFixed(2)}
+                                    </div>
+                                    <div style="margin-bottom: 15px;">
+                                      <strong style="color: #333;">Order Status:</strong>
+                                      <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; color: ${statusStyle.color}; background-color: ${statusStyle.backgroundColor}; font-weight: bold;">
+                                        ${statusStyle.text}
+                                      </span>
+                                    </div>
+                                  </div>
+                                `,
+                                showCloseButton: true,
+                                focusConfirm: false,
+                                confirmButtonText: 'Close',
+                                customClass: {
+                                  popup: 'swal-wide'
+                                }
+                              });
+                            }}
                             title="View Details"
                           >
                             View Details

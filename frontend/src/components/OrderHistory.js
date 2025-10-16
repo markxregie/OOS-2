@@ -130,39 +130,46 @@ const OrderHistory = () => {
 
   const handleShowInvoice = (order) => {
     const invoiceHtml = `
-      <div>
-        <p><strong>Date:</strong> ${new Date(order.date).toLocaleString()}</p>
-        <p><strong>Order Type:</strong> ${order.orderType}</p>
-        <table style="width: 100%; border-collapse: collapse;">
-          <thead>
-            <tr style="background-color: #f2f2f2;">
-              <th style="border: 1px solid #ddd; padding: 8px;">Product</th>
-              <th style="border: 1px solid #ddd; padding: 8px;">Quantity</th>
-              <th style="border: 1px solid #ddd; padding: 8px;">Price (₱)</th>
-              <th style="border: 1px solid #ddd; padding: 8px;">Subtotal (₱)</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${order.products.map(p => `
-              <tr>
-                <td style="border: 1px solid #ddd; padding: 8px;">
-                  ${p.name}
-                  ${p.addons && p.addons.length > 0 ? `
-                    <ul style="margin:0; padding-left:15px; font-size:0.85em; color:#666;">
-                      ${p.addons.map(ao => `<li>+ ${ao.addon_name || ao.AddOnName || ao.name} (₱${(ao.price || ao.Price || 0).toFixed(2)})</li>`).join('')}
-                    </ul>
-                  ` : ""}
-                </td>
-                <td style="border: 1px solid #ddd; padding: 8px;">${p.quantity}</td>
-                <td style="border: 1px solid #ddd; padding: 8px;">${p.price.toFixed(2)}</td>
-                <td style="border: 1px solid #ddd; padding: 8px;">
-                  ${((p.price + (p.addons ? p.addons.reduce((s, ao) => s + (ao.price || ao.Price || 0), 0) : 0)) * p.quantity).toFixed(2)}
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        <h5 style="text-align: right; margin-top: 10px;">Total: ₱${order.total.toFixed(2)}</h5>
+      <div style="text-align: left; font-family: Arial, sans-serif;">
+        <div style="margin-bottom: 20px;">
+          <p style="margin: 5px 0;"><strong>Date:</strong> ${new Date(order.date).toLocaleString()}</p>
+          <p style="margin: 5px 0;"><strong>Order Type:</strong> ${order.orderType}</p>
+        </div>
+        <h6 style="border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 15px;">Order Summary</h6>
+        ${order.products.map(p => {
+          const addonsTotal = p.addons ? p.addons.reduce((s, a) => s + (a.price || a.Price || 0), 0) : 0;
+          const itemTotal = (p.price + addonsTotal) * p.quantity;
+          return `
+            <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #f0f0f0;">
+              <p style="font-weight: bold; font-size: 1.1em; margin: 0 0 5px 0;">${p.name}</p>
+              <div style="display: flex; justify-content: space-between;">
+                <span>Base Price:</span>
+                <span>₱${p.price.toFixed(2)}</span>
+              </div>
+              ${p.addons && p.addons.length > 0 ? `
+                <div style="padding-left: 15px; font-size: 0.9em; color: #555;">
+                  ${p.addons.map(ao => `
+                    <div style="display: flex; justify-content: space-between;">
+                      <span>+ ${ao.addon_name || ao.AddOnName || ao.name}</span>
+                      <span>₱${(ao.price || ao.Price || 0).toFixed(2)}</span>
+                    </div>
+                  `).join('')}
+                </div>
+              ` : ""}
+              <div style="display: flex; justify-content: space-between; margin-top: 5px;">
+                <span>Quantity:</span>
+                <span>x${p.quantity}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-weight: bold; margin-top: 8px;">
+                <span>Item Total:</span>
+                <span>₱${itemTotal.toFixed(2)}</span>
+              </div>
+            </div>
+          `;
+        }).join('')}
+        <div style="text-align: right; margin-top: 20px; padding-top: 10px; border-top: 2px solid #333;">
+          <h5 style="margin: 0; font-size: 1.2em;">Total: ₱${order.total.toFixed(2)}</h5>
+        </div>
       </div>
     `;
     Swal.fire({
@@ -170,7 +177,8 @@ const OrderHistory = () => {
       html: invoiceHtml,
       showConfirmButton: true,
       confirmButtonText: 'Close',
-      width: '90%', 
+      width: '30%',
+      customClass: { popup: 'invoice-modal' }
     });
   };
 
