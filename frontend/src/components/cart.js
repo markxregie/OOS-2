@@ -165,13 +165,15 @@ const Cart = () => {
   console.log("🧾 Current cartItems:", cartItems);
 
   const [selectedCartItems, setSelectedCartItems] = useState([]);
-  
+
   // Existing state variables...
   const [receiptFile, setReceiptFile] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [paymentMethodMain, setPaymentMethodMain] = useState('E-Wallet');
   const [orderTypeMain, setOrderTypeMain] = useState('Pick Up'); // Mutable state for Order Type
+
+  const [orderNotes, setOrderNotes] = useState({}); // State for order notes per item
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -262,12 +264,27 @@ const Cart = () => {
     // Close modal before navigating
     setShowOrderModal(false);
 
+    // Filter orderNotes for selected items
+    const selectedOrderNotes = {};
+    selectedCartItems.forEach(item => {
+      if (orderNotes[item.cartItemId]) {
+        selectedOrderNotes[item.cartItemId] = orderNotes[item.cartItemId];
+      }
+    });
+
+    // Attach orderNotes to selectedCartItems
+    const selectedCartItemsWithNotes = selectedCartItems.map(item => ({
+      ...item,
+      orderNotes: selectedOrderNotes[item.cartItemId] || ''
+    }));
+
     // Proceed directly to checkout since stock limits are already handled
     navigate('/checkout', {
       state: {
-        cartItems: selectedCartItems,
+        cartItems: selectedCartItemsWithNotes,
         orderType: orderTypeMain,
-        paymentMethod: paymentMethodMain
+        paymentMethod: paymentMethodMain,
+        orderNotes: selectedOrderNotes
       }
     });
   };
@@ -356,14 +373,15 @@ const Cart = () => {
             <div className="table-responsive d-none d-lg-block">
               <table className="table align-middle" style={{ tableLayout: 'fixed' }}>
                 <colgroup>
-                  <col style={{ width: '30px' }} /> 
-                  <col style={{ width: '18%' }} /> 
-                  <col style={{ width: '14%' }} /> 
-                  <col style={{ width: '14%' }} /> 
-                  <col style={{ width: '10%' }} /> 
-                  <col style={{ width: '10%' }} /> 
-                  <col style={{ width: '10%' }} /> 
-                  <col style={{ width: '10%' }} /> 
+                  <col style={{ width: '30px' }} />
+                  <col style={{ width: '18%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '15%' }} />
                 </colgroup>
                 <thead>
                   <tr style={{ color: '#4B929D', verticalAlign: 'middle' }}>
@@ -381,6 +399,7 @@ const Cart = () => {
                     <th style={{ textAlign: 'center' }}>Qty</th>
                     <th style={{ textAlign: 'right' }}>Price</th>
                     <th style={{ textAlign: 'right' }}>Total</th>
+                    <th>Order Notes</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -448,6 +467,15 @@ const Cart = () => {
                       </td>
                       <td style={{ textAlign: 'right' }}>₱{item.ProductPrice.toFixed(2)}</td>
                       <td style={{ textAlign: 'right' }}>₱{calculateTotal(item).toFixed(2)}</td>
+                      <td>
+                        <input
+                          type="text"
+                          placeholder="Add notes..."
+                          value={orderNotes[item.cartItemId] || ''}
+                          onChange={(e) => setOrderNotes(prev => ({ ...prev, [item.cartItemId]: e.target.value }))}
+                          style={{ width: '100%', border: '1px solid #ccc', borderRadius: '4px', padding: '4px' }}
+                        />
+                      </td>
                       <td style={{ textAlign: 'center' }}>
                         <button className="btn btn-link text-danger p-0" onClick={() => handleRemove(i)}>
                           <i className="bi bi-trash" style={{ fontSize: '1.2rem' }}></i>
@@ -504,6 +532,17 @@ const Cart = () => {
                       <div className="text-end fw-bold total-price-mobile mt-2">
                         <span className='total-label-mobile'>Total:</span>
                         <span className='total-value-mobile'>₱{calculateTotal(item).toFixed(2)}</span>
+                      </div>
+
+                      {/* Order Notes for Mobile */}
+                      <div className="mt-2">
+                        <input
+                          type="text"
+                          placeholder="Add notes..."
+                          value={orderNotes[item.cartItemId] || ''}
+                          onChange={(e) => setOrderNotes(prev => ({ ...prev, [item.cartItemId]: e.target.value }))}
+                          style={{ width: '100%', border: '1px solid #ccc', borderRadius: '4px', padding: '4px', fontSize: '0.9rem' }}
+                        />
                       </div>
                     </div>
                   </div>
