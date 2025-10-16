@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaTimesCircle, FaExchangeAlt, FaBars, FaHome, FaHistory, FaCog, FaCreditCard, FaUserTie } from "react-icons/fa";
 import { Container, Card, Form } from "react-bootstrap";
 import riderImage from "../../assets/rider.jpg";
-import "./riderdashboard.css"; // Updated CSS import
+import "./riderdashboard.css";
 
 function RiderDashboard() {
   const userRole = "Admin";
@@ -18,6 +18,7 @@ function RiderDashboard() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [statusUpdating, setStatusUpdating] = useState({});
 
   const authToken = localStorage.getItem('authToken');
 
@@ -27,6 +28,7 @@ function RiderDashboard() {
 
   useEffect(() => {
     if (selectedRider) {
+      console.log(`🔄 Fetching orders for rider ID: ${selectedRider}`);
       fetchOrders(selectedRider);
     }
   }, [selectedRider]);
@@ -66,6 +68,7 @@ function RiderDashboard() {
     setLoading(true);
     setError(null);
     try {
+      console.log(`📡 Making request to: http://localhost:7004/delivery/rider/${riderId}/orders`);
       const response = await fetch(`http://localhost:7004/delivery/rider/${riderId}/orders`, {
         method: 'GET',
         headers: {
@@ -73,15 +76,134 @@ function RiderDashboard() {
           'Content-Type': 'application/json',
         },
       });
+      console.log(`Response status: ${response.status}`);
+      
       if (!response.ok) {
         throw new Error('Failed to fetch orders');
       }
       const data = await response.json();
+      console.log('✅ Orders fetched successfully! Total orders:', data.length);
+      console.log('═══════════════════════════════════════════');
+      console.log('COMPLETE ORDERS DATA:');
+      console.log('═══════════════════════════════════════════');
+      data.forEach((order, index) => {
+        console.log(`\n📦 ORDER ${index + 1}:`);
+        console.log('  id:', order.id);
+        console.log('  referenceNumber:', order.referenceNumber);
+        console.log('  customerName:', order.customerName);
+        console.log('  phone:', order.phone);
+        console.log('  address:', order.address);
+        console.log('  orderedAt:', order.orderedAt);
+        console.log('  currentStatus:', order.currentStatus);
+        console.log('  paymentMethod:', order.paymentMethod);
+        console.log('  total:', order.total);
+        console.log('  notes:', order.notes);
+        console.log('  items:', order.items);
+        console.log('  ─ Full object:', order);
+      });
+      console.log('\n═══════════════════════════════════════════');
+      console.log('FULL ARRAY:', data);
+      console.log('═══════════════════════════════════════════\n');
       setOrders(data);
     } catch (err) {
+      console.error('❌ Error fetching orders:', err);
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+
+
+  // Send status update to POS service
+  const sendStatusToPOS = async (referenceNumber, newStatus) => {
+    try {
+      const response = await fetch(`http://127.0.0.1:9000/auth/purchase_orders/online/${referenceNumber}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          newStatus: newStatus,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update POS status');
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (err) {
+      console.error('Error sending status to POS:', err);
+      throw err;
+    }
+  };
+
+  // Main function: Update order status and sync with POS
+  const updateOrderStatusWithPOS = async (orderId, newStatus) => {
+    setStatusUpdating(prev => ({ ...prev, [orderId]: true }));
+    try {
+      // Step 1: Find the order and get its reference number from the order data
+      console.log(`\n========== POS SYNC START ==========`);
+      console.log(`Step 1: Finding order ${orderId}...`);
+      console.log('Current orders state:', orders);
+      
+      const order = orders.find(o => o.id === orderId);
+      
+      if (!order) {
+        console.error(`❌ Order ${orderId} not found in orders array`);
+        throw new Error(`Order ${orderId} not found`);
+      }
+
+      console.log('✅ Order found:', order);
+      console.log('Order ID:', order.id);
+      console.log('Order referenceNumber:', order.referenceNumber);
+
+      const referenceNumber = order.referenceNumber;
+      
+      if (!referenceNumber) {
+        console.error('❌ Reference number is missing from order');
+        throw new Error('Reference number not found in order data');
+      }
+      
+      console.log(`✅ Reference number extracted: ${referenceNumber}`);
+
+      // Step 2: Send status update to POS service
+      console.log(`\nStep 2: Sending status update to POS...`);
+      console.log(`Endpoint: http://127.0.0.1:9000/auth/purchase_orders/online/${referenceNumber}/status`);
+      console.log(`Payload: { newStatus: "${newStatus}" }`);
+      
+      let posResponse;
+      try {
+        posResponse = await sendStatusToPOS(referenceNumber, newStatus);
+        console.log('✅ POS status update successful:', posResponse);
+      } catch (err) {
+        console.error('❌ POS update failed:', err);
+        throw new Error(`POS sync failed: ${err.message}`);
+      }
+
+      // Step 3: Update local orders state
+      console.log(`\nStep 3: Updating local order state...`);
+      setOrders(prevOrders =>
+        prevOrders.map(order =>
+          order.id === orderId ? { ...order, currentStatus: newStatus } : order
+        )
+      );
+      console.log(`✅ Order status updated locally`);
+
+      // Show success message
+      console.log(`\n✅ SUCCESS: Order #${orderId} synced with POS`);
+      console.log(`========== POS SYNC END ==========\n`);
+      alert(`✅ Order #${orderId} status updated to "${newStatus}" and synced with POS\nReference: ${referenceNumber}`);
+
+    } catch (err) {
+      console.error('❌ Error updating order status:', err);
+      console.log(`========== POS SYNC END (ERROR) ==========\n`);
+      alert(`❌ Failed to update order status:\n${err.message}`);
+    } finally {
+      setStatusUpdating(prev => ({ ...prev, [orderId]: false }));
     }
   };
 
@@ -151,7 +273,6 @@ function RiderDashboard() {
     let startDate;
 
     if (earningsFilter === "Daily") {
-      // Filter orders from today
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
       return orders
@@ -164,7 +285,6 @@ function RiderDashboard() {
       startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     }
 
-    // For All-Time, include both 'pending' and 'delivered' statuses
     if (earningsFilter === "All-Time") {
       const validStatuses = ["pending", "delivered"];
       return orders
@@ -173,7 +293,6 @@ function RiderDashboard() {
         .toFixed(2);
     }
 
-    // For Weekly and Monthly filters, include active statuses and filter by date
     const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
     return orders
       .filter(order => activeStatuses.includes(order.currentStatus) && new Date(order.orderedAt) >= startDate)
@@ -196,7 +315,7 @@ function RiderDashboard() {
     cancelled: <FaTimesCircle />,
   };
 
-  const cardColors = "#a3d3d8"; // Fixed color since riders are dynamic
+  const cardColors = "#a3d3d8";
 
   if (loading) {
     return <div>Loading...</div>;
@@ -345,7 +464,43 @@ function RiderDashboard() {
                   <span className="total-value">₱{order.total?.toFixed(2) || "0.00"}</span>
                 </div>
                 <div className="order-actions">
-                  {/* Dropdowns removed as requested */}
+                  <button
+                    className="status-button delivered"
+                    onClick={() => {
+                      console.log('');
+                      console.log('═══════════════════════════════════════════');
+                      console.log('📦 FULL ORDER DATA:');
+                      console.log('═══════════════════════════════════════════');
+                      console.log('ID:', order.id);
+                      console.log('Reference Number:', order.referenceNumber);
+                      console.log('Customer Name:', order.customerName);
+                      console.log('Phone:', order.phone);
+                      console.log('Address:', order.address);
+                      console.log('Ordered At:', order.orderedAt);
+                      console.log('Current Status:', order.currentStatus);
+                      console.log('Payment Method:', order.paymentMethod);
+                      console.log('Total:', order.total);
+                      console.log('Notes:', order.notes);
+                      console.log('Items:', order.items);
+                      console.log('─────────────────────────────────────────');
+                      console.log('Full Order Object:', order);
+                      console.log('═══════════════════════════════════════════');
+                      console.log('');
+                      updateOrderStatusWithPOS(order.id, "delivered");
+                    }}
+                    disabled={statusUpdating[order.id]}
+                  >
+                    {statusUpdating[order.id] ? "Updating..." : "Mark Delivered"}
+                  </button>
+                  <button
+                    className="status-button cancelled"
+                    onClick={() => {
+                      updateOrderStatusWithPOS(order.id, "cancelled");
+                    }}
+                    disabled={statusUpdating[order.id]}
+                  >
+                    {statusUpdating[order.id] ? "Updating..." : "Cancel Order"}
+                  </button>
                 </div>
               </Card>
             ))

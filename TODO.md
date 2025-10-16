@@ -1,5 +1,0 @@
-- [x] Modify the orders container in deliverymanagement.js to use CSS Grid for 4 cards per row
-- [x] Remove flex-specific styles and add grid styles
-- [x] Test the layout to ensure 4 cards horizontally
-- [x] Add green color for "Completed" status in order cards
-- [x] Add display text for "completed" status
