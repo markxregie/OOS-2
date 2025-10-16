@@ -24,7 +24,7 @@ function RiderDashboard() {
   const [riderId, setRiderId] = useState(localStorage.getItem("riderId") || "");
   const [riderName, setRiderName] = useState(localStorage.getItem("riderName") || "");
   const [riderPhone, setRiderPhone] = useState(localStorage.getItem("riderPhone") || "");
-  const [userLoading, setUserLoading] = useState(true); // New loading state for user info
+  const [userLoading, setUserLoading] = useState(true);
 
   const location = useLocation();
 
@@ -50,7 +50,6 @@ function RiderDashboard() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -81,7 +80,7 @@ function RiderDashboard() {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
-        // ✅ no remapping needed, backend already normalized
+        console.log('✅ Orders fetched:', data);
         setOrders(data);
       } catch (e) {
         setError(e.message);
@@ -94,11 +93,9 @@ function RiderDashboard() {
     }
   }, [riderId, authToken]);
 
-  // Fetch user info with loading and debug logging
   useEffect(() => {
     if (authToken) {
       setUserLoading(true);
-      console.log("Fetching user info");
       fetch("http://localhost:4000/auth/users/me", {
         headers: { "Authorization": `Bearer ${authToken}` }
       })
@@ -113,7 +110,6 @@ function RiderDashboard() {
           return res.json();
         })
         .then(async data => {
-          console.log("User data:", data);
           if (!data) return;
           const userId = data.userId || "";
           const userRoleData = data.userRole || "";
@@ -129,7 +125,6 @@ function RiderDashboard() {
           setUserRole(userRoleData);
           setUserName(fallbackName);
 
-          // Fetch rider details from riders endpoint
           if (userId) {
             try {
               const riderRes = await fetch(`http://localhost:4000/users/riders/${userId}`, {
@@ -137,7 +132,6 @@ function RiderDashboard() {
               });
               if (riderRes.ok) {
                 const riderData = await riderRes.json();
-                console.log("Rider data:", riderData);
                 const riderFullName = riderData.FullName || fallbackName;
                 const riderPhone = riderData.Phone || fallbackPhone;
                 setRiderName(riderFullName);
@@ -146,7 +140,6 @@ function RiderDashboard() {
                 localStorage.setItem("riderPhone", riderPhone);
                 setUserName(riderFullName);
               } else {
-                // Fallback to user data
                 setRiderName(fallbackName);
                 localStorage.setItem("riderName", fallbackName);
                 setRiderPhone(fallbackPhone);
@@ -154,23 +147,17 @@ function RiderDashboard() {
               }
             } catch (err) {
               console.error("Failed to fetch rider info:", err);
-              // Fallback to user data
               setRiderName(fallbackName);
               localStorage.setItem("riderName", fallbackName);
               setRiderPhone(fallbackPhone);
               localStorage.setItem("riderPhone", fallbackPhone);
             }
-          } else {
-            setRiderName(fallbackName);
-            localStorage.setItem("riderName", fallbackName);
-            setRiderPhone(fallbackPhone);
-            localStorage.setItem("riderPhone", fallbackPhone);
           }
-          setUserLoading(false); // Done loading
+          setUserLoading(false);
         })
         .catch(err => {
           console.error("Failed to fetch user info:", err);
-          setUserLoading(false); // Done loading even on error
+          setUserLoading(false);
         });
     }
   }, [authToken]);
@@ -245,7 +232,6 @@ function RiderDashboard() {
     } else if (earningsFilter === "Monthly") {
       startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     } else {
-      // All-Time
       return orders
         .filter(order => ["pending", "confirmed", "preparing", "waitingforpickup", "pickedup", "delivering", "delivered"].includes(order.currentStatus))
         .reduce((sum, order) => sum + (order.total || 0), 0)
@@ -260,6 +246,17 @@ function RiderDashboard() {
 
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
+      // Find the order to get the reference number
+      const order = orders.find(o => o.id === orderId);
+      if (!order) {
+        throw new Error('Order not found');
+      }
+      
+      const referenceNumber = order.referenceNumber;
+      if (!referenceNumber) {
+        throw new Error('Reference number not found for this order');
+      }
+
       // PATCH to cart/rider/orders
       const cartResponse = await fetch(`http://localhost:7004/cart/rider/orders/${orderId}/status`, {
         method: 'PATCH',
@@ -286,15 +283,25 @@ function RiderDashboard() {
         throw new Error(`Failed to update delivery status: ${deliveryResponse.status}`);
       }
 
-      // If delivered, update POS
-      if (newStatus === 'delivered') {
-        const posResponse = await fetch(`http://127.0.0.1:9000/auth/purchase_orders/online/${orderId}/status`, {
+      // Update POS status based on delivery status
+      let posStatus = null;
+      if (newStatus === 'pickedup') {
+        posStatus = "picked up";
+      } else if (newStatus === 'delivering') {
+        posStatus = "delivering";
+      } else if (newStatus === 'delivered') {
+        posStatus = "completed";
+      }
+
+      if (posStatus) {
+        console.log(`Updating POS for reference: ${referenceNumber}, status: ${posStatus}`);
+        const posResponse = await fetch(`http://127.0.0.1:9000/auth/purchase_orders/online/${referenceNumber}/status`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${authToken}`
           },
-          body: JSON.stringify({ newStatus: "completed" })
+          body: JSON.stringify({ newStatus: posStatus })
         });
         if (!posResponse.ok) {
           throw new Error(`Failed to update POS status: ${posResponse.status}`);
@@ -374,9 +381,6 @@ function RiderDashboard() {
     returned: <FaUndo />,
   };
 
-
-
-  // Helper function to render the correct button text
   const getButtonText = (currentStatus) => {
     if (currentStatus === 'waitingforpickup') return 'Picked Up';
     else if (currentStatus === 'pickedup') return 'Delivering';
@@ -384,12 +388,10 @@ function RiderDashboard() {
     return '';
   };
 
-  // Helper function to determine if the button should be rendered at all
   const shouldRenderButton = (currentStatus) => {
     return ['waitingforpickup', 'pickedup', 'delivering'].includes(currentStatus);
   };
 
-  // Helper function to determine the button's class name
   const getButtonClass = (currentStatus) => {
     if (currentStatus === 'delivering') return 'delivered';
     else return 'pickedUp';
@@ -474,10 +476,7 @@ function RiderDashboard() {
           <div className="rider-selector-group">
             <div className="rider-info-display">
               <img src={riderImage} alt={riderName} className="rider-profile-pic" />
-              <span className="rider-name-text">
-  {riderName || "Rider"}
-</span>
-
+              <span className="rider-name-text">{riderName || "Rider"}</span>
             </div>
           </div>
           <div className="summary-cards-container">
@@ -591,11 +590,11 @@ function RiderDashboard() {
                 <div className="order-actions">
                   {shouldRenderButton(order.currentStatus) && (
                     <Button
-                        variant="primary"
-                        className={`status-change-button ${getButtonClass(order.currentStatus)}`}
-                        onClick={() => handleProgressiveStatusChange(order.id, order.currentStatus)}
+                      variant="primary"
+                      className={`status-change-button ${getButtonClass(order.currentStatus)}`}
+                      onClick={() => handleProgressiveStatusChange(order.id, order.currentStatus)}
                     >
-                        {getButtonText(order.currentStatus)}
+                      {getButtonText(order.currentStatus)}
                     </Button>
                   )}
                 </div>

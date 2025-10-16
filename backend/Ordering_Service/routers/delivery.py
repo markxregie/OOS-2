@@ -238,7 +238,8 @@ async def get_rider_orders(rider_id: int, token: str = Depends(oauth2_scheme)):
             SELECT
                 o.OrderID, o.UserName, o.OrderDate, o.Status, o.PaymentMethod,
                 o.TotalAmount, di.FirstName, di.MiddleName, di.LastName,
-                di.PhoneNumber, di.Address, di.City, di.Province, di.Notes, di.Landmark
+                di.PhoneNumber, di.Address, di.City, di.Province, di.Notes, di.Landmark,
+                o.ReferenceNumber
             FROM Orders o
             LEFT JOIN DeliveryInfo di ON o.OrderID = di.OrderID
             WHERE o.AssignedRiderID = ?
@@ -250,6 +251,7 @@ async def get_rider_orders(rider_id: int, token: str = Depends(oauth2_scheme)):
         for row in rows:
             order_id = row[0]
             username = row[1]
+            reference_number = row[15] # Get the reference number
 
             await cursor.execute("""
                 SELECT ProductName, Quantity, Price
@@ -291,6 +293,7 @@ async def get_rider_orders(rider_id: int, token: str = Depends(oauth2_scheme)):
 
             orders.append({
                 "id": order_id,
+                "referenceNumber": reference_number, # Add it to the response
                 "customerName": customer_name,
                 "phone": phone,
                 "address": address,
@@ -417,6 +420,36 @@ async def get_delivery_orders(token: str = Depends(oauth2_scheme)):
     except Exception as e:
         logger.error(f"Error fetching delivery orders: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch delivery orders")
+
+    finally:
+        await cursor.close()
+        await conn.close()
+
+@router.get("/orders/{order_id}/reference-number")
+async def get_reference_number(order_id: int, token: str = Depends(oauth2_scheme)):
+    await validate_token_and_roles(token, ["user", "admin", "rider"])
+
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+
+    try:
+        await cursor.execute(
+            "SELECT ReferenceNumber FROM Orders WHERE OrderID = ?", (order_id,)
+        )
+        row = await cursor.fetchone()
+
+        if not row:
+            raise HTTPException(
+                status_code=404, detail="Order not found"
+            )
+
+        return {"ReferenceNumber": row[0]}
+
+    except Exception as e:
+        logger.error(f"Error retrieving reference number: {e}")
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve reference number"
+        )
 
     finally:
         await cursor.close()
