@@ -285,7 +285,7 @@ const Concerns = () => {
           <Table responsive className="orders-table">
             <thead>
               <tr>
-                <th>ID</th>
+               
                 <th>Name</th>
                 <th>Email</th>
                 <th>Subject</th>
@@ -298,7 +298,7 @@ const Concerns = () => {
             <tbody>
               {currentConcerns.map((concern) => (
                 <tr key={concern.id}>
-                  <td>{concern.id}</td>
+          
                   <td>{concern.name}</td>
                   <td>{concern.email}</td>
                   <td>{concern.subject}</td>

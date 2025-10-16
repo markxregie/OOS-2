@@ -120,6 +120,8 @@ function RiderDashboard() {
         return { color: "#8e44ad", backgroundColor: "#e5dbff", text: "Ready to Pickup" };
       case "pickedUp":
         return { color: "#0d6efd", backgroundColor: "#cfe2ff", text: "Picked Up" };
+         case "delivering":
+           return { color: "#ffffff", backgroundColor: "rgb(63, 81, 181)", text: "DELIVERING" };
       case "completed":
       return { color: "rgb(25, 135, 84)", backgroundColor: "rgb(209, 231, 221)", text: "COMPLETED"};
       case "inTransit":

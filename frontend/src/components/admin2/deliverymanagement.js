@@ -24,10 +24,16 @@ function DeliveryManagement() {
   const [showChangeRiderDropdown, setShowChangeRiderDropdown] = useState({});
 
   const [riders, setRiders] = useState([]);
-  
+
   // 💡 NEW: State for pagination
   const [currentPage, setCurrentPage] = useState(1);
   const ordersPerPage = 12; // 💡 NEW: Constant for orders per page
+
+  // 💡 NEW: Local state for rider assignments to persist across fetches and navigation
+  const [localAssignments, setLocalAssignments] = useState(() => {
+    const stored = localStorage.getItem("riderAssignments");
+    return stored ? JSON.parse(stored) : {};
+  });
 
 
 
@@ -47,11 +53,11 @@ function DeliveryManagement() {
         }
 
         const data = await response.json();
-        console.log("Fetched orders:", data); // ✅ debug
+        console.log("Fetched orders:", data); 
 
         const ordersWithAssignments = data.map(order => ({
           ...order,
-          assignedRider: order.assignedRider ?? null
+          assignedRider: localAssignments[order.id] ?? order.assignedRider ?? null
         }));
 
         setOrders(ordersWithAssignments);
@@ -229,6 +235,13 @@ function DeliveryManagement() {
 
       // ✅ Update frontend state with selected rider
       handleRiderChange(orderId, riderId);
+
+      // 💡 NEW: Update local assignments and persist to localStorage
+      setLocalAssignments(prev => {
+        const updated = { ...prev, [orderId]: riderId };
+        localStorage.setItem("riderAssignments", JSON.stringify(updated));
+        return updated;
+      });
 
       // Hide dropdown after assignment
       setShowChangeRiderDropdown(prev => ({
@@ -493,8 +506,8 @@ function DeliveryManagement() {
                     waitingforpickup: "Waiting for Pickup",
                     readytopickup: "Ready to Pickup",
                     pickedup: "Picked Up",
-                    intransit: "Delivering", // This key already maps to "Delivering"
-                    delivering: "Delivering", // 💡 FIX: Added lowercase 'delivering' for display consistency
+                    intransit: "Delivering", 
+                    delivering: "Delivering",
                     delivered: "Delivered",
                     completed: "Completed",
                     cancelled: "Cancelled",

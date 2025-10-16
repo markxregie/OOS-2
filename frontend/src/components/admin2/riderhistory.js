@@ -310,7 +310,7 @@ function RiderHistory() {
   };
 
   const navigateToHistory = () => {
-    window.location.href = "/rider/history";
+    window.location.href = "/rider/riderhistory";
   };
 
   const handleLogout = () => {
@@ -360,7 +360,7 @@ function RiderHistory() {
             {isSidebarOpen && <span>History</span>}
           </li>
           <li onClick={handleLogout} style={{ cursor: 'pointer' }}>
-            <FaCog />
+             <FaSignOutAlt />
             {isSidebarOpen && <span>Logout</span>}
           </li>
         </ul>
@@ -484,9 +484,7 @@ function RiderHistory() {
                 <table className="orders-table">
                   <thead>
                     <tr>
-                      <th onClick={() => requestSort('id')} style={{ cursor: 'pointer' }}>
-                        Order ID {getSortIcon('id')}
-                      </th>
+                     
                       <th onClick={() => requestSort('customerName')} style={{ cursor: 'pointer' }}>
                         Customer Name {getSortIcon('customerName')}
                       </th>

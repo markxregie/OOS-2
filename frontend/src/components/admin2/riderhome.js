@@ -185,7 +185,7 @@ function RiderDashboard() {
   const getStatusStyle = (status) => {
     switch (status) {
       case "pending":
-        return { color: "#d39e00", backgroundColor: "#fff3cd", text: "Pending" };
+        return { color: "#d39e00", backgroundColor: "#fff3cd", text: "PENDING" };
       case "confirmed":
         return { color: "#198754", backgroundColor: "#d1e7dd", text: "Confirmed" };
       case "preparing":
@@ -194,8 +194,10 @@ function RiderDashboard() {
         return { color: "#ffffff", backgroundColor: "#9c27b0", text: "Waiting for Pickup" };
       case "pickedup":
         return { color: "#0d6efd", backgroundColor: "#cfe2ff", text: "Picked Up" };
-      case "delivering":
-        return { color: "#6610f2", backgroundColor: "#e5dbff", text: "Delivering" };
+         case "delivering":
+        return { color: "#ffffff", backgroundColor: "rgb(63, 81, 181)", text: "DELIVERING" };
+      case "completed":
+        return { color: "rgb(25, 135, 84)", backgroundColor: "rgb(209, 231, 221)", text: "COMPLETED" };
       case "delivered":
         return { color: "#198754", backgroundColor: "#d1e7dd", text: "Delivered" };
       case "cancelled":
@@ -375,6 +377,7 @@ function RiderDashboard() {
     preparing: <FaBox />,
     waitingforpickup: <FaTruckPickup />,
     pickedup: <FaTruckMoving />,
+    completed: <FaCheckCircle />,
     delivering: <FaTruckMoving />,
     delivered: <FaCheckCircle />,
     cancelled: <FaTimesCircle />,
@@ -430,7 +433,7 @@ function RiderDashboard() {
             {isSidebarOpen && <span>History</span>}
           </li>
           <li onClick={handleLogout} style={{ cursor: 'pointer' }}>
-            <FaCog />
+            <FaSignOutAlt />
             {isSidebarOpen && <span>Logout</span>}
           </li>
         </ul>

@@ -515,7 +515,7 @@ const ManageOrders = () => {
           <Table className="orders-table" responsive>
             <thead>
               <tr>
-                <th>Order ID</th>
+                
                 <th>Customer Name</th>
                 <th>Order Time/Date</th>
                 <th>Items</th>
@@ -530,15 +530,7 @@ const ManageOrders = () => {
               {currentOrders.length > 0 ? (
                 currentOrders.map((order) => (
                   <tr key={order.id}>
-                    <td>
-                      <button
-                        className="link-button"
-                        onClick={() => handleViewOrder(order)}
-                        style={{ color: "#007bff", background: "none", border: "none", padding: 0, cursor: "pointer" }}
-                      >
-                        {order.id}
-                      </button>
-                    </td>
+                   
                     <td>{order.customer}</td>
                     <td>{order.date}</td>
                     <td>
