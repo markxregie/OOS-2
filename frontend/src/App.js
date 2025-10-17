@@ -17,6 +17,7 @@ import Sidebar from './components/admin2/sidebar';
 import ProfilePage from './components/ProfilePage';
 import ProfileSidebar from './components/ProfileSidebar';
 import OrderHistory from './components/OrderHistory';
+import { default as TrackOrder } from './components/trackorder';
 import Notification from './components/Notification';
 import Products from './components/admin2/products';
 import Staff from './components/admin2/Staff';
@@ -105,6 +106,7 @@ function MainApp() {
           <Route element={<ProfileLayout />}>
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/profile/orderhistory" element={<OrderHistory />} />
+            <Route path="/profile/orderhistory/:orderId" element={<TrackOrder />} />
             <Route path="/profile/notification" element={<Notification />} />
           </Route>
           {/* Admin Routes */}

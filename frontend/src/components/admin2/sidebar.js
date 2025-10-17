@@ -24,7 +24,7 @@ function SidebarComponent() {
             <img src={logo} alt="Logo" className="logo" />
           </div>
 
-          {!collapsed && <div className="section-title">GENERAL</div>}
+          
           <Menu>
             <MenuItem
               icon={<FontAwesomeIcon icon={faHome} />}

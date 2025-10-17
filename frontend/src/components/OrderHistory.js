@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Form, Button } from 'react-bootstrap';
 import { EyeFill, XCircle } from 'react-bootstrap-icons';
+import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import './OrderHistory.css';
 
@@ -17,6 +18,7 @@ const OrderHistory = () => {
   });
   // Use the new breakpoint for mobile detection
   const [isMobileOrTablet, setIsMobileOrTablet] = useState(window.innerWidth <= MOBILE_BREAKPOINT); 
+  const navigate = useNavigate();
 
   // Function to update the isMobileOrTablet state on resize
   const handleResize = () => {
@@ -71,20 +73,22 @@ const OrderHistory = () => {
             return sum + (p.price + addonSum) * p.quantity;
           }, 0) + (order.orderType === 'Delivery' ? 50 : 0);
           const originalStatus = order.status.toLowerCase();
-          const status = originalStatus === 'delivered' ? 'completed' : originalStatus;
+          const isCompleted = originalStatus === 'delivered' || originalStatus === 'completed';
+          let displayStatus = originalStatus;
+          if (originalStatus === 'pickedup') displayStatus = 'picked up';
           const orderData = {
             id: order.id,
             orderType: order.orderType,
             products: order.products,
-            status: status,
+            status: isCompleted ? 'completed' : displayStatus,
             date: order.date,
             total,
           };
-
-          if (status === 'completed') {
+          
+          if (isCompleted) {
             completedOrders.push(orderData);
-          } else if (status === 'cancelled') {
-            cancelledOrders.push(orderData);
+          } else if (originalStatus === 'cancelled') {
+            cancelledOrders.push({ ...orderData, status: 'cancelled' });
           } else {
             // Group all other statuses (pending, preparing, delivering, etc.) as active
             activeOrders.push(orderData);
@@ -117,11 +121,12 @@ const OrderHistory = () => {
   };
 
   const getStatusBadge = (status) => {
-    const capitalizedStatus = status.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    const capitalizedStatus = status.split(' ').map(word => word.toUpperCase()).join(' ');
     let className = "status-badge";
     if (status === 'pending') className += " status-pending";
     else if (status === 'preparing') className += " status-preparing";
     else if (status === 'waiting for pick up') className += " status-waiting";
+    else if (status === 'picked up') className += " status-pickedup";
     else if (status === 'delivering') className += " status-delivering";
     else if (status === 'completed') className += " status-completed";
     else if (status === 'cancelled') className += " status-cancelled";
@@ -249,7 +254,7 @@ const OrderHistory = () => {
   );
 
   const renderMobileOrderCard = (order) => (
-    <div className="order-card" key={order.id}>
+    <div className="order-card" key={order.id} data-id={order.id}>
       <div className="card-header">
         <span style={{ fontWeight: 'bold' }}>Order #{order.id}</span>
         {getStatusBadge(order.status)}
@@ -280,6 +285,10 @@ const OrderHistory = () => {
     </div>
   );
 
+  const handleRowClick = (order) => {
+    navigate(`/profile/orderhistory/${order.id}`);
+  };
+
   const renderTable = (orders) => {
     const ordersToRender = filteredOrders(orders);
 
@@ -290,7 +299,7 @@ const OrderHistory = () => {
     // Render mobile/tablet card list if isMobileOrTablet is true
     if (isMobileOrTablet) {
       return (
-        <div className="orders-mobile-list">
+        <div className="orders-mobile-list" onClick={(e) => e.target.closest('.order-card') && handleRowClick(ordersToRender.find(o => o.id.toString() === e.target.closest('.order-card').dataset.id))}>
           {ordersToRender.map(renderMobileOrderCard)}
         </div>
       );
@@ -301,7 +310,7 @@ const OrderHistory = () => {
           <Table className="orders-table">
             <thead>
               <tr>
-                <th>Order ID</th>
+             
                 <th>Order Type</th>
                 <th>Products</th>
                 <th>Total</th>
@@ -312,8 +321,8 @@ const OrderHistory = () => {
             </thead>
             <tbody>
               {ordersToRender.map((order) => (
-                <tr key={order.id}>
-                  <td>#{order.id}</td>
+                <tr key={order.id} onClick={() => handleRowClick(order)} className="desktop-order-row">
+                  
                   <td>{order.orderType}</td>
                   <td>
                     {order.products.map((p, idx) => (
@@ -333,14 +342,20 @@ const OrderHistory = () => {
                   <td>{new Date(order.date).toLocaleDateString()}</td>
                   <td>{getStatusBadge(order.status)}</td>
                   <td>
-                    <button className="action-btn view" title="View Invoice" onClick={() => handleShowInvoice(order)}>
+                    <button className="action-btn view" title="View Invoice" onClick={(e) => {
+                      e.stopPropagation();
+                      handleShowInvoice(order);
+                    }}>
                       <EyeFill />
                     </button>
                     {order.status === 'pending' && (
                       <button
                         className="action-btn cancel"
                         title="Cancel Order"
-                        onClick={() => handleCancelClick(order)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCancelClick(order);
+                        }}
                       >
                         <XCircle />
                       </button>

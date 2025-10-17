@@ -70,6 +70,11 @@
   background-color: #9c27b0;
 }
 
+.status-pickedup {
+  background-color: #0d6efd;
+  color: #cfe2ff;
+}
+
 .status-delivering {
   background-color: #3f51b5;
 }

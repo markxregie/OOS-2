@@ -13,7 +13,7 @@
   display: flex !important;
   flex-wrap: wrap !important;
   gap: 20px;
-  justify-content: flex-start !important; 
+  justify-content: flex-start !important;
 }
 
 .active-orders-container.two-cards {

@@ -1,12 +1,126 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from "react-router-dom";
 import { FaChevronDown, FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaUndo, FaSignOutAlt, FaTimesCircle, FaExchangeAlt, FaBars, FaHome, FaHistory, FaCog, FaCreditCard, FaUserTie } from "react-icons/fa";
-import { Container, Card, Form, Button } from "react-bootstrap";
+import { Container, Card, Form, Button, Modal } from "react-bootstrap";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet-routing-machine';
 import riderImage from "../../assets/rider.jpg";
 import logoImage from "../../assets/logo.png";
 import "./riderhome.css";
 import "./riderdashboard.css";
 import Swal from 'sweetalert2';
+import 'leaflet/dist/leaflet.css';
+import 'leaflet-routing-machine/dist/leaflet-routing-machine.css';
+
+// Custom icons for rider and customer locations
+const riderIcon = L.icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+const customerIcon = L.icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+// RoutingMachine component to add routing control
+const RoutingMachine = ({ riderLocation, customerLocation }) => {
+  const map = useMap();
+  const routeLayerRef = useRef(null);
+
+  useEffect(() => {
+    // Clean up any existing route layer
+    if (routeLayerRef.current) {
+      try {
+        if (map.hasLayer(routeLayerRef.current)) {
+          map.removeLayer(routeLayerRef.current);
+        }
+      } catch (e) {
+        console.warn('Error removing route layer:', e);
+      }
+      routeLayerRef.current = null;
+    }
+
+    if (!riderLocation || !customerLocation) {
+      return;
+    }
+
+    // Wait for map to be fully ready
+    const timeoutId = setTimeout(() => {
+      try {
+        // Use OSRM routing service to get route
+        const router = L.Routing.osrmv1({
+          serviceUrl: 'https://router.project-osrm.org/route/v1'
+        });
+
+        router.route([
+          L.Routing.waypoint(L.latLng(riderLocation[0], riderLocation[1])),
+          L.Routing.waypoint(L.latLng(customerLocation[0], customerLocation[1]))
+        ], (err, routes) => {
+          if (err) {
+            console.error('Routing error:', err);
+            return;
+          }
+
+          if (routes && routes.length > 0) {
+            const route = routes[0];
+            if (route.coordinates && Array.isArray(route.coordinates)) {
+              // OSRM returns coordinates as [lng, lat], but Leaflet expects [lat, lng]
+              const latLngCoords = route.coordinates
+                .filter(coord => coord && coord.length >= 2 && typeof coord[0] === 'number' && typeof coord[1] === 'number')
+                .map(coord => [coord[1], coord[0]]);
+              if (latLngCoords.length > 0) {
+                const routeLine = L.polyline(latLngCoords, {
+                  color: '#007bff',
+                  weight: 6,
+                  opacity: 0.9
+                });
+
+                // Add the route line to the map
+                routeLine.addTo(map);
+                routeLayerRef.current = routeLine;
+
+                // Fit map to show the entire route
+                map.fitBounds(routeLine.getBounds());
+              } else {
+                console.warn('No valid coordinates found in route');
+              }
+            } else {
+              console.warn('Route coordinates not available');
+            }
+          }
+        });
+      } catch (e) {
+        console.error('Error creating route:', e);
+      }
+    }, 100);
+
+    return () => {
+      clearTimeout(timeoutId);
+      if (routeLayerRef.current) {
+        try {
+          if (map.hasLayer(routeLayerRef.current)) {
+            map.removeLayer(routeLayerRef.current);
+          }
+        } catch (e) {
+          console.warn('Error removing route layer in cleanup:', e);
+        }
+        routeLayerRef.current = null;
+      }
+    };
+  }, [map, riderLocation, customerLocation]);
+
+  return null;
+};
 
 function RiderDashboard() {
   const [userRole, setUserRole] = useState("");
@@ -17,6 +131,10 @@ function RiderDashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 991);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [currentOrderToDeliver, setCurrentOrderToDeliver] = useState(null);
+  const [showMapModal, setShowMapModal] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [riderLocation, setRiderLocation] = useState(null);
+  const [customerLocation, setCustomerLocation] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -408,6 +526,82 @@ function RiderDashboard() {
     window.location.href = "/rider/riderhistory";
   };
 
+  const navigateToRoute = (order) => {
+    setSelectedOrder(order);
+    // Get rider's current location
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const riderLat = position.coords.latitude;
+          const riderLng = position.coords.longitude;
+          setRiderLocation([riderLat, riderLng]);
+          // Geocode customer address to get coordinates
+          fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(order.address)}`)
+            .then(res => res.json())
+            .then(data => {
+              if (data.length > 0) {
+                const customerLat = parseFloat(data[0].lat);
+                const customerLng = parseFloat(data[0].lon);
+                setCustomerLocation([customerLat, customerLng]);
+              } else {
+                // Fallback to default location if geocoding fails
+                setCustomerLocation([14.5995, 120.9842]);
+              }
+              setShowMapModal(true);
+            })
+            .catch(err => {
+              console.error('Geocoding error:', err);
+              setCustomerLocation([14.5995, 120.9842]);
+              setShowMapModal(true);
+            });
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          // Fallback to default rider location
+          setRiderLocation([14.5995, 120.9842]);
+          // Geocode customer address
+          fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(order.address)}`)
+            .then(res => res.json())
+            .then(data => {
+              if (data.length > 0) {
+                const customerLat = parseFloat(data[0].lat);
+                const customerLng = parseFloat(data[0].lon);
+                setCustomerLocation([customerLat, customerLng]);
+              } else {
+                setCustomerLocation([14.5995, 120.9842]);
+              }
+              setShowMapModal(true);
+            })
+            .catch(err => {
+              console.error('Geocoding error:', err);
+              setCustomerLocation([14.5995, 120.9842]);
+              setShowMapModal(true);
+            });
+        }
+      );
+    } else {
+      // Fallback if geolocation is not supported
+      setRiderLocation([14.5995, 120.9842]);
+      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(order.address)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.length > 0) {
+            const customerLat = parseFloat(data[0].lat);
+            const customerLng = parseFloat(data[0].lon);
+            setCustomerLocation([customerLat, customerLng]);
+          } else {
+            setCustomerLocation([14.5995, 120.9842]);
+          }
+          setShowMapModal(true);
+        })
+        .catch(err => {
+          console.error('Geocoding error:', err);
+          setCustomerLocation([14.5995, 120.9842]);
+          setShowMapModal(true);
+        });
+    }
+  };
+
   const handleLogout = () => {
     setAuthToken(null);
     localStorage.removeItem("authToken");
@@ -600,11 +794,48 @@ function RiderDashboard() {
                       {getButtonText(order.currentStatus)}
                     </Button>
                   )}
+                  {order.currentStatus === 'pickedup' && (
+                    <Button
+                      variant="secondary"
+                      className="navigate-route-button"
+                      onClick={() => navigateToRoute(order)}
+                    >
+                      Navigate Route
+                    </Button>
+                  )}
                 </div>
               </Card>
             ))
           )}
         </div>
+
+        {showMapModal && selectedOrder && (
+          <Modal centered show={showMapModal} onHide={() => setShowMapModal(false)} size="xl" scrollable>
+            <Modal.Header closeButton>
+              <Modal.Title>Navigate to {selectedOrder.customerName}'s Address</Modal.Title>
+            </Modal.Header>
+            <Modal.Body style={{ maxHeight: '200vh', overflowY: 'auto' }}>
+              <MapContainer center={riderLocation || [14.5995, 120.9842]} zoom={13} style={{ height: '650px', width: '100%' }}>
+                <TileLayer
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                />
+                {riderLocation && (
+                  <Marker position={riderLocation} icon={riderIcon}>
+                    <Popup>Your Location</Popup>
+                  </Marker>
+                )}
+                {customerLocation && (
+                  <Marker position={customerLocation} icon={customerIcon}>
+                    <Popup>{selectedOrder.address}</Popup>
+                  </Marker>
+                )}
+                <RoutingMachine riderLocation={riderLocation} customerLocation={customerLocation} />
+              </MapContainer>
+
+            </Modal.Body>
+          </Modal>
+        )}
       </div>
     </div>
   );
