@@ -485,8 +485,11 @@ function DeliveryManagement() {
           alignItems: "flex-start",
           width: "100%"
         }}>
-          {currentOrders.map((order, idx) => (
-            <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "350px", height: "500px", overflowY: "auto" }}>
+          {currentOrders.map((order, idx) => {
+            const restrictedStatuses = ["pickedup", "delivered", "cancelled", "returned"];
+            const canChangeRider = !restrictedStatuses.includes(order.currentStatus?.toLowerCase());
+            return (
+              <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "350px", height: "500px", overflowY: "auto" }}>
               <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
                 <h5 style={{ color: "#2c3e50", fontWeight: "700" }}>Order #{order.id}</h5>
                 <p style={{
@@ -576,7 +579,7 @@ function DeliveryManagement() {
                       ))}
                     </Form.Select>
                   </>
-                ) : (
+                ) : canChangeRider ? (
                   <>
                     <button
                       onClick={() => handleChangeRiderClick(order.id)}
@@ -610,10 +613,11 @@ function DeliveryManagement() {
                       </div>
                     )}
                   </>
-                )}
+                ) : null}
               </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
         {/* 💡 NEW: Pagination Controls */}
         {filteredOrders.length > ordersPerPage && (
