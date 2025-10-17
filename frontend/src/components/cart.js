@@ -1,10 +1,15 @@
 import React, { useCallback, useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import qrImage from '../assets/qr.png';
+import { Modal } from 'react-bootstrap';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import './cart.css';
 import { CartContext } from '../contexts/CartContext';
+import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
+import L from 'leaflet';
+import Swal from 'sweetalert2';
+import 'leaflet/dist/leaflet.css';
 
 // Modal component definition
 const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderTypeMain, handleCheckoutClick, setOrderTypeMain }) => {
@@ -132,6 +137,12 @@ const Cart = () => {
 
   const [maxQuantities, setMaxQuantities] = useState({});
   const [showOrderModal, setShowOrderModal] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
+  const [isCheckingLocation, setIsCheckingLocation] = useState(false);
+
+  // Store Location and Delivery Radius
+  const STORE_LOCATION = [14.699660772061614, 121.08295563928553];
+  const MAX_DELIVERY_RADIUS_KM = 3;
 
   useEffect(() => {
     const token = localStorage.getItem("authToken");
@@ -252,24 +263,130 @@ const Cart = () => {
     return (basePrice + addonsTotal) * item.quantity;
   };
 
+  // Haversine formula to calculate distance between two lat/lng points
+  const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const d = R * c; // Distance in km
+    return d;
+  };
+
+  const showLocationCheckAlert = () => {
+    Swal.fire({
+      title: 'Checking Delivery Location...',
+      html: '<div id="map-container-placeholder" style="height: 400px; width: 100%;"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Getting your location...</p></div>',
+      showConfirmButton: false,
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const { latitude, longitude } = position.coords;
+            const userCoords = [latitude, longitude];
+            
+            const distance = getDistanceFromLatLonInKm(
+              latitude,
+              longitude,
+              STORE_LOCATION[0],
+              STORE_LOCATION[1]
+            );
+
+            const isWithinRange = distance <= MAX_DELIVERY_RADIUS_KM;
+
+            // Update Swal content with the map
+            Swal.update({
+              title: isWithinRange ? 'Location Verified!' : 'Outside Delivery Range',
+              html: `
+                <div id="map-container" style="height: 400px; width: 100%;"></div>
+                <p class="mt-2">${isWithinRange ? 'You are within our delivery area. Proceeding to checkout...' : `Sorry, your location is outside our ${MAX_DELIVERY_RADIUS_KM}km delivery radius.`}</p>
+              `,
+              showConfirmButton: !isWithinRange, // Show button only if out of range
+              confirmButtonText: 'Close',
+              confirmButtonColor: '#dc3545',
+              showCancelButton: false,
+              allowOutsideClick: !isWithinRange,
+            });
+
+            // Render the map
+            const map = L.map('map-container').setView(userCoords, 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+              attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            L.marker(userCoords, { icon: new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34] }) }).addTo(map).bindPopup('Your Location').openPopup();
+            L.marker(STORE_LOCATION, { icon: new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34] }) }).addTo(map).bindPopup('Store Location');
+            L.circle(STORE_LOCATION, { radius: MAX_DELIVERY_RADIUS_KM * 1000, color: isWithinRange ? 'green' : 'red', fillColor: isWithinRange ? 'green' : 'red', fillOpacity: 0.2 }).addTo(map);
+
+            if (isWithinRange) {
+              setTimeout(() => {
+                Swal.close();
+                navigate('/checkout', {
+                  state: {
+                    cartItems: selectedCartItems,
+                    orderType: orderTypeMain,
+                    paymentMethod: paymentMethodMain
+                  }
+                });
+              }, 3000); // Wait 3 seconds then proceed
+            }
+          },
+          (error) => {
+            let title = 'Location Access Denied';
+            let text = 'We need your location to check for delivery eligibility. Please allow location access and try again.';
+
+            // Check if the error is due to a persistent "denied" state
+            if (error.code === error.PERMISSION_DENIED) {
+                title = 'Location Permission Blocked';
+                text = `
+                    It looks like you've previously blocked location access for this site. 
+                    <br/><br/> 
+                    To proceed with delivery, please go to your browser's site settings and change the location permission to "Allow" or "Ask".
+                `;
+            }
+
+            Swal.fire({
+                icon: 'error',
+                title: title,
+                html: text, // Use html to render the line breaks
+                confirmButtonColor: '#dc3545'
+            });
+          }
+        );
+      }
+    });
+  };
+
+
   const handleCheckoutClick = async (e) => {
     e.preventDefault();
     if (selectedCartItems.length === 0) {
       toast.error("Please select items to checkout.");
       return;
     }
-
-    // Close modal before navigating
-    setShowOrderModal(false);
-
-    // Proceed directly to checkout since stock limits are already handled
-    navigate('/checkout', {
-      state: {
-        cartItems: selectedCartItems,
-        orderType: orderTypeMain,
-        paymentMethod: paymentMethodMain
+  
+    // This logic now applies to both mobile and desktop checkout flows
+    if (orderTypeMain === 'Delivery') {
+      if (!window.isSecureContext) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Insecure Connection',
+          html: "Location services require a secure (HTTPS) connection. Please access this site via <b>localhost</b> or a secure domain.",
+        });
+        return;
       }
-    });
+      setShowOrderModal(false);
+      showLocationCheckAlert();
+    } else {
+      // For Pick Up or other types, proceed directly
+      setShowOrderModal(false);
+      navigate('/checkout', { state: { cartItems: selectedCartItems, orderType: orderTypeMain, paymentMethod: paymentMethodMain } });
+    }
   };
   
   const handleFileChange = (e) => {
@@ -343,6 +460,13 @@ const Cart = () => {
 
   return (
     <section className="container-fluid py-3 px-2 px-md-5 mt-5 pt-5" style={{ backgroundColor: '#eaf4f6', minHeight: '100vh' }}>
+      {isCheckingLocation && (
+        <div className="location-loader-overlay">
+            <div className="spinner-border text-primary" role="status">
+                <span className="visually-hidden">Loading...</span>
+            </div>
+            <p className="mt-2">Checking your location for delivery...</p>
+        </div>)}
       <div className="row">
         {/* Cart Section (Always visible) */}
         <div className="col-lg-8 mb-4">

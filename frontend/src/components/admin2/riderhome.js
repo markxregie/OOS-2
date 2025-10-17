@@ -383,8 +383,7 @@ function RiderDashboard() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
-        },
-        body: JSON.stringify({ new_status: newStatus.toUpperCase() })
+        }
       });
       if (!cartResponse.ok) {
         throw new Error(`Failed to update cart status: ${cartResponse.status}`);
@@ -395,10 +394,9 @@ function RiderDashboard() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        },
-        body: JSON.stringify({ status: newStatus })
-      });
+          'Authorization': `Bearer ${authToken}` }
+        }
+      );
       if (!deliveryResponse.ok) {
         throw new Error(`Failed to update delivery status: ${deliveryResponse.status}`);
       }
@@ -419,10 +417,9 @@ function RiderDashboard() {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
-          },
-          body: JSON.stringify({ newStatus: posStatus })
-        });
+            'Authorization': `Bearer ${authToken}` }
+          }
+        );
         if (!posResponse.ok) {
           throw new Error(`Failed to update POS status: ${posResponse.status}`);
         }
@@ -794,7 +791,7 @@ function RiderDashboard() {
                       {getButtonText(order.currentStatus)}
                     </Button>
                   )}
-                  {order.currentStatus === 'pickedup' && (
+                  {(order.currentStatus === 'pickedup' || order.currentStatus === 'delivering') && (
                     <Button
                       variant="secondary"
                       className="navigate-route-button"

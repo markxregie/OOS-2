@@ -30,7 +30,7 @@ const TrackOrder = () => {
 
     const orderStatusSteps = ['pending', 'processing', 'waiting for pickup', 'picked up', 'delivering', 'completed'];
     // Placeholder coordinates. In a real app, these would come from your order/user data.
-    const storeLocation = [14.5547, 121.0244]; // Example: BGC, Manila
+    const storeLocation = [14.699660772061614, 121.08295563928553]; // Specific store location
     const deliveryLocation = [14.5800, 121.0000]; // Example: Malate, Manila
 
     const pickupStatusSteps = ['pending', 'processing', 'waiting for pickup', 'picked up', 'completed'];
