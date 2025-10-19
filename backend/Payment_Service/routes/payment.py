@@ -86,6 +86,55 @@ class ConfirmPaymentRequest(BaseModel):
 @router.post("/create-checkout")
 async def create_checkout_session(payload: CheckoutRequest, token: str = Depends(oauth2_scheme)):
     await validate_token_and_roles(token, ["user", "admin", "staff"])
+
+    # Fetch user profile for customer info
+    PROFILE_URL = "http://localhost:4000/users/profile"
+    customer_id = None
+    name, email, phone = "User", "", ""
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(PROFILE_URL, headers={"Authorization": f"Bearer {token}"})
+            response.raise_for_status()
+            profile_data = response.json()
+
+            first_name = profile_data.get("firstName", "")
+            last_name = profile_data.get("lastName", "")
+            email = profile_data.get("email", "")
+            phone = profile_data.get("phoneNumber", profile_data.get("phone", ""))
+            name = f"{first_name} {last_name}".strip() or "User"
+
+            # Create PayMongo customer if info is available
+            if name and email:
+                customer_body = {
+                    "data": {
+                        "attributes": {
+                            "name": name,
+                            "email": email,
+                            "phone": phone
+                        }
+                    }
+                }
+                encoded_key = base64.b64encode(f"{PAYMONGO_SECRET_KEY}:".encode()).decode()
+                customer_headers = {
+                    "accept": "application/json",
+                    "authorization": f"Basic {encoded_key}",
+                    "content-type": "application/json",
+                }
+
+                customer_response = await client.post(
+                    "https://api.paymongo.com/v1/customers",
+                    headers=customer_headers,
+                    json=customer_body
+                )
+                customer_response.raise_for_status()
+                customer_data = customer_response.json()
+                customer_id = customer_data["data"]["id"]
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch profile or create customer: {e}")
+            customer_id = None
+
     try:
         amount_in_centavos = int(payload.amount * 100)
         encoded_key = base64.b64encode(f"{PAYMONGO_SECRET_KEY}:".encode()).decode()
@@ -96,26 +145,35 @@ async def create_checkout_session(payload: CheckoutRequest, token: str = Depends
             "content-type": "application/json",
         }
 
+        attributes = {
+            "billing": {
+                "name": name,
+                "email": email,
+                "phone": phone
+            },
+            "send_email_receipt": False,
+            "show_description": True,
+            "show_line_items": True,
+            "line_items": [{
+                "name": "OOS Order",
+                "amount": amount_in_centavos,
+                "currency": "PHP",
+                "description": payload.description,
+                "quantity": 1
+            }],
+            "description": payload.description,
+            "reference_number": payload.reference_number,
+            "payment_method_types": ["gcash", "card"],
+            "success_url": f"{payload.redirect_url}?status=success",
+            "cancel_url": f"{payload.redirect_url}?status=cancel"
+        }
+
+        if customer_id and name and email:
+            attributes["customer"] = customer_id
+
         body = {
             "data": {
-                "attributes": {
-                    "billing": None,
-                    "send_email_receipt": False,
-                    "show_description": True,
-                    "show_line_items": True,
-                    "line_items": [{
-                        "name": "OOS Order",
-                        "amount": amount_in_centavos,
-                        "currency": "PHP",
-                        "description": payload.description,
-                        "quantity": 1
-                    }],
-                    "description": payload.description,
-                    "reference_number": payload.reference_number,
-                    "payment_method_types": ["gcash", "card"],
-                    "success_url": f"{payload.redirect_url}?status=success",
-                    "cancel_url": f"{payload.redirect_url}?status=cancel"
-                }
+                "attributes": attributes
             }
         }
 
@@ -133,6 +191,8 @@ async def create_checkout_session(payload: CheckoutRequest, token: str = Depends
     except Exception as e:
         logger.error(f"Unexpected error creating checkout: {str(e)}")
         raise HTTPException(status_code=500, detail="Unexpected server error.")
+
+
 
 # ---- CONFIRM PAYMENT ENDPOINT ----
 @router.post("/confirm-payment")

@@ -383,7 +383,8 @@ function RiderDashboard() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
-        }
+        },
+        body: JSON.stringify({ new_status: newStatus })
       });
       if (!cartResponse.ok) {
         throw new Error(`Failed to update cart status: ${cartResponse.status}`);
@@ -394,9 +395,10 @@ function RiderDashboard() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}` }
-        }
-      );
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
       if (!deliveryResponse.ok) {
         throw new Error(`Failed to update delivery status: ${deliveryResponse.status}`);
       }
@@ -417,9 +419,10 @@ function RiderDashboard() {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}` }
-          }
-        );
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ newStatus: posStatus })
+        });
         if (!posResponse.ok) {
           throw new Error(`Failed to update POS status: ${posResponse.status}`);
         }
@@ -755,6 +758,7 @@ function RiderDashboard() {
               <Card key={order.id} className="order-card">
                 <div className="order-header">
                   <h5 className="order-id">Order #{order.id}</h5>
+                  <p className="reference-number">Reference: {order.referenceNumber}</p>
                   <div className="status-tag" style={{ color: getStatusStyle(order.currentStatus).color, backgroundColor: getStatusStyle(order.currentStatus).backgroundColor }}>
                     {statusIcons[order.currentStatus]} {getStatusStyle(order.currentStatus).text}
                   </div>
