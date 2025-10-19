@@ -8,7 +8,7 @@ import 'leaflet-routing-machine';
 import riderImage from "../../assets/rider.jpg";
 import logoImage from "../../assets/logo.png";
 import "./riderhome.css";
-import "./riderdashboard.css";
+
 import Swal from 'sweetalert2';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-routing-machine/dist/leaflet-routing-machine.css';
@@ -129,6 +129,7 @@ function RiderDashboard() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 991);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // NEW: State for mobile bottom menu
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [currentOrderToDeliver, setCurrentOrderToDeliver] = useState(null);
   const [showMapModal, setShowMapModal] = useState(false);
@@ -312,7 +313,7 @@ function RiderDashboard() {
         return { color: "#ffffff", backgroundColor: "#9c27b0", text: "Waiting for Pickup" };
       case "pickedup":
         return { color: "#0d6efd", backgroundColor: "#cfe2ff", text: "Picked Up" };
-         case "delivering":
+      case "delivering":
         return { color: "#ffffff", backgroundColor: "rgb(63, 81, 181)", text: "DELIVERING" };
       case "completed":
         return { color: "rgb(25, 135, 84)", backgroundColor: "rgb(209, 231, 221)", text: "COMPLETED" };
@@ -330,9 +331,9 @@ function RiderDashboard() {
   const filteredOrders = orders
     .filter(order => {
       if (toggle === "active") {
-        return !["delivered", "cancelled", "returned"].includes(order.currentStatus);
+        return !["delivered", "completed", "cancelled", "returned"].includes(order.currentStatus);
       } else if (toggle === "completed") {
-        return order.currentStatus === "delivered";
+        return ["delivered", "completed"].includes(order.currentStatus);
       }
       return true;
     });
@@ -371,7 +372,7 @@ function RiderDashboard() {
       if (!order) {
         throw new Error('Order not found');
       }
-      
+
       const referenceNumber = order.referenceNumber;
       if (!referenceNumber) {
         throw new Error('Reference number not found for this order');
@@ -613,108 +614,123 @@ function RiderDashboard() {
 
   return (
     <div className="rider-dashboard-container">
-      <div className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
-        <div className="sidebar-header">
-          <img src={logoImage} alt="Logo" className="logo" />
+      {/* Desktop Sidebar - Conditionally rendered for desktop view */}
+      {isSidebarOpen && window.innerWidth > 991 && (
+        <div className="sidebar desktop-sidebar">
+          <div className="sidebar-header">
+            <img src={logoImage} alt="Logo" className="logo" />
+          </div>
+          <ul className="sidebar-menu">
+            <li onClick={navigateToDashboard} style={{ cursor: 'pointer' }}>
+              <FaHome />
+              {isSidebarOpen && <span>Dashboard</span>}
+            </li>
+            <li onClick={navigateToHistory} style={{ cursor: 'pointer' }}>
+              <FaHistory />
+              {isSidebarOpen && <span>History</span>}
+            </li>
+            <li onClick={handleLogout} style={{ cursor: 'pointer' }}>
+              <FaSignOutAlt />
+              {isSidebarOpen && <span>Logout</span>}
+            </li>
+          </ul>
         </div>
-        <ul className="sidebar-menu">
-          <li onClick={navigateToDashboard} style={{ cursor: 'pointer' }}>
-            <FaHome />
-            {isSidebarOpen && <span>Dashboard</span>}
-          </li>
-          <li onClick={navigateToHistory} style={{ cursor: 'pointer' }}>
-            <FaHistory />
-            {isSidebarOpen && <span>History</span>}
-          </li>
-          <li onClick={handleLogout} style={{ cursor: 'pointer' }}>
-            <FaSignOutAlt />
-            {isSidebarOpen && <span>Logout</span>}
-          </li>
-        </ul>
-      </div>
+      )}
 
       <div className="main-content">
         <header className="manage-header">
           <div className="header-left">
-            <button className="menu-toggle" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
-              <FaBars />
-            </button>
+            {/* Toggle button - used for desktop sidebar collapse/expand, hidden in mobile view */}
+            {window.innerWidth > 991 && (
+              <button
+                className="menu-toggle"
+                onClick={() => {
+                  setIsSidebarOpen(!isSidebarOpen);
+                }}
+              >
+                <FaBars />
+              </button>
+            )}
             <h2 className="page-title">Rider Dashboard</h2>
           </div>
           <div className="header-right">
             <div className="header-date">{currentDateFormatted}</div>
-            <div className="header-profile">
-              <div className="bell-icon"><FaBell className="bell-outline" /></div>
-              <div className="profile-pic" style={{ backgroundImage: `url(${riderImage})` }}></div>
-              <div className="profile-info">
-                <div className="profile-role">{getGreeting()}! I'm {userRole}</div>
-                <div className="profile-name">{userName}</div>
+            {window.innerWidth > 991 && (
+              <div className="header-profile">
+                <div className="bell-icon"><FaBell className="bell-outline" /></div>
+                <div className="profile-pic" style={{ backgroundImage: `url(${riderImage})` }}></div>
+                <div className="profile-info">
+                  <div className="profile-role">{getGreeting()}! I'm {userRole}</div>
+                  <div className="profile-name">{userName}</div>
+                </div>
+                <div className="dropdown-icon" onClick={() => setDropdownOpen(!dropdownOpen)}>
+                  <FaChevronDown className={dropdownOpen ? "icon-rotated" : ""} />
+                  {dropdownOpen && (
+                    <div className="profile-dropdown">
+                      <ul className="dropdown-menu-list">
+                        <li onClick={() => window.location.reload()}>
+                          <FaUndo /> Refresh
+                        </li>
+                        <li onClick={handleLogout}>
+                          <FaSignOutAlt /> Logout
+                        </li>
+                      </ul>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="dropdown-icon" onClick={() => setDropdownOpen(!dropdownOpen)}>
-                <FaChevronDown className={dropdownOpen ? "icon-rotated" : ""} />
-                {dropdownOpen && (
-                  <div className="profile-dropdown">
-                    <ul className="dropdown-menu-list">
-                      <li onClick={() => window.location.reload()}>
-                        <FaUndo /> Refresh
-                      </li>
-                      <li onClick={handleLogout}>
-                        <FaSignOutAlt /> Logout
-                      </li>
-                    </ul>
-                  </div>
-                )}
-              </div>
-            </div>
+            )}
           </div>
         </header>
 
-        <Container fluid className="dashboard-summary-container" style={{ backgroundColor: "#a3d3d8" }}>
-          <div className="rider-selector-group">
-            <div className="rider-info-display">
-              <img src={riderImage} alt={riderName} className="rider-profile-pic" />
-              <span className="rider-name-text">{riderName || "Rider"}</span>
+        {window.innerWidth > 991 && (
+          <Container fluid className="dashboard-summary-container" style={{ backgroundColor: "#a3d3d8", display: window.innerWidth <= 991 ? 'flex' : 'block', flexDirection: window.innerWidth <= 991 ? 'row' : 'column', alignItems: window.innerWidth <= 991 ? 'center' : 'stretch' }}>
+            <div className="rider-selector-group">
+              <div className="rider-info-display">
+                <img src={riderImage} alt={riderName} className="rider-profile-pic" />
+                <span className="rider-name-text">{riderName || "Rider"}</span>
+              </div>
             </div>
-          </div>
-          <div className="summary-cards-container">
-            <Card className="summary-card">
-              <FaBoxOpen size={32} color="#964b00" />
-              <span className="card-title">Active Orders</span>
-              <span className="card-value">
-                {orders.filter(order => !["delivered", "cancelled", "returned"].includes(order.currentStatus)).length} orders
-              </span>
-            </Card>
-            <Card className="summary-card">
-              <FaCheckCircle size={32} color="#198754" />
-              <span className="card-title">Completed</span>
-              <span className="card-value">
-                {orders.filter(order => order.currentStatus === "delivered").length} orders
-              </span>
-            </Card>
-            <Card className="summary-card" style={{ position: 'relative' }}>
-              <Form.Select
-                size="sm"
-                value={earningsFilter}
-                onChange={(e) => setEarningsFilter(e.target.value)}
-                style={{
-                  position: 'absolute',
-                  top: '10px',
-                  right: '10px',
-                  width: '120px',
-                  fontSize: '12px',
-                  padding: '2px 6px'
-                }}
-              >
-                <option value="Daily">Daily</option>
-                <option value="Weekly">Weekly</option>
-                <option value="Monthly">Monthly</option>
-              </Form.Select>
-              <FaDollarSign size={32} color="#fd7e14" />
-              <span className="card-title">Earnings</span>
-              <span className="card-value">₱{calculateEarnings()}</span>
-            </Card>
-          </div>
-        </Container>
+            <div className="summary-cards-container">
+              <Card className="summary-card">
+                <FaBoxOpen size={32} color="#964b00" />
+                <span className="card-title">Active Orders</span>
+                <span className="card-value">
+                  {orders.filter(order => !["delivered", "completed", "cancelled", "returned"].includes(order.currentStatus)).length} orders
+                </span>
+              </Card>
+              <Card className="summary-card">
+                <FaCheckCircle size={32} color="#198754" />
+                <span className="card-title">Completed</span>
+                <span className="card-value">
+                  {orders.filter(order => ["delivered", "completed"].includes(order.currentStatus)).length} orders
+                </span>
+              </Card>
+              <Card className="summary-card" style={{ position: 'relative' }}>
+                <Form.Select
+                  size="sm"
+                  value={earningsFilter}
+                  onChange={(e) => setEarningsFilter(e.target.value)}
+                  style={{
+                    position: 'absolute',
+                    top: '10px',
+                    right: '10px',
+                    width: '120px',
+                    fontSize: '12px',
+                    padding: '2px 6px'
+                  }}
+                >
+                  <option value="Daily">Daily</option>
+                  <option value="Weekly">Weekly</option>
+                  <option value="Monthly">Monthly</option>
+                </Form.Select>
+                <FaDollarSign size={32} color="#fd7e14" />
+                <span className="card-title">Earnings</span>
+                <span className="card-value">₱{calculateEarnings()}</span>
+              </Card>
+            </div>
+          </Container>
+        )}
 
         <div className="toggle-buttons-container">
           <button
@@ -758,18 +774,18 @@ function RiderDashboard() {
               <Card key={order.id} className="order-card">
                 <div className="order-header">
                   <h5 className="order-id">Order #{order.id}</h5>
-                  <p className="reference-number">Reference: {order.referenceNumber}</p>
+
                   <div className="status-tag" style={{ color: getStatusStyle(order.currentStatus).color, backgroundColor: getStatusStyle(order.currentStatus).backgroundColor }}>
                     {statusIcons[order.currentStatus]} {getStatusStyle(order.currentStatus).text}
                   </div>
                 </div>
-                <div className="order-details">
+                <div className="order-details mobile-stack"> {/* Added mobile-stack for responsiveness */}
                   <p className="detail-item"><FaClock color="#4b929d" /> Ordered at: <span className="detail-value">{new Date(order.orderedAt).toLocaleString()}</span></p>
                   <p className="detail-item"><FaUser color="#4b929d" /> Customer: <span className="detail-value">{order.customerName}</span></p>
                   <p className="detail-item"><FaPhone color="#4b929d" /> Phone: <span className="detail-value">{order.phone}</span></p>
                   <p className="detail-item"><FaMapMarkerAlt color="#4b929d" /> Address: <span className="detail-value">{order.address}</span></p>
                 </div>
-                <div className="order-items-section">
+                <div className="order-items-section mobile-stack"> {/* Added mobile-stack for responsiveness */}
                   <h6><FaBox color="#4b929d" /> Items ({order.items?.length || 0})</h6>
                   <ul className="item-list">
                     {order.items?.map((item, i) => (
@@ -781,7 +797,7 @@ function RiderDashboard() {
                   </ul>
                 </div>
                 <hr className="divider" />
-                <div className="order-total-section">
+                <div className="order-total-section mobile-total"> {/* Added mobile-total for font size adjustment */}
                   <span className="total-label">Total:</span>
                   <span className="total-value">₱{order.total?.toFixed(2) || "0.00"}</span>
                 </div>
@@ -837,6 +853,24 @@ function RiderDashboard() {
             </Modal.Body>
           </Modal>
         )}
+      </div>
+
+      {/* Mobile Bottom Navigation Bar - ONLY visible on mobile via CSS media query */}
+      <div className="mobile-bottom-nav">
+        <ul className="bottom-nav-menu">
+          <li onClick={navigateToDashboard} style={{ cursor: 'pointer' }}>
+            <FaHome />
+            <span>Dashboard</span>
+          </li>
+          <li onClick={navigateToHistory} style={{ cursor: 'pointer' }}>
+            <FaHistory />
+            <span>History</span>
+          </li>
+          <li onClick={handleLogout} style={{ cursor: 'pointer' }}>
+            <FaSignOutAlt />
+            <span>Logout</span>
+          </li>
+        </ul>
       </div>
     </div>
   );
