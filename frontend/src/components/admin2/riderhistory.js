@@ -215,8 +215,12 @@ function RiderHistory() {
         return { color: "#0d6efd", backgroundColor: "#cfe2ff", text: "Picked Up" };
       case "inTransit":
         return { color: "#6610f2", backgroundColor: "#e5dbff", text: "In Transit" };
+      case "delivering":
+        return { color: "#6610f2", backgroundColor: "#e5dbff", text: "Delivering" };
       case "delivered":
         return { color: "#198754", backgroundColor: "#d1e7dd", text: "Delivered" };
+      case "completed":
+        return { color: "#198754", backgroundColor: "#d1e7dd", text: "Completed" };
       case "cancelled":
         return { color: "#dc3545", backgroundColor: "#f8d7da", text: "Cancelled" };
       case "returned":
