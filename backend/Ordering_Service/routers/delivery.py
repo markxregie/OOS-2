@@ -213,6 +213,35 @@ async def update_delivery_order_status(
 
         await conn.commit()
 
+        # --- Notify user about status change ---
+        try:
+            # Fetch username to know who to notify
+            await cursor.execute("SELECT UserName FROM Orders WHERE OrderID = ?", (order_id,))
+            user_row = await cursor.fetchone()
+            if user_row:
+                username = user_row[0]
+
+                # Prepare notification message
+                notif_title = "Order Update"
+                notif_message = f"Your order #{order_id} is now {request.status.capitalize()}."
+                notif_type = "OrderStatus"
+
+                # Send POST to Notification microservice
+                async with httpx.AsyncClient() as client:
+                    await client.post(
+                        "http://localhost:7002/notifications/create",
+                        params={
+                            "username": username,
+                            "title": notif_title,
+                            "message": notif_message,
+                            "type": notif_type,
+                            "order_id": order_id,
+                        },
+                        headers={"Authorization": f"Bearer {token}"}
+                    )
+        except Exception as notify_err:
+            logger.warning(f"⚠️ Failed to send notification: {notify_err}")
+
         logger.info(f"Updated delivery status for order {order_id} to {request.status}")
         return {"message": f"Order status successfully updated to {request.status}"}
 

@@ -76,10 +76,21 @@ export default function AppHeader() {
     })));
   };
 
-  const markAsRead = (id) => {
-    setNotifications(notifications.map(notification =>
-      notification.id === id ? { ...notification, isRead: true } : notification
-    ));
+  const markAsRead = async (id) => {
+    try {
+      const token = localStorage.getItem('authToken');
+      await fetch(`http://localhost:7002/notifications/${id}/read`, {
+        method: "PUT",
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      setNotifications(notifications.map(notification =>
+        notification.id === id ? { ...notification, isRead: true } : notification
+      ));
+    } catch (error) {
+      console.error("Failed to mark notification as read:", error);
+    }
   };
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
@@ -146,6 +157,64 @@ export default function AppHeader() {
     if (isLoggedIn) {
       fetchUserProfile();
     }
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    let ws;
+    const token = localStorage.getItem("authToken");
+    const userData = localStorage.getItem("userData");
+    const username = userData ? JSON.parse(userData).username : null;
+
+    if (isLoggedIn && username && token) {
+      // Fetch existing notifications from backend
+      const fetchNotifications = async () => {
+        const res = await fetch(`http://localhost:7002/notifications/${username}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const data = await res.json();
+
+        if (Array.isArray(data)) {
+          data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+          setNotifications(data);
+        } else {
+          console.error("Unexpected notification response:", data);
+        }
+      };
+
+      fetchNotifications();
+
+      // Create WebSocket connection with token auth
+      ws = new WebSocket(`ws://localhost:7002/ws/notifications/${username}?token=${token}`);
+
+      ws.onopen = () => {
+        console.log("✅ Connected to Notification WebSocket");
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log("📩 Notification received:", data);
+
+          setNotifications((prev) => [data, ...prev]);
+        } catch (err) {
+          console.error("Error parsing WebSocket message:", err);
+        }
+      };
+
+      ws.onclose = (event) => {
+        console.log("🔌 WebSocket closed:", event.reason);
+      };
+
+      ws.onerror = (error) => {
+        console.error("⚠️ WebSocket error:", error);
+      };
+    }
+
+    return () => {
+      if (ws) ws.close();
+    };
   }, [isLoggedIn]);
 
   const handleLogoutClick = () => {
@@ -333,7 +402,10 @@ export default function AppHeader() {
                                         className={`notification-item p-2 mb-2 border rounded ${
                                           !notification.isRead ? 'bg-primary bg-opacity-10' : ''
                                         }`}
-                                        onClick={() => markAsRead(notification.id)}
+                                        onClick={() => {
+                                          markAsRead(notification.id);
+                                          navigate('/profile/notification');
+                                        }}
                                         style={{ cursor: 'pointer' }}
                                       >
                                         <div className="d-flex w-100 justify-content-between">

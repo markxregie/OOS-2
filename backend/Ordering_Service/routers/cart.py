@@ -513,6 +513,23 @@ async def add_to_cart(item: CartItem, token: str = Depends(oauth2_scheme)):
             row = await cursor.fetchone()
             order_id = row[0] if row else None
 
+        # ✅ Notify user when a new order is created
+        if order_id:
+            try:
+                async with httpx.AsyncClient() as client:
+                    await client.post(
+                        "http://localhost:7002/notifications/notifications/create",
+                        params={
+                            "username": item.username,
+                            "title": "Order Placed",
+                            "message": f"Your order #{order_id} has been placed successfully!",
+                            "type": "Order",
+                            "order_id": order_id
+                        }
+                    )
+            except Exception as notify_err:
+                logger.error(f"Failed to send notification: {notify_err}")
+
         # Check if item already in cart
         await cursor.execute("""
             SELECT OrderItemID, Quantity FROM OrderItems
@@ -652,6 +669,9 @@ async def finalize_order(username: str, token: str = Depends(oauth2_scheme)):
             WHERE OrderID = ?
         """, (order_id,))
         await conn.commit()
+
+        
+
     except Exception as e:
         logger.error(f"Error finalizing order: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to finalize order: {str(e)}")
@@ -746,6 +766,23 @@ async def update_order_status(
         await conn.commit()
 
         logger.info(f"Updated status for order {order_id} to {request.new_status}")
+
+        # ✅ Notify customer about the status update
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    "http://localhost:7002/notifications/notifications/create",
+                    params={
+                        "username": order_owner,
+                        "title": "Order Update",
+                        "message": f"Your order #{order_id} is now {request.new_status}.",
+                        "type": "Order",
+                        "order_id": order_id
+                    }
+                )
+        except Exception as notify_err:
+            logger.error(f"Failed to send order update notification: {notify_err}")
+
         return {"message": f"Order status successfully updated to {request.new_status}"}
 
     except Exception as e:
