@@ -34,3 +34,191 @@
 .active-orders-container.two-cards .active-order-card {
   width: 45%;
 }
+
+/* ----------------------------------------------------
+    RESPONSIVENESS AND MOBILE VIEW (Sidebar to Bottom Nav)
+    ---------------------------------------------------- */
+
+.rider-dashboard-container {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar-menu{
+  justify-items: left!important;
+
+}
+/* Desktop Styles (992px and up) */
+.sidebar {
+  transition: width 0.3s ease;
+}
+.sidebar.desktop-sidebar {
+  width: 15rem; /* Fixed width for desktop sidebar */
+  transition: width 0.3s ease;
+  justify-items: left!important;
+}
+
+.logo {
+  margin-top: 20px;
+  width: 100%;
+  height: 70px !important;
+  max-width: 6rem;
+}
+/* Main content positioning for desktop */
+.main-content {
+  flex-grow: 1;
+  transition: margin-left 0.3s ease;
+  margin-left: 1rem; 
+  width: calc(100% - 250px);
+  padding-bottom: 0; /* Default desktop padding */
+}
+
+/* Hide the mobile bottom nav on desktop */
+.mobile-bottom-nav {
+  display: none;
+}
+
+/* Media Query for Mobile/Tablet View (max-width: 991px) */
+@media (max-width: 991px) {
+  /* General Mobile Layout */
+  .sidebar.desktop-sidebar {
+    display: none;
+    width: 0;
+  }
+
+  .main-content {
+    margin-left: 0;
+    width: 100%;
+    padding-bottom: 60px; /* Space for the fixed bottom nav */
+  }
+
+  .mobile-bottom-nav {
+    display: block;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background-color: #ffffff; 
+    border-top: 1px solid #dee2e6;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+    z-index: 1000;
+  }
+
+  .bottom-nav-menu {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    height: 100%;
+  }
+
+  .bottom-nav-menu li {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-size: 10px;
+    color: #495057;
+    padding: 5px;
+    cursor: pointer;
+    text-align: center;
+  }
+
+  .bottom-nav-menu li svg {
+    font-size: 20px;
+    margin-bottom: 2px;
+    color: #007bff;
+  }
+
+  /* Summary Cards */
+  .dashboard-summary-container .summary-cards-container {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .dashboard-summary-container .summary-card {
+    width: 100% !important;
+  }
+  
+  /* Pagination */
+  .pagination-container {
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+    padding: 10px;
+  }
+  
+  .pagination-controls {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  /* =======================================================
+     DEFINITIVE MOBILE TABLE FIX 
+     ======================================================= */
+  .orders-table-container {
+    /* Use overflow-x auto to allow horizontal scrolling if necessary 
+       but the main fix below converts it to a vertical list. */
+    overflow-x: hidden; 
+    padding: 0 10px;
+  }
+
+  .orders-table {
+    border: none !important;
+    width: 100% !important;
+    border-collapse: separate !important;
+    border-spacing: 0 12px !important; /* Spacing between rows/cards */
+  }
+
+  /* Hide table headers on mobile */
+  .orders-table thead {
+    display: none !important; 
+  }
+
+  /* Turn rows into cards/blocks */
+  .orders-table tbody tr {
+    border: 1px solid #ddd;
+    display: block !important;
+    margin-bottom: 12px;
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    padding: 0; /* Reset row padding */
+  }
+
+  /* Turn cells into block elements */
+  .orders-table tbody td {
+    border: none !important; /* Remove individual cell borders */
+    display: block !important;
+    font-size: 0.9em;
+    text-align: right !important;
+    padding: 10px 10px 10px 50% !important; /* Create space for the label */
+    position: relative;
+    white-space: normal;
+    border-bottom: 1px dashed #eee !important; /* Separator between fields */
+  }
+  
+  /* Remove the separator line for the last field (Actions) */
+  .orders-table tbody tr td:last-child {
+    border-bottom: none !important; 
+    padding-left: 10px !important;
+    text-align: center !important;
+  }
+
+  /* Display the header name using the data-label attribute */
+  .orders-table tbody td::before {
+    content: attr(data-label);
+    position: absolute;
+    left: 10px;
+    width: 45%;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: #333; /* Darker label for better visibility */
+    text-align: left;
+    white-space: nowrap; /* Keep the label on one line */
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}

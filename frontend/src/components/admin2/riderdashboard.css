@@ -508,13 +508,15 @@
 }
 
 .item-row {
+  display: flex;
+  justify-content: space-between;
   margin-bottom: 5px;
   font-size: 0.9rem;
   color: #777;
 }
 
 .divider {
-  background-color: #333!important;
+  background-color: #333 !important;
   margin: 15px 0;
   opacity: 1;
   border: none;
@@ -545,24 +547,25 @@
   gap: 10px;
 }
 
-.status-select,
-.rider-reassign-select {
-  width: 100%;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
-  font-size: 0.95rem;
-  font-weight: 500;
-  background-color: #f8f9fa;
-  cursor: pointer;
-  transition: border-color 0.2s;
+/* Fix the status change button width */
+.status-change-button {
+  width: 100%; /* Make it take full width of its container (order-actions) */
+  max-width: none; /* Remove any maximum width constraint */
+  border-radius: 5px; 
 }
 
-.status-select:focus,
-.rider-reassign-select:focus {
-  outline: none;
-  border-color: #4b929d;
-  box-shadow: 0 0 0 2px rgba(75, 146, 157, 0.25);
+.status-change-button.pickedUp {
+  background-color: #0d6efd; /* Blue */
+  border-color: #0d6efd;
+}
+
+.status-change-button.delivered {
+  background-color: #198754; /* Green */
+  border-color: #198754;
+}
+
+.navigate-route-button {
+  width: 100%; /* Make this button also full width */
 }
 
 .no-orders-message {
@@ -580,26 +583,122 @@
   margin: 0 auto;
 }
 
-/* in riderdashboard.css */
-
-.order-actions {
-  display: flex;
-  justify-content: center;
-  align-items: center; /* This centers the button vertically if needed */
-  flex-direction: column; /* To stack the dropdown and button if the dropdown is still present */
+/* Mobile adjustments for toggle buttons */
+@media (max-width: 991px) {
+  .toggle-button {
+    font-size: 14px; /* Smaller font size for mobile */
+    padding: 8px 12px; /* Adjust padding if needed */
+  }
 }
 
-.status-change-button {
-  width: 300%;
-  max-width: 300px; /* Optional: This prevents the button from becoming too wide on large screens */
-  border-radius: 5px; 
-}
-.status-change-button.pickedUp {
-  background-color: #0d6efd; /* Blue */
-  border-color: #0d6efd;
-}
+/* * MOBILE RESPONSIVENESS for Order Cards (Max-width 576px) 
+* This is where card responsiveness and font size adjustments happen.
+*/
+@media (max-width: 576px) {
+  .main-content {
+    padding: 10px; /* Reduce main content padding */
+  }
+  
+  .page-title {
+    font-size: 1.5rem; /* Slightly smaller title */
+  }
 
-.status-change-button.delivered {
-  background-color: #198754; /* Green */
-  border-color: #198754;
+  .toggle-buttons-container {
+    justify-content: space-between; /* Spread buttons out */
+    padding: 3px; /* Reduced padding */
+    margin-top: 10px;
+    margin-bottom: 10px;
+  }
+
+  .toggle-button {
+    font-size: 0.85rem; /* Smaller font size for buttons */
+    padding: 8px 10px; 
+    flex-grow: 1; /* Allow buttons to grow and fill space */
+    text-align: center;
+  }
+  
+  .order-cards-container {
+    /* Ensures only one card per row in small mobile view */
+    grid-template-columns: 1fr; 
+    gap: 15px; /* Reduced gap */
+  }
+
+  .order-card {
+    padding: 15px; /* Reduced card padding */
+  }
+
+  .order-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .order-id {
+    font-size: 1.1rem; /* Smaller ID font size */
+  }
+
+  .status-tag {
+    /* Full width and reset margin for stacking */
+    width: 100%;
+    margin-left: 0;
+    justify-content: center;
+    font-size: 0.8rem; /* Smaller status tag font */
+    padding: 4px 8px;
+  }
+
+  .detail-item {
+    font-size: 0.85rem; /* Smaller detail font size */
+    flex-direction: column;
+    align-items: flex-start;
+    margin-bottom: 1px;
+  }
+  .detail-value{
+    margin-top: -10px !important;
+    margin-bottom: 10px !important ;
+  }
+  .order-items-section .detail-item {
+  margin-bottom: 2px !important;
+}
+  
+  .detail-item svg {
+    display: none; /* Optionally hide icons to save space */
+  }
+
+  .detail-value {
+    word-break: break-word; /* Ensure long addresses wrap */
+    width: 100%;
+    margin-top: 2px;
+    font-size: 0.9rem; /* Slightly larger value for readability */
+  }
+
+  .order-items-section h6 {
+    font-size: 1rem; /* Adjust item section heading */
+    margin-bottom: 10px;
+  }
+
+  .item-row {
+    font-size: 0.85rem; /* Smaller item row font */
+  }
+
+  .order-total-section {
+    font-size: 1.1rem; /* Smaller total section font */
+    margin-bottom: 15px;
+    justify-content: center; /* Center the total section in mobile */
+  }
+
+  /* Force vertical stacking on order actions for mobile */
+  .order-actions {
+    flex-direction: column;
+    gap: 8px;
+    align-items: center; /* Center the buttons in mobile */
+  }
+
+  .status-change-button,
+  .navigate-route-button {
+    padding: 10px; /* Comfortable padding for touch targets */
+    font-size: 1rem; /* Readable button text */
+    width: 125%; /* Reduce width to center better, but keep full if needed */
+    margin-left: 4rem;
+  }
 }

@@ -1,6 +1,7 @@
 import aioodbc
 
 
+
 # database config
 server = 'DESKTOP-VQQ0NIU\SQLEXPRESS'
 database = 'OOS'
