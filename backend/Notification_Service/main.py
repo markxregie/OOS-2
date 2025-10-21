@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from routers import notification
+from routers import websocket 
 import os
 import sys
 
@@ -8,13 +10,14 @@ import sys
 sys.path.append(os.path.dirname(__file__))
 
 # Import your routers (we’ll later add routes like notifications.py and websocket.py)
-from routers import notification, websocket
+
 
 app = FastAPI(title="Notification Service")
 
 # Include routers
 app.include_router(notification.router, prefix="/notifications", tags=["Notifications"])
-app.include_router(websocket.router, prefix="/ws", tags=["WebSocket"])
+app.include_router(notification.router)
+app.include_router(websocket.router, prefix="", tags=["WebSocket"])
 
 # Optional: mount static files for uploaded proof images (if needed)
 if not os.path.exists("uploads"):

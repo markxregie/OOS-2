@@ -3,6 +3,8 @@ import React, { createContext, useState, useEffect } from 'react';
 // Create the AuthContext with default values
 export const AuthContext = createContext({
   isLoggedIn: false,
+  username: null,
+  userRole: null,
   login: () => {},
   logout: () => {},
 });
@@ -32,24 +34,57 @@ function isTokenValid(authToken, expiresAt) {
 // AuthProvider component to wrap the app and provide auth state
 export const AuthProvider = ({ children }) => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [username, setUsername] = useState(null);
+  const [userRole, setUserRole] = useState(null);
 
   // Check localStorage for authToken and expires_at on mount to set login state
   useEffect(() => {
     const authToken = localStorage.getItem('authToken');
     const expiresAt = localStorage.getItem('expires_at');
+    const userData = localStorage.getItem('userData');
     if (authToken && isTokenValid(authToken, expiresAt)) {
       setIsLoggedIn(true);
+      if (userData) {
+        try {
+          const { username, userRole } = JSON.parse(userData);
+          setUsername(username);
+          setUserRole(userRole);
+        } catch (error) {
+          // Ignore parse error
+        }
+      }
     } else {
       localStorage.removeItem('authToken');
       localStorage.removeItem('expires_at');
+      localStorage.removeItem('userData');
       setIsLoggedIn(false);
+      setUsername(null);
+      setUserRole(null);
     }
   }, []);
 
   // Login function to set login state and store authToken and expires_at
   const login = (data) => {
     const { authToken, expires_at } = data;
+
+    // Save token
     localStorage.setItem('authToken', authToken);
+
+    // ✅ Decode username and role from JWT and store in userData
+    try {
+      const payload = JSON.parse(atob(authToken.split('.')[1]));
+      const username = payload.sub;
+      const userRole = payload.role;
+      if (username) {
+        localStorage.setItem('userData', JSON.stringify({ username, userRole }));
+        setUsername(username);
+        setUserRole(userRole);
+      }
+    } catch (error) {
+      console.error("Failed to decode username from token:", error);
+    }
+
+    // Handle expiration
     let expTime = expires_at;
     if (!expTime) {
       try {
@@ -59,12 +94,13 @@ export const AuthProvider = ({ children }) => {
           expTime = new Date(exp * 1000).toISOString();
         }
       } catch (error) {
-        // If decoding fails, do nothing
+        // Ignore decode error
       }
     }
     if (expTime) {
       localStorage.setItem('expires_at', expTime);
     }
+
     setIsLoggedIn(true);
   };
 
@@ -72,11 +108,14 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem('authToken');
     localStorage.removeItem('expires_at');
+    localStorage.removeItem('userData');
     setIsLoggedIn(false);
+    setUsername(null);
+    setUserRole(null);
   };
 
   return (
-    <AuthContext.Provider value={{ isLoggedIn, login, logout }}>
+    <AuthContext.Provider value={{ isLoggedIn, username, userRole, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
