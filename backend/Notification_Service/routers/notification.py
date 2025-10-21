@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends, status
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from database import get_db_connection
+from routers.websocket import manager
 import httpx
 import logging
 from typing import List
@@ -45,46 +46,57 @@ class NotificationCreate(BaseModel):
 
 # --- CREATE Notification ---
 @router.post("/notifications/create")
-async def create_notification(
+async def create_or_update_notification(
     username: str = Query(...),
     title: str = Query(...),
     message: str = Query(...),
     type: str = Query(...),
     order_id: int | None = Query(None)
 ):
-    # Note: Removed token dependency for internal service calls
-    """
-    Create a new notification record and broadcast it via WebSocket.
-    """
     conn = await get_db_connection()
     cursor = await conn.cursor()
     try:
-        # Insert into database
+        # 🔍 Check if there's already a notification for this user + order
         await cursor.execute("""
-            INSERT INTO Notifications (UserName, Title, Message, Type, OrderID)
-            VALUES (?, ?, ?, ?, ?)
-        """, (username, title, message, type, order_id))
+            SELECT TOP 1 NotificationID
+            FROM Notifications
+            WHERE UserName = ? AND OrderID = ?
+        """, (username, order_id))
+        existing = await cursor.fetchone()
+
+        if existing:
+            # 🔁 Update existing notification message
+            await cursor.execute("""
+                UPDATE Notifications
+                SET Title = ?, Message = ?, Type = ?, IsRead = 0, CreatedAt = GETDATE()
+                WHERE NotificationID = ?
+            """, (title, message, type, existing[0]))
+            action = "updated"
+        else:
+            # 🆕 Insert new notification if none exists
+            await cursor.execute("""
+                INSERT INTO Notifications (UserName, Title, Message, Type, OrderID, IsRead, CreatedAt)
+                VALUES (?, ?, ?, ?, ?, 0, GETDATE())
+            """, (username, title, message, type, order_id))
+            action = "created"
+
         await conn.commit()
 
-        logger.info(f"✅ Notification created for {username}: {title}")
+        # ✅ ALWAYS broadcast (for both create + update)
+        await manager.send_personal_message({
+            "username": username,
+            "title": title,
+            "message": message,
+            "type": type,
+            "order_id": order_id
+        }, username)
 
-        # --- 🔔 Send live notification via WebSocket ---
-        await manager.send_personal_message(
-            {
-                "title": title,
-                "message": message,
-                "type": type,
-                "orderId": order_id,
-            },
-            username,
-        )
-
-        return {"message": "Notification created and sent successfully"}
+        logger.info(f"🔔 Notification {action} for user={username}, order_id={order_id}")
+        return {"status": "success", "action": action}
 
     except Exception as e:
-        logger.error(f"❌ Failed to create notification: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create notification")
-
+        logger.error(f"Failed to create/update notification: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         await cursor.close()
         await conn.close()

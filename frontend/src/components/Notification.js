@@ -52,24 +52,55 @@ const Notification = () => {
   // --- Connect WebSocket for live updates ---
   useEffect(() => {
     if (!username) return;
-    const socket = new WebSocket(`ws://localhost:7002/ws/notifications/${username}`);
+
+    const token = localStorage.getItem("authToken");
+    const socket = new WebSocket(`ws://localhost:7002/ws/notifications/${username}?token=${token}`);
 
     socket.onopen = () => console.log("🔌 Connected to Notification WebSocket");
+
     socket.onmessage = (event) => {
       const notif = JSON.parse(event.data);
-      console.log("📩 New notification:", notif);
-      setNotifications((prev) => [
-        {
-          id: Date.now(),
-          title: notif.title,
-          message: notif.message,
-          type: notif.type,
-          createdAt: new Date().toISOString(),
-          isRead: false,
-        },
-        ...prev,
-      ]);
+      console.log("📩 Live update from WebSocket:", notif);
+
+      setNotifications((prev) => {
+        // Check if a notification already exists for this order_id
+        const existingIndex = prev.findIndex((n) => n.order_id === notif.order_id);
+
+        const now = new Date().toISOString();
+
+        if (existingIndex !== -1) {
+          // 🔁 Update the existing one (new message, new time)
+          const updated = [...prev];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            title: notif.title,
+            message: notif.message,
+            type: notif.type,
+            isRead: false,
+            createdAt: now,
+          };
+
+          // Move updated item to the top of the list
+          const [updatedItem] = updated.splice(existingIndex, 1);
+          return [updatedItem, ...updated];
+        } else {
+          // 🆕 If new order, prepend to list
+          return [
+            {
+              id: Date.now(),
+              order_id: notif.order_id,
+              title: notif.title,
+              message: notif.message,
+              type: notif.type,
+              createdAt: now,
+              isRead: false,
+            },
+            ...prev,
+          ];
+        }
+      });
     };
+
     socket.onclose = () => console.log("❌ Disconnected from Notification WebSocket");
     socket.onerror = (err) => console.error("⚠️ WebSocket error:", err);
 
