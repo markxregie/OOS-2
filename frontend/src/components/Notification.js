@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const Notification = () => {
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [username, setUsername] = useState(() => {
@@ -33,6 +35,7 @@ const Notification = () => {
           const normalized = data.map(n => ({
             ...n,
             createdAt: n.createdAt, // normalize field name
+            order_id: n.orderId || n.order_id, // normalize order_id field
           }));
           normalized.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
           setNotifications(normalized);
@@ -127,6 +130,16 @@ const Notification = () => {
     }
   };
 
+  // --- Handle notification click ---
+  const handleNotificationClick = async (notification) => {
+    // Mark as read
+    await markAsRead(notification.id);
+    // Navigate to track order if it's an order-related notification
+    if (notification.order_id) {
+      navigate(`/profile/orderhistory/${notification.order_id}`);
+    }
+  };
+
   // --- Mark one as read ---
   const markAsRead = async (id) => {
     try {
@@ -179,7 +192,7 @@ const Notification = () => {
               className={`notification-item list-group-item list-group-item-action ${
                 !notification.isRead ? "notification-unread list-group-item-primary" : ""
               }`}
-              onClick={() => markAsRead(notification.id)}
+              onClick={() => handleNotificationClick(notification)}
             >
               <div className="d-flex w-100 justify-content-between">
                 <h5 className="notification-item-title mb-1">
