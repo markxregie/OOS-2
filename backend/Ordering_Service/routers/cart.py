@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from database import get_db_connection
 import httpx
+import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
@@ -770,8 +771,8 @@ async def update_order_status(
         # Get reference number
         await cursor.execute("SELECT ReferenceNumber FROM Orders WHERE OrderID = ?", (order_id,))
         ref = await cursor.fetchone()
-        reference_number = ref.ReferenceNumber if ref else f"#{order_id}"
 
+        reference_number = ref.ReferenceNumber if ref else f"#{order_id}"
         # ✅ Notify customer about the status update
         try:
             async with httpx.AsyncClient() as client:
@@ -841,3 +842,170 @@ async def update_rider_order_status(
     finally:
         await cursor.close()
         await conn.close()
+
+@router.patch("/admin/orders/auto-cancel/{reference_number}")
+async def auto_cancel_order_by_reference(
+    reference_number: str,
+    cancellation_data: dict
+):
+    """
+    Endpoint called by POS to cancel an OOS order that has expired.
+    This is called by the POS system's auto-cancel task.
+    """
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+    
+    try:
+        # Find the order by reference number
+        await cursor.execute("""
+            SELECT OrderID, UserName, Status 
+            FROM Orders 
+            WHERE ReferenceNumber = ?
+        """, (reference_number,))
+        
+        order = await cursor.fetchone()
+        
+        if not order:
+            logger.warning(f"Order with reference {reference_number} not found in OOS")
+            raise HTTPException(status_code=404, detail="Order not found")
+        
+        order_id = order[0]
+        username = order[1]
+        current_status = order[2]
+        
+        # Only cancel if still pending
+        if current_status.lower() != 'pending':
+            logger.info(f"Order {order_id} is {current_status}, skipping auto-cancel")
+            return {
+                "message": f"Order already has status: {current_status}",
+                "order_id": order_id
+            }
+        
+        # Update order status to cancelled
+        await cursor.execute("""
+            UPDATE Orders 
+            SET Status = 'Cancelled', 
+                DeliveryNotes = CONCAT(
+                    ISNULL(DeliveryNotes, ''), 
+                    ' [AUTO-CANCELLED: Order expired after 30 minutes]'
+                )
+            WHERE OrderID = ?
+        """, (order_id,))
+        
+        await conn.commit()
+        
+        logger.info(
+            f"✅ Auto-cancelled OOS OrderID={order_id}, "
+            f"Ref={reference_number}, Reason={cancellation_data.get('reason')}"
+        )
+        
+        # Send notification to customer
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                await client.post(
+                    "http://localhost:7002/notifications/notifications/create",
+                    params={
+                        "username": username,
+                        "title": "Order Automatically Cancelled",
+                        "message": f"Your order #{order_id} was automatically cancelled due to payment timeout (30 minutes).",
+                        "type": "Order",
+                        "order_id": order_id
+                    }
+                )
+        except Exception as notify_err:
+            logger.error(f"Failed to send cancellation notification: {notify_err}")
+        
+        return {
+            "message": "Order successfully auto-cancelled",
+            "order_id": order_id,
+            "reference_number": reference_number,
+            "reason": cancellation_data.get("reason")
+        }
+        
+    except Exception as e:
+        await conn.rollback()
+        logger.error(f"Error auto-cancelling order {reference_number}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to cancel order: {str(e)}")
+    finally:
+        await cursor.close()
+        await conn.close()
+
+
+# Also add a background task for OOS to check its own orders
+async def auto_cancel_expired_oos_orders():
+    """
+    Background task for OOS to independently check and cancel expired orders
+    """
+    while True:
+        try:
+            logger.info("🔍 OOS: Checking for expired pending orders...")
+            conn = await get_db_connection()
+            cursor = await conn.cursor()
+            
+            # Find orders pending for more than 30 minutes
+            expiration_time = datetime.now() - timedelta(minutes=1)
+            
+            await cursor.execute("""
+                SELECT OrderID, UserName, ReferenceNumber
+                FROM Orders
+                WHERE Status = 'Pending' 
+                AND PaymentStatus = 'Unpaid'
+                AND OrderDate < ?
+            """, (expiration_time,))
+            
+            expired_orders = await cursor.fetchall()
+            
+            if expired_orders:
+                logger.info(f"Found {len(expired_orders)} expired OOS orders")
+                
+                for order in expired_orders:
+                    order_id = order[0]
+                    username = order[1]
+                    reference_number = order[2]
+                    
+                    try:
+                        await cursor.execute("""
+                            UPDATE Orders 
+                            SET Status = 'Cancelled',
+                                DeliveryNotes = CONCAT(
+                                    ISNULL(DeliveryNotes, ''), 
+                                    ' [AUTO-CANCELLED: Payment not completed within 30 minutes]'
+                                )
+                            WHERE OrderID = ?
+                        """, (order_id,))
+                        
+                        await conn.commit()
+                        
+                        logger.info(f"✅ OOS auto-cancelled OrderID={order_id}")
+                        
+                        # Notify customer
+                        try:
+                            async with httpx.AsyncClient(timeout=10.0) as client:
+                                await client.post(
+                                    "http://localhost:7002/notifications/notifications/create",
+                                    params={
+                                        "username": username,
+                                        "title": "Order Automatically Cancelled",
+                                        "message": f"Your order #{order_id} was cancelled due to payment timeout.",
+                                        "type": "Order",
+                                        "order_id": order_id
+                                    }
+                                )
+                        except Exception as notify_err:
+                            logger.error(f"Failed to send notification: {notify_err}")
+                            
+                    except Exception as e:
+                        await conn.rollback()
+                        logger.error(f"Failed to cancel order {order_id}: {e}")
+                        continue
+            else:
+                logger.info("No expired OOS orders found")
+                
+            await cursor.close()
+            await conn.close()
+            
+        except Exception as e:
+            logger.error(f"Error in OOS auto-cancel task: {e}", exc_info=True)
+        
+        # Check every 5 minutes
+        await asyncio.sleep(300)
