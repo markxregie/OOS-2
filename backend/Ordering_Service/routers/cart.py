@@ -943,7 +943,7 @@ async def auto_cancel_expired_oos_orders():
             cursor = await conn.cursor()
             
             # Find orders pending for more than 30 minutes
-            expiration_time = datetime.now() - timedelta(minutes=1)
+            expiration_time = datetime.now() - timedelta(minutes=30)
             
             await cursor.execute("""
                 SELECT OrderID, UserName, ReferenceNumber
