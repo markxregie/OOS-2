@@ -767,6 +767,11 @@ async def update_order_status(
 
         logger.info(f"Updated status for order {order_id} to {request.new_status}")
 
+        # Get reference number
+        await cursor.execute("SELECT ReferenceNumber FROM Orders WHERE OrderID = ?", (order_id,))
+        ref = await cursor.fetchone()
+        reference_number = ref.ReferenceNumber if ref else f"#{order_id}"
+
         # ✅ Notify customer about the status update
         try:
             async with httpx.AsyncClient() as client:
@@ -775,7 +780,7 @@ async def update_order_status(
                     params={
                         "username": order_owner,
                         "title": "Order Update",
-                        "message": f"Your order #{order_id} is now {request.new_status}.",
+                        "message": f"Your order {reference_number} is now {request.new_status}.",
                         "type": "Order",
                         "order_id": order_id
                     }

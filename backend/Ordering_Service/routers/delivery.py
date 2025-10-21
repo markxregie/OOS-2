@@ -221,9 +221,14 @@ async def update_delivery_order_status(
             if user_row:
                 username = user_row[0]
 
+                # Get reference number
+                await cursor.execute("SELECT ReferenceNumber FROM Orders WHERE OrderID = ?", (order_id,))
+                ref = await cursor.fetchone()
+                reference_number = ref.ReferenceNumber if ref else f"#{order_id}"
+
                 # Prepare notification message
                 notif_title = "Order Update"
-                notif_message = f"Your order #{order_id} is now {request.status.capitalize()}."
+                notif_message = f"Your order {reference_number} is now {request.status.capitalize()}."
                 notif_type = "OrderStatus"
 
                 # Send POST to Notification microservice
