@@ -392,6 +392,23 @@ async def update_payment_details(payload: UpdatePaymentDetails, token: str = Dep
         ))
 
         await conn.commit()
+
+        # ✅ Notify user when order is placed (payment details updated)
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    "http://localhost:7002/notifications/notifications/create",
+                    params={
+                        "username": payload.username,
+                        "title": "Order Placed",
+                        "message": f"Your order {payload.reference_number} has been placed successfully!",
+                        "type": "Order",
+                        "order_id": order_id
+                    }
+                )
+        except Exception as notify_err:
+            logger.error(f"Failed to send notification: {notify_err}")
+
     except Exception as e:
         logger.error(f"Error updating order payment details: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update order payment details")
@@ -514,22 +531,7 @@ async def add_to_cart(item: CartItem, token: str = Depends(oauth2_scheme)):
             row = await cursor.fetchone()
             order_id = row[0] if row else None
 
-        # ✅ Notify user when a new order is created
-        if order_id:
-            try:
-                async with httpx.AsyncClient() as client:
-                    await client.post(
-                        "http://localhost:7002/notifications/notifications/create",
-                        params={
-                            "username": item.username,
-                            "title": "Order Placed",
-                            "message": f"Your order #{order_id} has been placed successfully!",
-                            "type": "Order",
-                            "order_id": order_id
-                        }
-                    )
-            except Exception as notify_err:
-                logger.error(f"Failed to send notification: {notify_err}")
+
 
         # Check if item already in cart
         await cursor.execute("""
