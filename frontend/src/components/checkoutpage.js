@@ -94,105 +94,123 @@ const CheckoutPage = () => {
     return subtotal + deliveryFee;
   };
 
-  const confirmPayment = async (saved) => {
-    const token = localStorage.getItem("authToken");
-    if (!token || !saved) return;
+  // Replace the confirmPayment function in your CheckoutPage.js
 
-    const { cartItems, orderType, paymentMethod, userData: savedUserData, deliveryNotes, reference_number } = saved;
-    const subtotal = cartItems.reduce((acc, item) => {
-      const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
-      return acc + (item.ProductPrice + addonSum) * item.quantity;
-    }, 0);
-    const deliveryFee = orderType === "Delivery" ? 50 : 0;
-    const total = subtotal + deliveryFee;
+const confirmPayment = async (saved) => {
+  const token = localStorage.getItem("authToken");
+  if (!token || !saved) return;
 
-    const cartPayload = cartItems.map(item => ({
-      product_id: item.product_id,
-      product_name: item.ProductName,
-      product_type: item.ProductType || '',
-      product_category: item.ProductCategory || '',
-      quantity: item.quantity,
-      price: item.ProductPrice,
-      addons: item.addons ? item.addons.map(addon => ({
-        addon_id: addon.addon_id || addon.AddOnID || 0,
-        addon_name: addon.addon_name || addon.AddOnName || addon.name,
-        price: addon.price || addon.Price || 0,
-        status: addon.status || addon.Status || 'Available'
-      })) : []
-    }));
+  const { cartItems, orderType, paymentMethod, userData: savedUserData, deliveryNotes, reference_number } = saved;
+  const subtotal = cartItems.reduce((acc, item) => {
+    const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
+    return acc + (item.ProductPrice + addonSum) * item.quantity;
+  }, 0);
+  const deliveryFee = orderType === "Delivery" ? 50 : 0;
+  const total = subtotal + deliveryFee;
 
-    const deliveryInfoPayload = orderType === "Delivery" ? {
-      FirstName: savedUserData.username,
-      MiddleName: savedUserData.middleName,
-      LastName: savedUserData.lastName,
-      Address: savedUserData.blockStreetSubdivision,
-      City: savedUserData.city,
-      Province: savedUserData.province,
-      Landmark: savedUserData.landmark,
-      EmailAddress: savedUserData.email,
-      PhoneNumber: savedUserData.phone,
-      Notes: deliveryNotes || "",
-    } : null;
+  const cartPayload = cartItems.map(item => ({
+    product_id: item.product_id,
+    product_name: item.ProductName,
+    product_type: item.ProductType || '',
+    product_category: item.ProductCategory || '',
+    quantity: item.quantity,
+    price: item.ProductPrice,
+    addons: item.addons ? item.addons.map(addon => ({
+      addon_id: addon.addon_id || addon.AddOnID || 0,
+      addon_name: addon.addon_name || addon.AddOnName || addon.name,
+      price: addon.price || addon.Price || 0,
+      status: addon.status || addon.Status || 'Available'
+    })) : []
+  }));
 
-    try {
-      const response = await fetch("http://localhost:7005/payment/confirm-payment", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          username: savedUserData.username,
-          order_type: orderType,
-          payment_method: paymentMethod,
-          subtotal,
-          delivery_fee: deliveryFee,
-          total,
-          notes: deliveryNotes || "",
-          cart_items: cartPayload,
-          delivery_info: deliveryInfoPayload,
-          reference_number,
-        }),
+  const deliveryInfoPayload = orderType === "Delivery" ? {
+    FirstName: savedUserData.username,
+    MiddleName: savedUserData.middleName,
+    LastName: savedUserData.lastName,
+    Address: savedUserData.blockStreetSubdivision,
+    City: savedUserData.city,
+    Province: savedUserData.province,
+    Landmark: savedUserData.landmark,
+    EmailAddress: savedUserData.email,
+    PhoneNumber: savedUserData.phone,
+    Notes: deliveryNotes || "",
+  } : null;
+
+  try {
+    console.log("=== CONFIRMING PAYMENT AND SAVING TO POS ===");
+    console.log("Reference Number:", reference_number);
+    console.log("Order Type:", orderType);
+    console.log("Payment Method:", paymentMethod);
+
+    // **CHANGED: Use the new endpoint that saves to POS immediately**
+    const response = await fetch("http://localhost:7005/payment/confirm-payment-and-save-pos", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        username: savedUserData.username,
+        order_type: orderType,
+        payment_method: paymentMethod,
+        subtotal,
+        delivery_fee: deliveryFee,
+        total,
+        notes: deliveryNotes || "",
+        cart_items: cartPayload,
+        delivery_info: deliveryInfoPayload,
+        reference_number,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (response.ok) {
+      console.log("✅ Payment confirmed successfully!");
+      console.log("Online Order ID:", result.online_order_id);
+      console.log("POS Sale ID:", result.pos_sale_id);
+      console.log("Status: Order saved to both OOS and POS as PENDING");
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Success',
+        html: `
+          <p>Order placed successfully!</p>
+          <p style="font-size: 0.9em; color: #666;">
+            Your order is now pending acceptance by the cashier.
+          </p>
+        `,
+      }).then(() => {
+        clearCart();
+        navigate("/profile/orderhistory");
       });
+      localStorage.removeItem("pendingOrderData");
+    } else {
+      console.error("❌ Backend Error:");
 
-      const result = await response.json();
-
-      if (response.ok) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: 'Order placed successfully!',
-        }).then(() => {
-          clearCart();
-          navigate("/profile/orderhistory");
-        });
-        localStorage.removeItem("pendingOrderData");
+      if (Array.isArray(result.detail)) {
+        result.detail.forEach((err, idx) =>
+          console.error(`Error ${idx + 1}:`, err.loc?.join(" → "), "-", err.msg)
+        );
       } else {
-        console.error("❌ Backend Validation Error:");
-
-        if (Array.isArray(result.detail)) {
-          result.detail.forEach((err, idx) =>
-            console.error(`Error ${idx + 1}:`, err.loc?.join(" → "), "-", err.msg)
-          );
-        } else {
-          console.error("❌ Server Error:", result.detail);
-        }
-
-        Swal.fire({
-          icon: 'error',
-          title: 'Order Failed',
-          text: 'Failed to confirm order. Please try again.',
-        });
+        console.error("❌ Server Error:", result.detail);
       }
-    } catch (error) {
-      console.error("Payment confirmation error:", error);
+
       Swal.fire({
         icon: 'error',
-        title: 'Error',
-        text: 'An error occurred while processing your payment.',
+        title: 'Order Failed',
+        text: result.detail || 'Failed to confirm order. Please try again.',
       });
     }
-  };
+  } catch (error) {
+    console.error("Payment confirmation error:", error);
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: 'An error occurred while processing your payment.',
+    });
+  }
+};
 
   const handlePlaceOrder = async () => {
     Swal.fire({

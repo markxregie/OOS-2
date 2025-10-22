@@ -6,6 +6,7 @@ import httpx
 import logging
 import base64
 import os
+import json
 from dotenv import load_dotenv
 
 # ---- LOAD ENV ----
@@ -322,3 +323,165 @@ async def update_pos_order_status(
     finally:
         await cursor.close()
         await conn.close()
+
+
+@router.post("/confirm-payment-and-save-pos")
+async def confirm_payment_and_save_pos(payload: ConfirmPaymentRequest, token: str = Depends(oauth2_scheme)):
+    """
+    Confirms payment and immediately saves the order to POS as PENDING.
+    This way, when cashier accepts the order, they only need to update status and deduct inventory.
+    """
+    await validate_token_and_roles(token, ["user", "admin", "staff"])
+
+    async with httpx.AsyncClient() as client:
+        try:
+            # Step 1: Add cart items to OOS (Online Order Service)
+            for item in payload.cart_items:
+                cart_payload = {
+                    "username": payload.username,
+                    "product_id": item.product_id,
+                    "product_name": item.product_name,
+                    "product_type": item.product_type,
+                    "product_category": item.product_category,
+                    "quantity": item.quantity,
+                    "price": item.price,
+                    "order_type": payload.order_type,
+                    "addons": item.addons,
+                    "ordernotes": item.ordernotes
+                }
+                cart_response = await client.post(
+                    "http://localhost:7004/cart/",
+                    json=cart_payload,
+                    headers={"Authorization": f"Bearer {token}"}
+                )
+                cart_response.raise_for_status()
+
+            # Step 2: Finalize order in OOS
+            finalize_response = await client.post(
+                f"http://localhost:7004/cart/finalize?username={payload.username}",
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            if finalize_response.status_code == 404:
+                logger.error(f"No pending order found for user {payload.username}")
+                raise HTTPException(status_code=404, detail=f"No pending order found for user {payload.username}")
+            finalize_response.raise_for_status()
+            
+            # Get the created order ID from finalize response
+            finalize_data = finalize_response.json()
+            online_order_id = finalize_data.get("order_id")
+
+            # Step 3: Save delivery info if provided
+            if payload.delivery_info:
+                delivery_info_payload = {
+                    "FirstName": payload.username,
+                    "MiddleName": payload.delivery_info.MiddleName,
+                    "LastName": payload.delivery_info.LastName,
+                    "Address": payload.delivery_info.Address,
+                    "City": payload.delivery_info.City,
+                    "Province": payload.delivery_info.Province,
+                    "Landmark": payload.delivery_info.Landmark,
+                    "EmailAddress": payload.delivery_info.EmailAddress,
+                    "PhoneNumber": payload.delivery_info.PhoneNumber,
+                    "Notes": payload.delivery_info.Notes or payload.notes or ""
+                }
+                delivery_response = await client.post(
+                    "http://localhost:7004/delivery/info",
+                    json=delivery_info_payload,
+                    headers={"Authorization": f"Bearer {token}"}
+                )
+                delivery_response.raise_for_status()
+
+            # Step 4: Update order payment details in OOS
+            update_order_payload = {
+                "username": payload.username,
+                "payment_method": payload.payment_method,
+                "subtotal": payload.subtotal,
+                "delivery_fee": payload.delivery_fee,
+                "total_amount": payload.total,
+                "delivery_notes": payload.notes or (payload.delivery_info.Notes if payload.delivery_info else ""),
+                "reference_number": payload.reference_number
+            }
+            update_order_response = await client.put(
+                "http://localhost:7004/cart/update-payment",
+                json=update_order_payload,
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            update_order_response.raise_for_status()
+
+            # Step 5: **FIXED** - Immediately save to POS as PENDING
+            logger.info(f"=== SAVING ORDER TO POS AS PENDING ===")
+            logger.info(f"Online Order ID: {online_order_id}")
+            logger.info(f"Reference Number: {payload.reference_number}")
+            
+            # Get customer name from delivery info or username
+            customer_name = payload.username
+            if payload.delivery_info:
+                customer_name = f"{payload.delivery_info.FirstName} {payload.delivery_info.LastName}".strip()
+            
+            # POS will generate its own SaleID, so we only send necessary data
+            pos_order_payload = {
+                "customer_name": customer_name,
+                "cashier_name": "System",  # Will be updated when cashier accepts
+                "order_type": payload.order_type,
+                "payment_method": payload.payment_method,
+                "subtotal": payload.subtotal,
+                "total_amount": payload.total,
+                "status": "pending",  # Save as PENDING initially
+                "reference_number": payload.reference_number,
+                "items": [
+                    {
+                        "name": item.product_name,
+                        "quantity": item.quantity,
+                        "price": item.price,
+                        "category": item.product_category,
+                        "addons": item.addons or []
+                    }
+                    for item in payload.cart_items
+                ]
+            }
+
+            logger.info(f"POS Payload: {json.dumps(pos_order_payload, indent=2)}")
+
+            # Save to POS - FIXED: Proper error handling
+            try:
+                pos_response = await client.post(
+                    "http://localhost:9000/auth/purchase_orders/online-order",
+                    json=pos_order_payload,
+                    headers={"Authorization": f"Bearer {token}"}
+                )
+                
+                # Check status code instead of .ok attribute
+                if pos_response.status_code not in [200, 201]:
+                    error_text = pos_response.text
+                    logger.error(f"Failed to save to POS: Status {pos_response.status_code} - {error_text}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Order created in OOS but failed to save to POS: {error_text}"
+                    )
+                
+                pos_data = pos_response.json()
+                logger.info(f"✅ Successfully saved to POS as PENDING - SaleID: {pos_data.get('pos_sale_id')}")
+
+                return {
+                    "message": "Payment confirmed, order placed successfully, and saved to POS as PENDING",
+                    "online_order_id": online_order_id,
+                    "pos_sale_id": pos_data.get("pos_sale_id"),
+                    "reference_number": payload.reference_number
+                }
+                
+            except httpx.HTTPStatusError as pos_error:
+                logger.error(f"POS service HTTP error: {pos_error}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Order created in OOS but POS service error: {str(pos_error)}"
+                )
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Service error: {e.response.status_code} - {e.response.text}")
+            raise HTTPException(status_code=e.response.status_code, detail=f"Service error: {e.response.text}")
+        except HTTPException:
+            # Re-raise HTTPExceptions as-is
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Unexpected server error: {str(e)}")
