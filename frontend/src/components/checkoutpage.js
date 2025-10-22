@@ -175,7 +175,7 @@ const confirmPayment = async (saved) => {
         icon: 'success',
         title: 'Success',
         html: `
-          <p>Order placed successfully!</p>
+          <p style="margin-bottom: 15px; margin-top: -0.5rem;">Order placed successfully!</p>
           <p style="font-size: 0.9em; color: #666;">
             Your order is now pending acceptance by the cashier.
           </p>
