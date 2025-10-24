@@ -43,11 +43,17 @@ async def validate_token_and_roles(token: str, allowed_roles: List[str]):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
 
 # ---- MODELS ----
+class CheckoutItem(BaseModel):
+    name: str
+    quantity: int
+    price: float
+    addons: Optional[List[str]] = []
+
 class CheckoutRequest(BaseModel):
-    amount: float
-    description: str
     reference_number: str
     redirect_url: str
+    items: List[CheckoutItem]
+    delivery_fee: float
 
 class CartItem(BaseModel):
     product_id: int
@@ -137,7 +143,38 @@ async def create_checkout_session(payload: CheckoutRequest, token: str = Depends
             customer_id = None
 
     try:
-        amount_in_centavos = int(payload.amount * 100)
+        # Calculate total amount from items and delivery fee
+        subtotal = sum(item.price * item.quantity for item in payload.items)
+        total_amount = subtotal + payload.delivery_fee
+        amount_in_centavos = int(total_amount * 100)
+
+        # Create line items for each cart item
+        line_items = []
+        for item in payload.items:
+            item_amount = int(item.price * 100)  # Convert to centavos
+            description = f"Quantity: {item.quantity}"
+            if item.addons:
+                description += f" | Addons: {', '.join(item.addons)}"
+
+            line_items.append({
+                "name": item.name,
+                "amount": item_amount,
+                "currency": "PHP",
+                "description": description,
+                "quantity": item.quantity
+            })
+
+        # Add delivery fee as a separate line item if applicable
+        if payload.delivery_fee > 0:
+            delivery_amount = int(payload.delivery_fee * 100)
+            line_items.append({
+                "name": "Delivery Fee",
+                "amount": delivery_amount,
+                "currency": "PHP",
+                "description": "Delivery charges",
+                "quantity": 1
+            })
+
         encoded_key = base64.b64encode(f"{PAYMONGO_SECRET_KEY}:".encode()).decode()
 
         headers = {
@@ -155,14 +192,8 @@ async def create_checkout_session(payload: CheckoutRequest, token: str = Depends
             "send_email_receipt": False,
             "show_description": True,
             "show_line_items": True,
-            "line_items": [{
-                "name": "OOS Order",
-                "amount": amount_in_centavos,
-                "currency": "PHP",
-                "description": payload.description,
-                "quantity": 1
-            }],
-            "description": payload.description,
+            "line_items": line_items,
+            "description": f"OOS Order - {payload.reference_number}",
             "reference_number": payload.reference_number,
             "payment_method_types": ["gcash", "card"],
             "success_url": f"{payload.redirect_url}?status=success",
