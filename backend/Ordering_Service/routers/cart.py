@@ -103,6 +103,7 @@ class UpdatePaymentDetails(BaseModel):
 
 class UpdateStatusRequest(BaseModel):
     new_status: str
+    cashier_name: Optional[str] = None
 
 @router.get("/admin/orders/manage")
 async def get_all_orders(token: str = Depends(oauth2_scheme)):
@@ -392,7 +393,6 @@ async def update_payment_details(payload: UpdatePaymentDetails, token: str = Dep
         ))
 
         await conn.commit()
-
         # ✅ Notify user when order is placed (payment details updated)
         try:
             async with httpx.AsyncClient() as client:
@@ -408,7 +408,6 @@ async def update_payment_details(payload: UpdatePaymentDetails, token: str = Dep
                 )
         except Exception as notify_err:
             logger.error(f"Failed to send notification: {notify_err}")
-
     except Exception as e:
         logger.error(f"Error updating order payment details: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update order payment details")
@@ -531,7 +530,7 @@ async def add_to_cart(item: CartItem, token: str = Depends(oauth2_scheme)):
             row = await cursor.fetchone()
             order_id = row[0] if row else None
 
-
+        
 
         # Check if item already in cart
         await cursor.execute("""
@@ -754,13 +753,21 @@ async def update_order_status(
                 detail="You can only update your own orders"
             )
 
-        # ✅ Update status AND cashier name when accepting order
+        # ✅ Update status with CashierName for different scenarios
         if request.new_status == "PREPARING":
+            # When accepting order, use the logged-in username
             await cursor.execute(
                 "UPDATE Orders SET Status = ?, CashierName = ? WHERE OrderID = ?",
                 (request.new_status, username, order_id)
             )
+        elif request.new_status == "CANCELLED" and request.cashier_name:
+            # When cancelling, use the provided cashier_name from frontend
+            await cursor.execute(
+                "UPDATE Orders SET Status = ?, CashierName = ? WHERE OrderID = ?",
+                (request.new_status, request.cashier_name, order_id)
+            )
         else:
+            # For other status updates
             await cursor.execute(
                 "UPDATE Orders SET Status = ? WHERE OrderID = ?",
                 (request.new_status, order_id)
@@ -774,7 +781,8 @@ async def update_order_status(
         await cursor.execute("SELECT ReferenceNumber FROM Orders WHERE OrderID = ?", (order_id,))
         ref = await cursor.fetchone()
 
-        reference_number = ref.ReferenceNumber if ref else f"#{order_id}"
+        reference_number = ref[0] if ref else f"#{order_id}"
+        
         # ✅ Notify customer about the status update
         try:
             async with httpx.AsyncClient() as client:

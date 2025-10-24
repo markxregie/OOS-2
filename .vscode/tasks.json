@@ -51,6 +51,16 @@
       },
       "problemMatcher": []
     },
+    {
+      "label": "Start Notification Service",
+      "type": "shell",
+      "command": "cd backend/notification_service; python main.py",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
     
     
     
@@ -73,6 +83,7 @@
         "Start Payment Service",
         "Start Concerns Service",
         "Start Track Order Service",
+        "Start Notification Service",
         "Start Frontend"
       ],
       "dependsOrder": "parallel"
