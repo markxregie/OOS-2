@@ -563,7 +563,7 @@ function DeliveryManagement() {
                 })()
               )}
               <div style={{ marginTop: "10px", width: "100%" }}>
-                {!order.assignedRider ? (
+                {!order.assignedRider && canChangeRider ? (
                   <>
                     <label htmlFor={`assignRider-${order.id}`} style={{ fontWeight: "600", marginBottom: "5px", display: "block" }}>Assign Rider</label>
                     <Form.Select
@@ -579,7 +579,7 @@ function DeliveryManagement() {
                       ))}
                     </Form.Select>
                   </>
-                ) : canChangeRider ? (
+                ) : order.assignedRider && canChangeRider ? (
                   <>
                     <button
                       onClick={() => handleChangeRiderClick(order.id)}
