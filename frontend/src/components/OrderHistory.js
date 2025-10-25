@@ -1,34 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Form, Button } from 'react-bootstrap';
 import { EyeFill, XCircle } from 'react-bootstrap-icons';
+import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import './OrderHistory.css';
 
+// Define the breakpoint for switching to the mobile/card view
+const MOBILE_BREAKPOINT = 992; 
+
 const OrderHistory = () => {
-  const [activeTab, setActiveTab] = useState('active'); 
+  const [activeTab, setActiveTab] = useState('active');
   const [searchTerm, setSearchTerm] = useState('');
   const [ordersData, setOrdersData] = useState({
-    active: [], 
+    active: [],
     completed: [],
     cancelled: [],
   });
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  // Use the new breakpoint for mobile detection
+  const [isMobileOrTablet, setIsMobileOrTablet] = useState(window.innerWidth <= MOBILE_BREAKPOINT); 
+  const navigate = useNavigate();
 
-
-  const token = localStorage.getItem('authToken');
+  // Function to update the isMobileOrTablet state on resize
+  const handleResize = () => {
+    setIsMobileOrTablet(window.innerWidth <= MOBILE_BREAKPOINT);
+  };
 
   useEffect(() => {
-    // Handler to update isMobile state on window resize
-    const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
-    };
-
-    // Set up event listener
     window.addEventListener('resize', handleResize);
-
-    // Cleanup listener on component unmount
     return () => window.removeEventListener('resize', handleResize);
-  }, []); // Empty dependency array means this runs once on mount and cleanup on unmount
+  }, []);
+
+  const token = localStorage.getItem('authToken');
 
   useEffect(() => {
     const getUsernameFromToken = (jwtToken) => {
@@ -44,7 +46,7 @@ const OrderHistory = () => {
         return null;
       }
     };
-    
+
     const username = getUsernameFromToken(token);
 
     const fetchOrders = async () => {
@@ -56,7 +58,7 @@ const OrderHistory = () => {
         });
 
         if (!response.ok) {
-            throw new Error(`Failed to fetch orders: ${response.statusText}`);
+          throw new Error(`Failed to fetch orders: ${response.statusText}`);
         }
 
         const data = await response.json();
@@ -67,23 +69,26 @@ const OrderHistory = () => {
 
         data.forEach(order => {
           const total = order.products.reduce((sum, p) => {
-            const addonSum = p.addons ? p.addons.reduce((s, a) => s + a.price, 0) : 0;
+            const addonSum = p.addons ? p.addons.reduce((s, a) => s + (a.price || a.Price || 0), 0) : 0;
             return sum + (p.price + addonSum) * p.quantity;
           }, 0) + (order.orderType === 'Delivery' ? 50 : 0);
+          const originalStatus = order.status.toLowerCase();
+          const isCompleted = originalStatus === 'delivered' || originalStatus === 'completed';
+          let displayStatus = originalStatus;
+          if (originalStatus === 'pickedup') displayStatus = 'picked up';
           const orderData = {
             id: order.id,
             orderType: order.orderType,
             products: order.products,
-            status: order.status.toLowerCase(),
+            status: isCompleted ? 'completed' : displayStatus,
             date: order.date,
             total,
           };
-
-          const status = order.status.toLowerCase();
-          if (status === 'completed') {
+          
+          if (isCompleted) {
             completedOrders.push(orderData);
-          } else if (status === 'cancelled') {
-            cancelledOrders.push(orderData);
+          } else if (originalStatus === 'cancelled') {
+            cancelledOrders.push({ ...orderData, status: 'cancelled' });
           } else {
             // Group all other statuses (pending, preparing, delivering, etc.) as active
             activeOrders.push(orderData);
@@ -103,7 +108,7 @@ const OrderHistory = () => {
 
     fetchOrders();
     const interval = setInterval(fetchOrders, 5000); // Refresh orders every 5 seconds
-    return () => clearInterval(interval); 
+    return () => clearInterval(interval);
 
   }, [token]);
 
@@ -116,59 +121,60 @@ const OrderHistory = () => {
   };
 
   const getStatusBadge = (status) => {
-    const capitalizedStatus = status.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    const capitalizedStatus = status.split(' ').map(word => word.toUpperCase()).join(' ');
     let className = "status-badge";
     if (status === 'pending') className += " status-pending";
     else if (status === 'preparing') className += " status-preparing";
     else if (status === 'waiting for pick up') className += " status-waiting";
+    else if (status === 'picked up') className += " status-pickedup";
     else if (status === 'delivering') className += " status-delivering";
     else if (status === 'completed') className += " status-completed";
     else if (status === 'cancelled') className += " status-cancelled";
     return <span className={className}>{capitalizedStatus}</span>;
   };
 
-  const showInvoice = (order) => {
+  const handleShowInvoice = (order) => {
     const invoiceHtml = `
-      <div>
-        <p><strong>Date:</strong> ${new Date(order.date).toLocaleString()}</p>
-        <p><strong>Order Type:</strong> ${order.orderType}</p>
-        <table style="width: 100%; border-collapse: collapse;">
-          <thead>
-            <tr style="background-color: #f2f2f2;">
-              <th style="border: 1px solid #ddd; padding: 8px;">Product</th>
-              <th style="border: 1px solid #ddd; padding: 8px;">Quantity</th>
-              <th style="border: 1px solid #ddd; padding: 8px;">Unit Price (₱)</th>
-              <th style="border: 1px solid #ddd; padding: 8px;">Subtotal (₱)</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${order.products.map(p => {
-              const productSubtotal = (p.price + (p.addons ? p.addons.reduce((s, ao) => s + ao.price, 0) : 0)) * p.quantity;
-              return `
-                <tr>
-                  <td style="border: 1px solid #ddd; padding: 8px;">
-                    ${p.name}
-                    ${p.addons && p.addons.length > 0 ? `
-                      <ul style="margin:0; padding-left:15px; font-size:0.85em; color:#666;">
-                        ${p.addons.map(ao => `<li>+ ${ao.addon_name || ao.name} (₱${ao.price.toFixed(2)})</li>`).join('')}
-                      </ul>
-                    ` : ""}
-                  </td>
-                  <td style="border: 1px solid #ddd; padding: 8px;">${p.quantity}</td>
-                  <td style="border: 1px solid #ddd; padding: 8px;">${p.price.toFixed(2)}</td>
-                  <td style="border: 1px solid #ddd; padding: 8px;">${productSubtotal.toFixed(2)}</td>
-                </tr>
-              `;
-            }).join('')}
-            ${order.orderType === 'Delivery' ? `
-              <tr>
-                <td colspan="3" style="border: 1px solid #ddd; padding: 8px; text-align: right;"><strong>Delivery Fee</strong></td>
-                <td style="border: 1px solid #ddd; padding: 8px;">₱50.00</td>
-              </tr>
-            ` : ''}
-            </tbody>
-        </table>
-        <h5 style="text-align: right; margin-top: 10px;">Total: ₱${order.total.toFixed(2)}</h5>
+      <div style="text-align: left; font-family: Arial, sans-serif;">
+        <div style="margin-bottom: 20px;">
+          <p style="margin: 5px 0;"><strong>Date:</strong> ${new Date(order.date).toLocaleString()}</p>
+          <p style="margin: 5px 0;"><strong>Order Type:</strong> ${order.orderType}</p>
+        </div>
+        <h6 style="border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 15px;">Order Summary</h6>
+        ${order.products.map(p => {
+          const addonsTotal = p.addons ? p.addons.reduce((s, a) => s + (a.price || a.Price || 0), 0) : 0;
+          const itemTotal = (p.price + addonsTotal) * p.quantity;
+          return `
+            <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #f0f0f0;">
+              <p style="font-weight: bold; font-size: 1.1em; margin: 0 0 5px 0;">${p.name}</p>
+              <div style="display: flex; justify-content: space-between;">
+                <span>Base Price:</span>
+                <span>₱${p.price.toFixed(2)}</span>
+              </div>
+              ${p.addons && p.addons.length > 0 ? `
+                <div style="padding-left: 15px; font-size: 0.9em; color: #555;">
+                  ${p.addons.map(ao => `
+                    <div style="display: flex; justify-content: space-between;">
+                      <span>+ ${ao.addon_name || ao.AddOnName || ao.name}</span>
+                      <span>₱${(ao.price || ao.Price || 0).toFixed(2)}</span>
+                    </div>
+                  `).join('')}
+                </div>
+              ` : ""}
+              <div style="display: flex; justify-content: space-between; margin-top: 5px;">
+                <span>Quantity:</span>
+                <span>x${p.quantity}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-weight: bold; margin-top: 8px;">
+                <span>Item Total:</span>
+                <span>₱${itemTotal.toFixed(2)}</span>
+              </div>
+            </div>
+          `;
+        }).join('')}
+        <div style="text-align: right; margin-top: 20px; padding-top: 10px; border-top: 2px solid #333;">
+          <h5 style="margin: 0; font-size: 1.2em;">Total: ₱${order.total.toFixed(2)}</h5>
+        </div>
       </div>
     `;
     Swal.fire({
@@ -176,6 +182,8 @@ const OrderHistory = () => {
       html: invoiceHtml,
       showConfirmButton: true,
       confirmButtonText: 'Close',
+      width: '30%',
+      customClass: { popup: 'invoice-modal' }
     });
   };
 
@@ -228,111 +236,139 @@ const OrderHistory = () => {
     }
   };
 
+  const renderProductDetails = (products) => (
+    <ul style={{ margin: 0, paddingLeft: '15px', fontSize: '0.9em', listStyle: 'none' }}>
+      {products.map((p, idx) => (
+        <li key={idx} style={{ marginBottom: '5px', fontWeight: 'bold' }}>
+          {p.name} (x{p.quantity})
+          {p.addons && p.addons.length > 0 && (
+            <ul style={{ margin: 0, paddingLeft: "15px", fontSize: "0.85em", color: "#666", fontWeight: 'normal' }}>
+              {p.addons.map((addon, i) => (
+                <li key={i}>+ {addon.addon_name || addon.AddOnName || addon.name} (₱{(addon.price || addon.Price || 0).toFixed(2)})</li>
+              ))}
+            </ul>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
 
-
-  const renderDesktopTable = (orders) => {
-    if (orders.length === 0) {
-      return <div className="orderhistory-no-orders">No orders found</div>;
-    }
-
-    return (
-      <Table className="orders-table desktop-table">
-        <thead>
-          <tr>
-            <th>Order ID</th>
-            <th>Order Type</th>
-            <th>Products</th>
-            <th>Total</th>
-            <th>Date</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredOrders(orders).map((order) => (
-            <tr key={order.id}>
-              <td>#{order.id}</td>
-              <td>{order.orderType}</td>
-              <td>
-                {order.products.map((p, idx) => (
-                  <div key={idx}>
-                    {p.name} (x{p.quantity})
-                    {p.addons && p.addons.length > 0 && (
-                      <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.85em", color: "#666" }}>
-                        {p.addons.map((addon, i) => (
-                          <li key={i}>+ {addon.addon_name || addon.name} (₱{addon.price.toFixed(2)})</li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                ))}
-              </td>
-              <td>₱{order.total.toFixed(2)}</td>
-              <td>{new Date(order.date).toLocaleDateString()}</td>
-              <td>{getStatusBadge(order.status)}</td>
-              <td>
-                <button className="action-btn view" title="View Invoice" onClick={() => showInvoice(order)}>
-                  <EyeFill />
-                </button>
-                {order.status === 'pending' && (
-                  <button
-                    className="action-btn cancel"
-                    title="Cancel Order"
-                    onClick={() => handleCancelClick(order)}
-                  >
-                    <XCircle />
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
-    );
-  };
-
-  const renderMobileCards = (orders) => {
-    if (orders.length === 0) {
-      return <div className="orderhistory-no-orders">No orders found</div>;
-    }
-
-    return (
-      <div className="orders-mobile-list">
-        {filteredOrders(orders).map((order) => (
-          <div key={order.id} className="order-card">
-            <div className="card-header">
-              <strong>Order #{order.id}</strong>
-              {getStatusBadge(order.status)}
-            </div>
-            <div className="card-body">
-              <p><strong>Type:</strong> {order.orderType}</p>
-              <p><strong>Date:</strong> {new Date(order.date).toLocaleDateString()}</p>
-              <p><strong>Items:</strong> {order.products.map(p => `${p.name} (x${p.quantity})`).join(', ')}</p>
-              <p className="card-total"><strong>Total:</strong> ₱{order.total.toFixed(2)}</p>
-            </div>
-            <div className="card-actions">
-              <button className="action-btn view" onClick={() => showInvoice(order)}>
-                <EyeFill /> View Invoice
-              </button>
-              {order.status === 'pending' && (
-                <button
-                  className="action-btn cancel"
-                  onClick={() => handleCancelClick(order)}
-                >
-                  <XCircle /> Cancel
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
+  const renderMobileOrderCard = (order) => (
+    <div className="order-card" key={order.id} data-id={order.id}>
+      <div className="card-header">
+        <span style={{ fontWeight: 'bold' }}>Order #{order.id}</span>
+        {getStatusBadge(order.status)}
       </div>
-    );
+      <div className="card-body" style={{ textAlign: 'left' }}>
+        <p><strong>Type:</strong> {order.orderType}</p>
+        <p><strong>Date:</strong> {new Date(order.date).toLocaleDateString()}</p>
+        <p>
+          <strong>Products:</strong>
+          {renderProductDetails(order.products)}
+        </p>
+        <p className="card-total"><strong>Total:</strong> ₱{order.total.toFixed(2)}</p>
+      </div>
+      <div className="card-actions">
+        <button className="action-btn view" title="View Invoice" onClick={() => handleShowInvoice(order)}>
+          <EyeFill /> View
+        </button>
+        {order.status === 'pending' && (
+          <button
+            className="action-btn cancel"
+            title="Cancel Order"
+            onClick={() => handleCancelClick(order)}
+          >
+            <XCircle /> Cancel
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  const handleRowClick = (order) => {
+    navigate(`/profile/orderhistory/${order.id}`);
   };
 
-  const renderContent = (orders) => {
-    return isMobile ? renderMobileCards(orders) : renderDesktopTable(orders);
-  };
+  const renderTable = (orders) => {
+    const ordersToRender = filteredOrders(orders);
 
+    if (ordersToRender.length === 0) {
+      return <div className="orderhistory-no-orders">No orders found</div>;
+    }
+
+    // Render mobile/tablet card list if isMobileOrTablet is true
+    if (isMobileOrTablet) {
+      return (
+        <div className="orders-mobile-list" onClick={(e) => e.target.closest('.order-card') && handleRowClick(ordersToRender.find(o => o.id.toString() === e.target.closest('.order-card').dataset.id))}>
+          {ordersToRender.map(renderMobileOrderCard)}
+        </div>
+      );
+    } else {
+      // Desktop View: Render a full table
+      return (
+        <div className="table-responsive">
+          <Table className="orders-table">
+            <thead>
+              <tr>
+             
+                <th>Order Type</th>
+                <th>Products</th>
+                <th>Total</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ordersToRender.map((order) => (
+                <tr key={order.id} onClick={() => handleRowClick(order)} className="desktop-order-row">
+                  
+                  <td>{order.orderType}</td>
+                  <td>
+                    {order.products.map((p, idx) => (
+                      <div key={idx}>
+                        {p.name} (x{p.quantity})
+                        {p.addons && p.addons.length > 0 && (
+                          <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.85em", color: "#666" }}>
+                            {p.addons.map((addon, i) => (
+                              <li key={i}>+ {addon.addon_name || addon.AddOnName || addon.name} (₱{(addon.price || addon.Price || 0).toFixed(2)})</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ))}
+                  </td>
+                  <td>₱{order.total.toFixed(2)}</td>
+                  <td>{new Date(order.date).toLocaleDateString()}</td>
+                  <td>{getStatusBadge(order.status)}</td>
+                  <td>
+                    <button className="action-btn view" title="View Invoice" onClick={(e) => {
+                      e.stopPropagation();
+                      handleShowInvoice(order);
+                    }}>
+                      <EyeFill />
+                    </button>
+                    {order.status === 'pending' && (
+                      <button
+                        className="action-btn cancel"
+                        title="Cancel Order"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCancelClick(order);
+                        }}
+                      >
+                        <XCircle />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </div>
+      );
+    }
+  };
 
   return (
     <div className="ordertable-container">
@@ -354,7 +390,7 @@ const OrderHistory = () => {
             onClick={() => setActiveTab('active')}
             style={activeTab === 'active' ? { backgroundColor: '#4B929D', color: 'white' } : { color: 'black' }}
           >
-            Active Orders ({ordersData.active.length})
+            Active Orders
           </button>
         </li>
         <li className="nav-item">
@@ -363,7 +399,7 @@ const OrderHistory = () => {
             onClick={() => setActiveTab('completed')}
             style={activeTab === 'completed' ? { backgroundColor: '#4B929D', color: 'white' } : { color: 'black' }}
           >
-            Completed ({ordersData.completed.length})
+            Completed
           </button>
         </li>
         <li className="nav-item">
@@ -372,15 +408,15 @@ const OrderHistory = () => {
             onClick={() => setActiveTab('cancelled')}
             style={activeTab === 'cancelled' ? { backgroundColor: '#4B929D', color: 'white' } : { color: 'black' }}
           >
-            Cancelled ({ordersData.cancelled.length})
+            Cancelled
           </button>
         </li>
       </ul>
 
       <div className="orderhistory-tab-content tab-content p-3 border border-top-0 rounded-bottom">
-        {activeTab === 'active' && renderContent(ordersData.active)}
-        {activeTab === 'completed' && renderContent(ordersData.completed)}
-        {activeTab === 'cancelled' && renderContent(ordersData.cancelled)}
+        {activeTab === 'active' && renderTable(ordersData.active)}
+        {activeTab === 'completed' && renderTable(ordersData.completed)}
+        {activeTab === 'cancelled' && renderTable(ordersData.cancelled)}
       </div>
     </div>
   );

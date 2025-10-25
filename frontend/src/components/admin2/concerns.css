@@ -101,3 +101,33 @@
         overflow-x: auto;
     }
 }
+
+/* Pagination Styles */
+.pagination-btn {
+    background-color: #fff;
+    border: 1px solid #dee2e6;
+    color: #6c757d;
+    padding: 0.375rem 0.75rem;
+    margin: 0 0.125rem;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease-in-out, border-color 0.15s ease-in-out;
+}
+
+.pagination-btn:hover:not(.active) {
+    background-color: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.pagination-btn.active {
+    background-color: #4a9ba5;
+    border-color: #4a9ba5;
+    color: white;
+}
+
+.pagination-btn:disabled {
+    background-color: #e9ecef;
+    border-color: #dee2e6;
+    color: #6c757d;
+    cursor: not-allowed;
+}

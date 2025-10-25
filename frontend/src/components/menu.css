@@ -41,6 +41,7 @@
     pointer-events: none;
     transform: translateY(8%); /* Adjust this to fine-tune position */
   }
+
   
   /* Responsive adjustments */
   @media (max-width: 768px) {
@@ -133,6 +134,7 @@
     background-color: #a3d3d8;
     border-radius: 15px;
     height: 180px;
+    width: 230px;
   }
   
 
@@ -422,6 +424,10 @@
     font-size: 1rem;
   }
 
+  .merchandise-title {
+    font-size: 0.65rem !important;
+  }
+
   .menu-sidebar .menu-category li {
     font-size: 0.7rem;
   }
@@ -482,5 +488,31 @@
     color: #4b929d;
     margin-top: -0.25rem;
     text-align: center;
+  }
+}
+
+/* Wavy text animation for loading screen */
+.wavy-text {
+  position: relative;
+  font-weight: 600;
+  color: #4b929d;
+  font-size: 1.5em;
+  margin-top: -4rem;
+  text-align: center;
+}
+
+.wavy-text span {
+  position: relative;
+  display: inline-block;
+  animation: wave 1.5s ease-in-out infinite;
+  animation-delay: calc(0.1s * var(--i));
+}
+
+@keyframes wave {
+  0%, 40%, 100% {
+    transform: translateY(0);
+  }
+  20% {
+    transform: translateY(-15px);
   }
 }

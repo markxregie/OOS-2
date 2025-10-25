@@ -1,0 +1,343 @@
+.track-order-page-wrapper {
+    /* Full width wrapper for background/padding */
+    min-height: 100vh;
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+    
+   
+}
+.track-order-card-body{
+    margin-top: -1rem;
+}
+.track-order-content-container {
+    /* This new class controls the width and centering of the content */
+    width: 95%; /* Take up most of the screen */
+    
+    margin: 0 auto; /* Center the container horizontally */
+}
+
+.track-order-card {
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+    border: none;
+    margin-top: 4rem;
+    max-width: 1200px; 
+    border-radius: 12px;
+    overflow: hidden; 
+    width: 100%; /* Ensure the card takes the full width of its parent (.track-order-content-container) */
+}
+
+.card-header-custom {
+    background-color: #fff !important;
+    font-weight: 600 !important;
+    color: #4a9ba5 !important;
+    font-size: 2rem !important;
+    padding: 1.5rem 1rem;
+    border-bottom: none;
+}
+
+.order-id-label {
+    font-size: 1.1rem;
+    font-weight: 300;
+    opacity: 0.9;
+    margin-top: 5px;
+    display: block;
+}
+
+/*
+ * UTILITY STYLES
+ */
+
+.section-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #343a40;
+    margin-bottom: 1rem;
+    border-left: 4px solid #4a9ba5;
+    padding-left: 10px;
+}
+
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #4a9ba5;
+    text-decoration: none;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    transition: color 0.2s ease;
+}
+
+.back-link:hover {
+    color: #3b7a82;
+    text-decoration: underline;
+}
+
+/*
+ * MAP STYLES
+ */
+
+.map-container {
+    height: 350px;
+    width: 100%;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #e9ecef;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.leaflet-map-content {
+    height: 100%;
+    width: 100%;
+}
+
+/*
+ * STEPPER STYLES (TIMELINE)
+ */
+
+.stepper-wrapper {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+    margin-bottom: 40px;
+    padding: 0 10px;
+}
+
+.stepper-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    text-align: center;
+    /* Ensure minimal space to prevent overflow on mobile */
+    min-width: 0; 
+}
+
+/* Line before the step */
+.stepper-item:not(:first-child)::before {
+    position: absolute;
+    content: '';
+    height: 3px;
+    background-color: #dee2e6; 
+    width: 100%;
+    top: 18px; 
+    left: -50%;
+    z-index: 1;
+}
+
+/* Progress line */
+.stepper-item:not(:first-child)::after {
+    position: absolute;
+    content: '';
+    height: 3px;
+    background-color: #4a9ba5; 
+    width: 0%; 
+    top: 18px;
+    left: -50%;
+    z-index: 2;
+    transition: width 0.5s ease-in-out;
+}
+
+.stepper-item.completed:not(:first-child)::after {
+    width: 100%; 
+}
+
+.stepper-item .step-counter {
+    position: relative;
+    z-index: 5;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: #adb5bd; 
+    color: white;
+    font-size: 1.2rem;
+    margin-bottom: 8px;
+    transition: background-color 0.5s ease-in-out, box-shadow 0.5s ease-in-out;
+}
+
+.stepper-item.active .step-counter {
+    background-color: #4a9ba5;
+    box-shadow: 0 0 0 5px rgba(74, 155, 165, 0.3);
+    animation: none; 
+}
+
+.stepper-item.completed .step-counter {
+    background-color: #28a745; 
+}
+
+.stepper-item.cancelled .step-counter {
+    background-color: #dc3545; 
+}
+
+.step-name {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #6c757d; 
+    text-align: center;
+    line-height: 1.2;
+    /* Allow text to wrap on multiple lines on mobile */
+    word-break: break-word;
+    white-space: normal; 
+}
+
+.stepper-item.active .step-name {
+    font-weight: 700;
+    color: #4a9ba5;
+}
+
+.stepper-item.completed .step-name {
+    color: #343a40;
+}
+
+/*
+ * CANCELLED NOTICE
+ */
+
+.cancelled-notice {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 1.5rem;
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+    border-radius: 8px;
+    flex-direction: column; /* Stack elements vertically on mobile */
+}
+
+/*
+ * ORDER SUMMARY & PRODUCT LIST
+ */
+
+.order-detail-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.4rem 0;
+    border-bottom: 1px dashed #e9ecef;
+    font-size: 1rem;
+}
+
+.order-detail-item:last-of-type {
+    border-bottom: none;
+}
+
+.order-detail-item strong {
+    font-weight: 600;
+    color: #495057;
+}
+
+.order-detail-item .detail-value {
+    color: #6c757d;
+}
+
+.total-amount {
+    font-size: 1.15rem;
+    font-weight: 700 !important;
+    padding-top: 0.8rem;
+    border-top: 1px solid #dee2e6;
+    margin-top: 0.5rem;
+}
+
+.total-amount .detail-value {
+    color: #4a9ba5;
+    font-weight: 700;
+}
+
+.product-list {
+    list-style: none;
+    padding-left: 0;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    padding: 0.5rem 1rem;
+}
+
+.product-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.3rem 0;
+    font-size: 0.95rem;
+    border-bottom: 1px dotted #f1f1f1;
+}
+
+.product-item:last-child {
+    border-bottom: none;
+}
+
+.product-name {
+    color: #495057;
+}
+
+.product-quantity {
+    font-weight: 600;
+    color: #4a9ba5;
+}
+
+
+/*
+ * RESPONSIVENESS
+ */
+
+@media (max-width: 768px) {
+    .track-order-card {
+        margin-top: 2.5rem; 
+        border-radius: 0; 
+    }
+    .track-order-card-body{
+    margin-top: -2rem !important;
+}
+
+    .track-order-page-wrapper {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+    }
+    
+    .track-order-content-container {
+        width: 100%;
+        padding: 0 15px; /* Add padding on small screens to prevent content from touching the edge */
+    }
+
+    .stepper-wrapper {
+        padding: 0;
+        margin-bottom: 30px;
+    }
+
+    .step-name {
+        font-size: 0.7rem; /* Smaller font for status text */
+        /* Make sure the text is visible even if it's long */
+        padding: 0 2px;
+    }
+
+    .stepper-item .step-counter {
+        width: 30px; /* Smaller step circles */
+        height: 30px;
+        font-size: 0.9rem;
+    }
+
+    /* Adjust the position of the line for smaller counter size */
+    .stepper-item:not(:first-child)::before,
+    .stepper-item:not(:first-child)::after {
+        top: 15px; 
+    }
+    
+    .map-container {
+        height: 250px; /* Shorter map on mobile */
+    }
+    
+    .card-header-custom {
+        font-size: 1.5rem !important; /* Smaller header on mobile */
+    }
+    
+    .cancelled-notice {
+        font-size: 0.9rem;
+    }
+    
+    .cancelled-notice .fs-5 {
+        font-size: 1.25rem !important;
+    }
+}

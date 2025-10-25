@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import get_db_connection  # connection checker (optional)
+from routers.concerns import router as concerns_router
 
 app = FastAPI(title="Concerns Service")
 
@@ -20,6 +21,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(concerns_router)
 
 # Health check (optional)
 @app.get("/")

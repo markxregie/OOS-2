@@ -24,31 +24,18 @@ function DeliveryManagement() {
   const [showChangeRiderDropdown, setShowChangeRiderDropdown] = useState({});
 
   const [riders, setRiders] = useState([]);
-  
+
   // 💡 NEW: State for pagination
   const [currentPage, setCurrentPage] = useState(1);
   const ordersPerPage = 12; // 💡 NEW: Constant for orders per page
 
-  // Helper functions for localStorage persistence
-  const saveRiderAssignments = (updatedOrders) => {
-    const assignments = {};
-    updatedOrders.forEach(order => {
-      if (order.assignedRider) {
-        assignments[order.id] = order.assignedRider;
-      }
-    });
-    localStorage.setItem("riderAssignments", JSON.stringify(assignments));
-  };
+  // 💡 NEW: Local state for rider assignments to persist across fetches and navigation
+  const [localAssignments, setLocalAssignments] = useState(() => {
+    const stored = localStorage.getItem("riderAssignments");
+    return stored ? JSON.parse(stored) : {};
+  });
 
-  const loadRiderAssignments = () => {
-    try {
-      const saved = localStorage.getItem("riderAssignments");
-      return saved ? JSON.parse(saved) : {};
-    } catch (error) {
-      console.error("Failed to load rider assignments:", error);
-      return {};
-    }
-  };
+
 
   useEffect(() => {
     if (!authToken) return;
@@ -66,13 +53,11 @@ function DeliveryManagement() {
         }
 
         const data = await response.json();
-        console.log("Fetched orders:", data); // ✅ debug
+        console.log("Fetched orders:", data); 
 
-        // Merge saved rider assignments with fetched orders
-        const savedAssignments = loadRiderAssignments();
         const ordersWithAssignments = data.map(order => ({
           ...order,
-          assignedRider: savedAssignments[order.id] || order.assignedRider || null
+          assignedRider: localAssignments[order.id] ?? order.assignedRider ?? null
         }));
 
         setOrders(ordersWithAssignments);
@@ -188,14 +173,11 @@ function DeliveryManagement() {
   });
 
   const handleRiderChange = (orderId, newRider) => {
-    setOrders(prevOrders => {
-      const updatedOrders = prevOrders.map(order =>
+    setOrders(prevOrders =>
+      prevOrders.map(order =>
         order.id === orderId ? { ...order, assignedRider: newRider } : order
-      );
-      // Save to localStorage whenever a rider is assigned
-      saveRiderAssignments(updatedOrders);
-      return updatedOrders;
-    });
+      )
+    );
   };
 
   const handleRiderSelection = (orderId, riderId) => {
@@ -254,6 +236,13 @@ function DeliveryManagement() {
       // ✅ Update frontend state with selected rider
       handleRiderChange(orderId, riderId);
 
+      // 💡 NEW: Update local assignments and persist to localStorage
+      setLocalAssignments(prev => {
+        const updated = { ...prev, [orderId]: riderId };
+        localStorage.setItem("riderAssignments", JSON.stringify(updated));
+        return updated;
+      });
+
       // Hide dropdown after assignment
       setShowChangeRiderDropdown(prev => ({
         ...prev,
@@ -293,6 +282,7 @@ function DeliveryManagement() {
       )
     );
   };
+  
 
   const getStatusStyle = (status) => {
     const normalizedStatus = status ? status.toLowerCase() : "";
@@ -303,13 +293,15 @@ function DeliveryManagement() {
         return { color: "#198754", backgroundColor: "#d1e7dd" };
       case "preparing":
         return { color: "#2980b9", backgroundColor: "#cfe2ff" };
+      case "waitingforpickup":
+        return { color: "#ffffff", backgroundColor: "#9c27b0" };
       case "readytopickup":
         return { color: "#8e44ad", backgroundColor: "#e5dbff" };
       case "pickedup":
         return { color: "#0d6efd", backgroundColor: "#cfe2ff" };
       case "intransit":
-      case "delivering": 
-        return { color: "#3f51b5", backgroundColor: "#e5dbff" }; 
+      case "delivering":
+        return { color: "#3f51b5", backgroundColor: "#e5dbff" };
       case "delivered":
         return { color: "#198754", backgroundColor: "#d1e7dd" };
       case "completed":
@@ -402,9 +394,7 @@ function DeliveryManagement() {
           {(() => {
             const statusCounts = {
               pending: 0,
-              confirmed: 0,
               preparing: 0,
-              pickedUp: 0,
               inTransit: 0,
               delivered: 0,
               cancelled: 0,
@@ -428,19 +418,9 @@ function DeliveryManagement() {
                   <span style={{ fontSize: "1.2rem", fontWeight: "700", textAlign: "center" }}>{pendingOrdersCount}</span>
                 </Card>
                 <Card style={{ flex: "1", minWidth: "150px", padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
-                  <FaCheckCircle color="#198754" size={32} />
-                  <span style={{ fontSize: "1rem", fontWeight: "400" }}>Confirmed</span>
-                  <span style={{ fontSize: "1.2rem", fontWeight: "700", textAlign: "center" }}>{statusCounts.confirmed}</span>
-                </Card>
-                <Card style={{ flex: "1", minWidth: "150px", padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
                   <FaSpinner color="#2980b9" size={32} />
                   <span style={{ fontSize: "1rem", fontWeight: "400" }}>Preparing</span>
                   <span style={{ fontSize: "1.2rem", fontWeight: "700", textAlign: "center" }}>{statusCounts.preparing}</span>
-                </Card>
-                <Card style={{ flex: "1", minWidth: "150px", padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
-                  <FaTruckPickup color="#0d6efd" size={32} />
-                  <span style={{ fontSize: "1rem", fontWeight: "400" }}>Picked up</span>
-                  <span style={{ fontSize: "1.2rem", fontWeight: "700", textAlign: "center" }}>{statusCounts.pickedUp}</span>
                 </Card>
                 <Card style={{ flex: "1", minWidth: "150px", padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
                   <FaTruckMoving color="#6610f2" size={32} />
@@ -475,9 +455,7 @@ function DeliveryManagement() {
             >
               <option value="all">All Statuses</option>
               <option value="pending">Pending</option>
-              <option value="confirmed">Confirmed</option>
               <option value="preparing">Preparing</option>
-              <option value="pickedUp">Picked Up</option>
               <option value="inTransit">Delivering</option>
               <option value="delivered">Delivered</option>
               <option value="cancelled">Cancelled</option>
@@ -507,8 +485,11 @@ function DeliveryManagement() {
           alignItems: "flex-start",
           width: "100%"
         }}>
-          {currentOrders.map((order, idx) => (
-            <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "350px", height: "500px", overflowY: "auto" }}>
+          {currentOrders.map((order, idx) => {
+            const restrictedStatuses = ["pickedup", "delivered", "cancelled", "returned"];
+            const canChangeRider = !restrictedStatuses.includes(order.currentStatus?.toLowerCase());
+            return (
+              <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "350px", height: "500px", overflowY: "auto" }}>
               <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
                 <h5 style={{ color: "#2c3e50", fontWeight: "700" }}>Order #{order.id}</h5>
                 <p style={{
@@ -525,10 +506,11 @@ function DeliveryManagement() {
                     pending: "Pending",
                     confirmed: "Confirmed",
                     preparing: "Preparing",
+                    waitingforpickup: "Waiting for Pickup",
                     readytopickup: "Ready to Pickup",
                     pickedup: "Picked Up",
-                    intransit: "Delivering", // This key already maps to "Delivering"
-                    delivering: "Delivering", // 💡 FIX: Added lowercase 'delivering' for display consistency
+                    intransit: "Delivering", 
+                    delivering: "Delivering",
                     delivered: "Delivered",
                     completed: "Completed",
                     cancelled: "Cancelled",
@@ -542,10 +524,19 @@ function DeliveryManagement() {
               <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaMapMarkerAlt color="#4b929d" /> Address: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.address}</span></p>
               <p style={{ fontWeight: "600", marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaBox color="#4b929d" /> Items ({order.items.length})</p>
               {order.items.map((item, i) => (
-                <p key={i} style={{ marginBottom: "3px", alignSelf: "flex-start", color: "black", display: "flex", justifyContent: "space-between", width: "100%" }}>
-                  <span>{item.quantity}x {item.name}</span>
-                  <span style={{ marginLeft: "auto" }}>₱{item.price.toFixed(2)}</span>
-                </p>
+                <div key={i} style={{ marginBottom: "3px", alignSelf: "flex-start", color: "black", width: "100%" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
+                    <span>{item.quantity}x {item.name}</span>
+                    <span style={{ marginLeft: "auto" }}>₱{item.price.toFixed(2)}</span>
+                  </div>
+                  {item.addons && item.addons.length > 0 && (
+                    <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.85em", color: "#666" }}>
+                      {item.addons.map((addon, j) => (
+                        <li key={j}>+ {addon.addon_name} (₱{addon.price.toFixed(2)})</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               ))}
               <hr style={{ alignSelf: "stretch" }} />
               <p style={{ fontWeight: "600", marginBottom: "0", alignSelf: "flex-start", color: "black", display: "flex", justifyContent: "space-between", width: "100%" }}>
@@ -572,7 +563,7 @@ function DeliveryManagement() {
                 })()
               )}
               <div style={{ marginTop: "10px", width: "100%" }}>
-                {!order.assignedRider ? (
+                {!order.assignedRider && canChangeRider ? (
                   <>
                     <label htmlFor={`assignRider-${order.id}`} style={{ fontWeight: "600", marginBottom: "5px", display: "block" }}>Assign Rider</label>
                     <Form.Select
@@ -588,7 +579,7 @@ function DeliveryManagement() {
                       ))}
                     </Form.Select>
                   </>
-                ) : (
+                ) : order.assignedRider && canChangeRider ? (
                   <>
                     <button
                       onClick={() => handleChangeRiderClick(order.id)}
@@ -622,10 +613,11 @@ function DeliveryManagement() {
                       </div>
                     )}
                   </>
-                )}
+                ) : null}
               </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
         {/* 💡 NEW: Pagination Controls */}
         {filteredOrders.length > ordersPerPage && (

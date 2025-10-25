@@ -5,6 +5,8 @@ import 'react-toastify/dist/ReactToastify.css';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2'; // 1. Import SweetAlert2
 
+import Lottie from "lottie-react";
+import coffeeTime from "../assets/Coffee Time.json";
 import './menu.css';
 import { CartContext } from '../contexts/CartContext';
 
@@ -23,13 +25,15 @@ const MenuContent = () => {
   const [selectedItem, setSelectedItem] = useState(null);
   const [orderNotes, setOrderNotes] = useState('');
   const [deliveryMethod, setDeliveryMethod] = useState('Pick-up');
-  const [paymentMethod, setPaymentMethod] = useState('Cash');
+  const [paymentMethod, setPaymentMethod] = useState('E-Wallet');
   // 1. New state for selected add-ons and total
   const [selectedAddOns, setSelectedAddOns] = useState([]);
   const [addOnsTotal, setAddOnsTotal] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
 
-  const { addToCart: addToContextCart } = useContext(CartContext);
+  const { cartItems, addToCart: addToContextCart } = useContext(CartContext);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -45,7 +49,7 @@ const MenuContent = () => {
 
   useEffect(() => {
     const fetchAllData = async () => {
-      toast.info("Loading menu, please wait...", { autoClose: 1500 });
+      setIsLoading(true);
       const token = localStorage.getItem("authToken");
 
       try {
@@ -118,6 +122,7 @@ const MenuContent = () => {
             ProductTypeName: "Merchandise",
             ProductCategory: "All Items",
             Status: item.Status,
+            MerchandiseQuantity: item.MerchandiseQuantity,
           }));
 
           // Add to grouped
@@ -151,6 +156,10 @@ const MenuContent = () => {
           if (!publicResponse.ok) throw new Error("Failed to fetch public product data.");
           const publicProducts = await publicResponse.json();
 
+          // ✅ Fetch all add-ons in one request for public
+          const allAddOnsResponse = await fetch(`${PRODUCTS_BASE_URL}/is_products/public/products/all_addons`);
+          const allAddOnsMap = allAddOnsResponse.ok ? await allAddOnsResponse.json() : {};
+
           // Fetch merchandise after other API calls
           const merchandiseResponse = await fetch(`${MERCH_BASE_URL}/merchandise/public/menu`);
           let apiMerchandise = [];
@@ -167,6 +176,7 @@ const MenuContent = () => {
             grouped[typeName][category].push({
               ...product,
               Status: product.Status || "Available", // ✅ use backend Status, fallback to "Available"
+              AddOns: allAddOnsMap[product.ProductID] || []  // ✅ attach add-ons directly from map
             });
           });
 
@@ -179,6 +189,7 @@ const MenuContent = () => {
             ProductTypeName: "Merchandise",
             ProductCategory: "All Items",
             Status: item.Status,
+            MerchandiseQuantity: item.MerchandiseQuantity,
           }));
 
           // Add to grouped
@@ -210,11 +221,60 @@ const MenuContent = () => {
       } catch (error) {
         console.error("Error fetching products:", error);
         toast.error("Failed to load products");
+      } finally {
+        setIsLoading(false);
       }
     };
 
     fetchAllData();
   }, []);
+
+  const subcategories = products[selectedCategory] ? Object.keys(products[selectedCategory]) : [];
+
+  useEffect(() => {
+    if (!selectedCategory && Object.keys(products).length > 0) {
+      const firstCategory = Object.keys(products)[0];
+      setSelectedCategory(firstCategory);
+    }
+  }, [products, selectedCategory]);
+
+  useEffect(() => {
+    if (selectedCategory && products[selectedCategory]) {
+      if (!selectedSubcategory || !subcategories.includes(selectedSubcategory)) {
+        setSelectedSubcategory(subcategories[0] || '');
+      }
+    }
+  }, [selectedCategory, products, selectedSubcategory, subcategories]);
+
+  if (isLoading) {
+    return (
+      <div style={{ 
+          position: 'fixed', 
+          top: 0, 
+          left: 0, 
+          width: '100%', 
+          height: '100%', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          backgroundColor: 'rgba(240, 249, 250, 0.85)', 
+          backdropFilter: 'blur(5px)',
+          zIndex: 9999 
+        }}>
+        <div>
+          <div style={{ width: '250px', height: '250px' }}>
+            <Lottie animationData={coffeeTime} loop={true} />
+          </div>
+          <div className="wavy-text">
+            {'Brewing Your Menu...'.split('').map((char, index) => (
+              <span key={index} style={{'--i': index + 1}}>{char === ' ' ? '\u00A0' : char}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
 
 
@@ -233,7 +293,7 @@ const MenuContent = () => {
     showSweetAlertItemDetails(item);
   };
 
-  const handleAddToCart = (item, notes, addOns, addOnsTotal) => {
+  const handleAddToCart = async (item, notes, addOns, addOnsTotal) => {
     if (!item) return;
 
     const token = localStorage.getItem("authToken");
@@ -241,13 +301,54 @@ const MenuContent = () => {
       toast.error("You must be logged in to add to cart.");
       return;
     }
-    
+
     // Check if the item is available before adding to cart
-    if (item.Status !== 'Available') {
+    if (item.Status !== 'Available' || (item.ProductTypeName === 'Merchandise' && item.MerchandiseQuantity <= 0)) {
       toast.error(`${item.ProductName} is currently unavailable.`);
       return;
     }
-    
+
+    // Normalize addOns for comparison
+    const normalizedAddOns = (addOns || []).map(a => ({ addon_name: a.name, price: a.price })).sort((a, b) => a.addon_name.localeCompare(b.addon_name));
+
+    // Find existing item in cart
+    const existingItemIndex = cartItems.findIndex(ci => {
+      const itemNormalizedAddOns = (ci.addons || []).sort((a, b) => a.addon_name.localeCompare(b.addon_name));
+      return ci.product_id === item.ProductID && JSON.stringify(normalizedAddOns) === JSON.stringify(itemNormalizedAddOns) && (ci.orderNotes || '') === (notes || '');
+    });
+
+    let currentQty = 0;
+    if (existingItemIndex !== -1) {
+      currentQty = cartItems[existingItemIndex].quantity;
+    }
+
+    // Get max quantity
+    let maxQty;
+    if (item.ProductTypeName === 'Merchandise') {
+      maxQty = item.MerchandiseQuantity;
+    } else {
+      try {
+        const res = await fetch(`${PRODUCTS_BASE_URL}/is_products/products/${item.ProductID}/max-quantity`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          maxQty = data.maxQuantity;
+        } else {
+          console.warn("Failed to fetch max quantity, proceeding without check.");
+          maxQty = Infinity;
+        }
+      } catch (err) {
+        console.error("Error fetching max quantity:", err);
+        maxQty = Infinity;
+      }
+    }
+
+    if (currentQty + 1 > maxQty) {
+      toast.error(`Cannot add more. Max quantity is ${maxQty}.`);
+      return;
+    }
+
     addToContextCart({
       product_id: item.ProductID,
       ProductName: item.ProductName,
@@ -259,6 +360,7 @@ const MenuContent = () => {
       // 3. Include notes and add-ons in the cart item
       orderNotes: notes,
       addOns: addOns,
+      MerchandiseQuantity: item.MerchandiseQuantity,
     });
 
     const finalPrice = (item.ProductPrice ?? 0) + addOnsTotal;
@@ -463,23 +565,12 @@ const MenuContent = () => {
                 type="radio"
                 class="btn-check"
                 name="paymentMethodSwal"
-                id="cashSwal"
+                id="ewalletSwal"
                 autocomplete="off"
-                value="Cash"
-                ${paymentMethod === 'Cash' ? 'checked' : ''}
+                value="E-Wallet"
+                checked
               />
-              <label class="btn btn-outline-secondary rounded-start-pill" for="cashSwal">Cash</label>
-
-              <input
-                type="radio"
-                class="btn-check"
-                name="paymentMethodSwal"
-                id="gcashSwal"
-                autocomplete="off"
-                value="Gcash"
-                ${paymentMethod === 'Gcash' ? 'checked' : ''}
-              />
-              <label class="btn btn-outline-secondary rounded-end-pill" for="gcashSwal">Gcash</label>
+              <label class="btn btn-outline-secondary w-100" for="ewalletSwal">E-Wallet</label>
             </div>
           </div>
         </div>
@@ -513,53 +604,44 @@ const MenuContent = () => {
 
   // Updated handler to accept add-ons details
   const handleConfirmBuyNow = (item, notes, addOns, addOnsTotal, delivery, payment) => {
-    if (item) {
-      navigate('/checkout', {
-        state: {
-          cartItems: [{
-            product_id: item.ProductID,
-            ProductName: item.ProductName,
-            ProductPrice: item.ProductPrice,
-            ProductImage: item.ProductImage,
-            ProductType: item.ProductTypeName,
-            ProductCategory: item.ProductCategory,
-            quantity: 1,
-            // 5. Include add-ons in the cart item for checkout
-            orderNotes: notes,
-            addOns: addOns,
-          }],
-          orderType: delivery,
-          paymentMethod: payment,
-          orderNotes: notes
-        }
-      });
-      // Reset temporary states after successful navigation
-      setOrderNotes('');
-      setSelectedAddOns([]);
-      setAddOnsTotal(0);
-      setDeliveryMethod('Pick-up');
-      setPaymentMethod('Cash');
+  if (item) {
+    // Check availability for Buy Now as well
+    if (item.Status !== 'Available' || (item.ProductTypeName === 'Merchandise' && item.MerchandiseQuantity <= 0)) {
+      toast.error(`${item.ProductName} is currently unavailable.`);
+      return;
     }
-  };
 
-  const subcategories = products[selectedCategory] ? Object.keys(products[selectedCategory]) : [];
-
-  useEffect(() => {
-    if (!selectedCategory && Object.keys(products).length > 0) {
-      const firstCategory = Object.keys(products)[0];
-      setSelectedCategory(firstCategory);
-    }
-  }, [products, selectedCategory]);
-
-  useEffect(() => {
-    if (selectedCategory && products[selectedCategory]) {
-      if (!selectedSubcategory || !subcategories.includes(selectedSubcategory)) {
-        setSelectedSubcategory(subcategories[0] || '');
+    navigate('/checkout', {
+      state: {
+        cartItems: [{
+          product_id: item.ProductID,
+          ProductName: item.ProductName,
+          ProductPrice: item.ProductPrice,
+          ProductImage: item.ProductImage,
+          ProductType: item.ProductTypeName,
+          ProductCategory: item.ProductCategory,
+          quantity: 1,
+          orderNotes: notes,
+          // --- THIS IS THE FIX ---
+          addons: addOns, // Change 'addOns' to 'addons' (lowercase)
+          // -----------------------
+          MerchandiseQuantity: item.MerchandiseQuantity,
+        }],
+        orderType: delivery,
+        paymentMethod: payment,
+        orderNotes: notes
       }
-    }
-  }, [selectedCategory, products, selectedSubcategory, subcategories]);
-
+    });
+    // Reset temporary states
+    setOrderNotes('');
+    setSelectedAddOns([]);
+    setAddOnsTotal(0);
+    setDeliveryMethod('Pick-up');
+    setPaymentMethod('E-Wallet');
+  }
+};
   const currentItems = (products[selectedCategory] && products[selectedCategory][selectedSubcategory]) || [];
+  const filteredItems = currentItems.filter(item => item.ProductName.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
     <section className="menu-content-section">
@@ -570,7 +652,7 @@ const MenuContent = () => {
           <div className="menu-category">
             {Object.keys(products).map((productType) => (
               <div key={productType}>
-                <h3>{productType}</h3>
+                <h3 className={productType === 'Merchandise' ? 'merchandise-title' : ''}>{productType}</h3>
                 <ul>
                   {products[productType] &&
                     Object.keys(products[productType]).map((subcat) => (
@@ -592,7 +674,7 @@ const MenuContent = () => {
         <div className="menu-items">
           <div className="search-container w-100">
             <div className="input-group" style={{ maxWidth: '500px' }}>
-              <input type="text" className="form-control" placeholder="Search Our Coffee, Merch" />
+              <input type="text" className="form-control" placeholder="Search Our Coffee, Merch" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
               <button className="btn btn-primary" type="button">🔍</button>
             </div>
           </div>
@@ -606,8 +688,8 @@ const MenuContent = () => {
           </nav>
 
           <div className="items-grid">
-            {currentItems.map((item) => {
-              const isAvailable = item.Status === 'Available';
+            {filteredItems.map((item) => {
+              const isAvailable = item.Status === 'Available' && (item.ProductTypeName !== 'Merchandise' || item.MerchandiseQuantity > 0);
               return (
                 <div
                   className={`item-card ${!isAvailable ? 'unavailable' : ''}`}

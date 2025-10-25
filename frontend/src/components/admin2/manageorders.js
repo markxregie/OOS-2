@@ -203,7 +203,14 @@ const ManageOrders = () => {
           items: order.items || []  // ← DIRECTLY use the array
         }));
 
-        setOrders(transformedOrders);
+        // Filter orders to only include those from today
+        const today = new Date();
+        const recentOrders = transformedOrders.filter(order => {
+          const orderDate = new Date(order.date);
+          return orderDate.toDateString() === today.toDateString();
+        });
+
+        setOrders(recentOrders);
       } catch (error) {
         console.error("Failed to fetch orders:", error);
         setOrders(sampleOrders);
@@ -260,12 +267,16 @@ const ManageOrders = () => {
         return <span className="status-badge status-processing">Processing</span>;
       case 'completed':
         return <span className="status-badge status-completed">Completed</span>;
+      case 'delivered':
+        return <span className="status-badge status-delivered">Delivered</span>;
       case 'cancelled':
         return <span className="status-badge status-cancelled">Cancelled</span>;
       case 'preparing':
         return <span className="status-badge status-preparing">Preparing</span>;
       case 'delivering':
         return <span className="status-badge status-delivering">Delivering</span>;
+      case 'waiting for pick up':
+        return <span className="status-badge status-waiting-for-pickup">Waiting for Pickup</span>;
       default:
         return <span className="status-badge">{status}</span>;
     }
@@ -492,9 +503,11 @@ const ManageOrders = () => {
               >
                 <option value="all">All Statuses</option>
                 <option value="pending">Pending</option>
-                <option value="processing">Processing</option>
+                
                 <option value="completed">Completed</option>
                 <option value="cancelled">Cancelled</option>
+
+                <option value="waiting for pickup">Waiting for Pickup</option>
               </Form.Select>
             </div>
           </div>
@@ -502,7 +515,7 @@ const ManageOrders = () => {
           <Table className="orders-table" responsive>
             <thead>
               <tr>
-                <th>Order ID</th>
+                
                 <th>Customer Name</th>
                 <th>Order Time/Date</th>
                 <th>Items</th>
@@ -517,15 +530,7 @@ const ManageOrders = () => {
               {currentOrders.length > 0 ? (
                 currentOrders.map((order) => (
                   <tr key={order.id}>
-                    <td>
-                      <button
-                        className="link-button"
-                        onClick={() => handleViewOrder(order)}
-                        style={{ color: "#007bff", background: "none", border: "none", padding: 0, cursor: "pointer" }}
-                      >
-                        {order.id}
-                      </button>
-                    </td>
+                   
                     <td>{order.customer}</td>
                     <td>{order.date}</td>
                     <td>

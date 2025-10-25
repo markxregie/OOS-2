@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Container, Row, Col, Form, Button } from 'react-bootstrap';
+import Swal from 'sweetalert2';
 import './concerns.css';
 
 const Concerns = () => {
@@ -7,17 +8,55 @@ const Concerns = () => {
   const [email, setEmail] = useState('');
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Here you would typically handle the form submission, e.g., send the data to a backend
-    console.log('Form Submitted:', { name, email, subject, message });
-    // Clear the form
-    setName('');
-    setEmail('');
-    setSubject('');
-    setMessage('');
-    alert('Thank you for your feedback! We will get back to you shortly.');
+    setLoading(true);
+    try {
+      const response = await fetch('http://127.0.0.1:7007/concerns', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name,
+          email,
+          subject,
+          message,
+        }),
+      });
+      if (response.ok) {
+        Swal.fire({
+          title: 'Success!',
+          text: 'Thank you for your feedback! We will get back to you shortly.',
+          icon: 'success',
+          confirmButtonColor: '#4a9ba5'
+        });
+        // Clear the form
+        setName('');
+        setEmail('');
+        setSubject('');
+        setMessage('');
+      } else {
+        Swal.fire({
+          title: 'Error!',
+          text: 'Failed to submit concern. Please try again.',
+          icon: 'error',
+          confirmButtonColor: '#dc3545'
+        });
+      }
+    } catch (error) {
+      console.error('Error submitting concern:', error);
+      Swal.fire({
+        title: 'Error!',
+        text: 'An error occurred. Please try again.',
+        icon: 'error',
+        confirmButtonColor: '#dc3545'
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

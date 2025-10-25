@@ -1,0 +1,101 @@
+.checkout-card {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.checkout-header,
+.checkout-subheader {
+    text-align: left;
+    color: #4B929D;
+}
+
+.checkout-subheader {
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+/* --- Mobile Item Card Styles --- */
+.checkout-item-card-mobile {
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.checkout-addons-mobile {
+    margin: 0.5rem 0;
+    padding-left: 20px;
+    font-size: 0.85em;
+    color: #666;
+    list-style-type: none;
+}
+
+.checkout-details-mobile {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+    color: #495057;
+}
+
+.checkout-summary-mobile {
+    border-top: 1px solid #dee2e6;
+    padding-top: 1rem;
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.checkout-summary-mobile div {
+    display: flex;
+    justify-content: space-between;
+}
+
+/* --- Totals Section --- */
+.checkout-totals-section {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 2px solid #e9ecef;
+}
+
+.total-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    font-size: 1rem;
+}
+
+.grand-total {
+    font-size: 1.2rem;
+    color: #4B929D;
+}
+
+/* --- Form Styles --- */
+.checkout-form-row {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.form-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    color: #4B929D;
+    margin-bottom: 0.25rem;
+    font-size: 0.9rem;
+    text-align: left;
+}
+
+/* --- Responsive Media Query --- */
+@media (max-width: 767.98px) {
+    .checkout-form-row {
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+}

@@ -12,6 +12,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useState, useContext } from 'react';
 import Swal from 'sweetalert2';
 import { CartContext } from '../contexts/CartContext';
+import { AuthContext } from './AuthContext';
 
 export default function AppHeader() {
   const location = useLocation();
@@ -19,30 +20,23 @@ export default function AppHeader() {
   const isHomePage = location.pathname === '/';
   const [isToggled, setIsToggled] = useState(false);
 
-  // Remove AuthContext usage, use local state for login detection
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [profileImage, setProfileImage] = useState(null);
+  const { isLoggedIn, login, logout } = useContext(AuthContext);
+  const [profileImage, setProfileImage] = useState("https://cdn-icons-png.flaticon.com/512/149/149071.png");
 
-  // Check URL query params for authorization token and store in localStorage
+  // Check URL query params for authorization token and login
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tokenFromUrl = params.get('authorization');
     console.log('Token from URL:', tokenFromUrl);
     if (tokenFromUrl) {
-      localStorage.setItem('authToken', tokenFromUrl);
-      setIsLoggedIn(true);
-      console.log('Set isLoggedIn to true');
+      login({ authToken: tokenFromUrl });
+      console.log('Logged in with token from URL');
       // Remove token from URL to clean up
       params.delete('authorization');
       const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
       window.history.replaceState({}, document.title, newUrl);
-    } else {
-      const token = localStorage.getItem('authToken');
-      console.log('Token from localStorage:', token);
-      setIsLoggedIn(!!token);
-      console.log('Set isLoggedIn to', !!token);
     }
-  }, []);
+  }, [login]);
 
   // New state for header visibility
   const [isVisible, setIsVisible] = useState(true);
@@ -82,10 +76,21 @@ export default function AppHeader() {
     })));
   };
 
-  const markAsRead = (id) => {
-    setNotifications(notifications.map(notification =>
-      notification.id === id ? { ...notification, isRead: true } : notification
-    ));
+  const markAsRead = async (id) => {
+    try {
+      const token = localStorage.getItem('authToken');
+      await fetch(`http://localhost:7002/notifications/${id}/read`, {
+        method: "PUT",
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      setNotifications(notifications.map(notification =>
+        notification.id === id ? { ...notification, isRead: true } : notification
+      ));
+    } catch (error) {
+      console.error("Failed to mark notification as read:", error);
+    }
   };
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
@@ -143,7 +148,7 @@ export default function AppHeader() {
         }
 
         const data = await response.json();
-        setProfileImage(data.profileImage || null);
+        setProfileImage(data.profileImage || "https://cdn-icons-png.flaticon.com/512/149/149071.png");
       } catch (error) {
         console.error('Error fetching user profile:', error);
       }
@@ -152,6 +157,64 @@ export default function AppHeader() {
     if (isLoggedIn) {
       fetchUserProfile();
     }
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    let ws;
+    const token = localStorage.getItem("authToken");
+    const userData = localStorage.getItem("userData");
+    const username = userData ? JSON.parse(userData).username : null;
+
+    if (isLoggedIn && username && token) {
+      // Fetch existing notifications from backend
+      const fetchNotifications = async () => {
+        const res = await fetch(`http://localhost:7002/notifications/${username}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const data = await res.json();
+
+        if (Array.isArray(data)) {
+          data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+          setNotifications(data);
+        } else {
+          console.error("Unexpected notification response:", data);
+        }
+      };
+
+      fetchNotifications();
+
+      // Create WebSocket connection with token auth
+      ws = new WebSocket(`ws://localhost:7002/ws/notifications/${username}?token=${token}`);
+
+      ws.onopen = () => {
+        console.log("✅ Connected to Notification WebSocket");
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log("📩 Notification received:", data);
+
+          setNotifications((prev) => [data, ...prev]);
+        } catch (err) {
+          console.error("Error parsing WebSocket message:", err);
+        }
+      };
+
+      ws.onclose = (event) => {
+        console.log("🔌 WebSocket closed:", event.reason);
+      };
+
+      ws.onerror = (error) => {
+        console.error("⚠️ WebSocket error:", error);
+      };
+    }
+
+    return () => {
+      if (ws) ws.close();
+    };
   }, [isLoggedIn]);
 
   const handleLogoutClick = () => {
@@ -166,8 +229,7 @@ export default function AppHeader() {
       cancelButtonText: 'Cancel'
     }).then((result) => {
       if (result.isConfirmed) {
-        localStorage.removeItem('authToken');
-        setIsLoggedIn(false);
+        logout();
         // Redirect to login page on frontend-auth at localhost:4002
         window.location.href = 'http://localhost:4002/';
       }
@@ -340,7 +402,10 @@ export default function AppHeader() {
                                         className={`notification-item p-2 mb-2 border rounded ${
                                           !notification.isRead ? 'bg-primary bg-opacity-10' : ''
                                         }`}
-                                        onClick={() => markAsRead(notification.id)}
+                                        onClick={() => {
+                                          markAsRead(notification.id);
+                                          navigate('/profile/notification');
+                                        }}
                                         style={{ cursor: 'pointer' }}
                                       >
                                         <div className="d-flex w-100 justify-content-between">
@@ -398,10 +463,11 @@ export default function AppHeader() {
                             className="p-0 border-0 bg-transparent"
                           >
                             <img
-                              src={profileImage || "https://cdn-icons-png.flaticon.com/512/149/149071.png"}
+                              src={profileImage}
                               alt="Profile"
                               className="profile-icon"
                               style={{ width: '40px', height: '40px', borderRadius: '50%' }}
+                              onError={(e) => { e.target.src = "https://cdn-icons-png.flaticon.com/512/149/149071.png"; }}
                             />
                           </Dropdown.Toggle>
 

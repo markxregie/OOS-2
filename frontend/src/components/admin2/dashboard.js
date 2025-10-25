@@ -31,23 +31,14 @@ library.add(faMoneyBillWave, faChartLine, faShoppingCart, faClock, faArrowTrendU
 // --- Static data remains the same ---
 const revenueData = [ { name: 'Jan', income: 5000, expense: 3000 }, { name: 'Feb', income: 14000, expense: 10000 }, { name: 'Mar', income: 15000, expense: 12000 }, { name: 'Apr', income: 11000, expense: 9000 }, { name: 'May', income: 13000, expense: 7000 }, { name: 'June', income: 18000, expense: 10000 }, { name: 'July', income: 18000, expense: 13000 }, ];
 
-// NEW STATIC DATA: Rider Earnings Data for the Bar Graph
-const riderEarningsData = [
-    { name: 'Rider A', earnings: 15000 },
-    { name: 'Rider B', earnings: 12000 },
-    { name: 'Rider C', earnings: 18500 },
-    { name: 'Rider D', earnings: 9000 },
-    { name: 'Rider E', earnings: 21000 },
-    { name: 'Rider F', earnings: 14500 },
-    { name: 'Rider G', earnings: 16000 },
-];
+// Rider Earnings Data for the Bar Graph - will be fetched dynamically
 
 const PIE_COLORS = ['#00b4d8', '#ffb703', '#48cae4', '#03045e', '#a9d6e5'];
 
 // ✅ FIXED: Date.toLocaleString "second" property is now "numeric"
 const currentDate = new Date().toLocaleString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric", });
 const userRole = "Admin";
-const initialData = [ { title: "Today's Sales", current: 0, previous: 0, format: "currency", icon: faMoneyBillWave, type: "sales" }, { title: "Total Orders", current: 0, previous: 0, format: "number", icon: faChartLine, type: "revenue" }, { title: "Today's Orders", current: 0, previous: 0, format: "number", icon: faShoppingCart, type: "orders" }, { title: "Pending Orders", current: 0, previous: 0, format: "number", icon: faClock, type: "pendings" }, { title: "Delivered Orders", current: 0, previous: 0, format: "number", icon: faCheckCircle, type: "deliveredOrders" }, { title: "Pick Up Orders", current: 0, previous: 0, format: "number", icon: faClipboardCheck, type: "confirmedOrders" }, { title: "Cancelled Orders", current: 0, previous: 0, format: "number", icon: faXmark, type: "cancelledOrders" } ];
+const initialData = [ { title: "Today's Sales", current: 0, previous: 45000, format: "currency", icon: faMoneyBillWave, type: "sales" }, { title: "Total Orders", current: 0, previous: 1100, format: "number", icon: faChartLine, type: "revenue" }, { title: "Today's Orders", current: 0, previous: 50, format: "number", icon: faShoppingCart, type: "orders" }, { title: "Pending Orders", current: 0, previous: 20, format: "number", icon: faClock, type: "pendings" }, { title: "Delivered Orders", current: 0, previous: 800, format: "number", icon: faCheckCircle, type: "deliveredOrders" }, { title: "Pick Up Orders", current: 0, previous: 300, format: "number", icon: faClipboardCheck, type: "confirmedOrders" }, { title: "Cancelled Orders", current: 0, previous: 50, format: "number", icon: faXmark, type: "cancelledOrders" } ];
 const formatValue = (value, format) => { return format === "currency" ? `₱${value.toLocaleString()}` : value.toLocaleString(); };
 
 // Define the custom label for the Pie chart
@@ -94,6 +85,10 @@ const Dashboard = () => {
   });
   const [recentOrders, setRecentOrders] = useState([]);
   const [allOrders, setAllOrders] = useState([]);
+  const [riderEarningsData, setRiderEarningsData] = useState([]);
+  const [earningsFilter, setEarningsFilter] = useState("Weekly");
+  const [allDeliveryOrders, setAllDeliveryOrders] = useState([]);
+  const [riders, setRiders] = useState([]);
 
   // --- useEffects for Auth and Data Fetching ---
   useEffect(() => {
@@ -178,6 +173,72 @@ const Dashboard = () => {
       })
       .catch((err) => console.error("Failed to fetch recent orders:", err));
   }, [authToken]);
+
+  useEffect(() => {
+    if (!authToken) { return; }
+    // Fetch all riders
+    fetch("http://localhost:7001/delivery/riders", { headers: { Authorization: `Bearer ${authToken}`, }, })
+      .then((res) => { if (!res.ok) { throw new Error(`HTTP error! status: ${res.status}`); } return res.json(); })
+      .then((riders) => {
+        console.log("Fetched riders:", riders);
+        setRiders(riders);
+      })
+      .catch((err) => console.error("Failed to fetch riders:", err));
+  }, [authToken]);
+
+  useEffect(() => {
+    if (!authToken) { return; }
+    // Fetch all delivery orders
+    fetch("http://localhost:7004/delivery/admin/delivery/orders", { headers: { Authorization: `Bearer ${authToken}`, }, })
+      .then((res) => { if (!res.ok) { throw new Error(`HTTP error! status: ${res.status}`); } return res.json(); })
+      .then((data) => {
+        console.log("Fetched delivery orders:", data);
+        setAllDeliveryOrders(data);
+      })
+      .catch((err) => console.error("Failed to fetch delivery orders:", err));
+  }, [authToken]);
+
+  useEffect(() => {
+    if (!riders.length || !allDeliveryOrders.length) { return; }
+    // Initialize earnings map with all riders at 0
+    const earningsMap = {};
+    riders.forEach(rider => {
+      earningsMap[rider.FullName] = 0;
+    });
+
+    // Filter active orders: not delivered, cancelled, returned
+    const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
+    let activeOrders = allDeliveryOrders.filter(order => activeStatuses.includes(order.currentStatus) && order.assignedRider);
+
+    // Filter by date based on earningsFilter
+    const now = new Date();
+    if (earningsFilter === "Daily") {
+      const today = now.toISOString().split('T')[0];
+      activeOrders = activeOrders.filter(order => order.orderedAt.startsWith(today));
+    } else if (earningsFilter === "Weekly") {
+      const sevenDaysAgo = new Date(now);
+      sevenDaysAgo.setDate(now.getDate() - 7);
+      activeOrders = activeOrders.filter(order => new Date(order.orderedAt) >= sevenDaysAgo);
+    } else if (earningsFilter === "Monthly") {
+      const thirtyDaysAgo = new Date(now);
+      thirtyDaysAgo.setDate(now.getDate() - 30);
+      activeOrders = activeOrders.filter(order => new Date(order.orderedAt) >= thirtyDaysAgo);
+    }
+
+    // Sum totals for filtered active orders
+    activeOrders.forEach(order => {
+      const riderName = order.assignedRider.fullName;
+      if (earningsMap.hasOwnProperty(riderName)) {
+        earningsMap[riderName] += order.total;
+      }
+    });
+
+    const transformedData = Object.entries(earningsMap).map(([name, earnings]) => ({
+      name,
+      earnings,
+    }));
+    setRiderEarningsData(transformedData);
+  }, [riders, allDeliveryOrders, earningsFilter]);
   // --- End of useEffects ---
 
   const toggleDropdown = () => {
@@ -400,7 +461,12 @@ const Dashboard = () => {
           <div className="dashboard-charts" style={{ marginTop: '20px', display: 'block' }}>
               <div className="chart-box" style={{ width: '100%', margin: '0', padding: '20px' }}>
                   <div className="chart-header">
-                      <span>Rider Earnings - All-Time</span>
+                      <span>Rider Earnings - {earningsFilter}</span>
+                      <select className="chart-dropdown" value={earningsFilter} onChange={(e) => setEarningsFilter(e.target.value)}>
+                          <option value="Daily">Daily</option>
+                          <option value="Weekly">Weekly</option>
+                          <option value="Monthly">Monthly</option>
+                      </select>
                   </div>
                   <ResponsiveContainer width="100%" height={350}>
                       <BarChart data={riderEarningsData} margin={{ top: 10, right: 30, left: 20, bottom: 5 }}>
@@ -408,7 +474,6 @@ const Dashboard = () => {
                           <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                           <YAxis tickFormatter={(value) => `₱${value.toLocaleString()}`} />
                           <Tooltip formatter={(value) => [`₱${value.toLocaleString()}`, 'Earnings']} />
-                          <Legend />
                           <Bar dataKey="earnings" fill="#00b4d8" name="Rider Earnings" />
                       </BarChart>
                   </ResponsiveContainer>
@@ -434,10 +499,12 @@ const Dashboard = () => {
                       display: 'inline-block',
                       backgroundColor: order.status.toLowerCase() === 'pending' ? '#fff3cd' :
                                          order.status.toLowerCase() === 'processing' ? '#cce5ff' :
+                                         order.status.toLowerCase() === 'waiting for pick up' ? '#9c27b0' :
                                          order.status.toLowerCase() === 'completed' ? '#d4edda' :
                                          order.status.toLowerCase() === 'cancelled' ? '#f8d7da' : '#e9ecef',
                       color: order.status.toLowerCase() === 'pending' ? '#856404' :
                              order.status.toLowerCase() === 'processing' ? '#004085' :
+                             order.status.toLowerCase() === 'waiting for pick up' ? '#ffffff' :
                              order.status.toLowerCase() === 'completed' ? '#155724' :
                              order.status.toLowerCase() === 'cancelled' ? '#721c24' : '#495057',
                       flex: 1,

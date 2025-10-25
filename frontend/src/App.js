@@ -17,6 +17,7 @@ import Sidebar from './components/admin2/sidebar';
 import ProfilePage from './components/ProfilePage';
 import ProfileSidebar from './components/ProfileSidebar';
 import OrderHistory from './components/OrderHistory';
+import { default as TrackOrder } from './components/trackorder';
 import Notification from './components/Notification';
 import Products from './components/admin2/products';
 import Staff from './components/admin2/Staff';
@@ -30,6 +31,7 @@ import NotFound from './components/NotFound';
 import Resetpassword from './components/Resetpassword';
 import Concerns from './components/concerns';
 import AdminConcerns from './components/admin2/concerns';
+import SessionManager from './components/SessionManager';  // <-- Import SessionManager
 
 import { BrowserRouter as Router, Routes, Route, useLocation, Outlet } from 'react-router-dom';
 import { AuthProvider } from './components/AuthContext';  // <-- Import AuthProvider
@@ -83,6 +85,7 @@ function MainApp() {
 
   return (
     <div className='App'>
+      <SessionManager /> {/* Global session management */}
       {!shouldHideHeader && !location.pathname.startsWith('/admin') && (
         <header id='header'>
           <AppHeader />
@@ -103,6 +106,7 @@ function MainApp() {
           <Route element={<ProfileLayout />}>
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/profile/orderhistory" element={<OrderHistory />} />
+            <Route path="/profile/orderhistory/:orderId" element={<TrackOrder />} />
             <Route path="/profile/notification" element={<Notification />} />
           </Route>
           {/* Admin Routes */}

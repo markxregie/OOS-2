@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaTimesCircle, FaExchangeAlt, FaBars, FaHome, FaHistory, FaCog, FaCreditCard, FaUserTie } from "react-icons/fa";
-import { Container, Card, Form } from "react-bootstrap";
+import { FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaTimesCircle, FaExchangeAlt, FaBars, FaHome, FaHistory, FaCog, FaCreditCard, FaUserTie, FaChevronDown, FaUndo, FaSignOutAlt } from "react-icons/fa";
+import { Container, Card, Form, Spinner } from "react-bootstrap";
 import riderImage from "../../assets/rider.jpg";
 import "./riderdashboard.css"; // Updated CSS import
 
@@ -11,6 +11,8 @@ function RiderDashboard() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [toggle, setToggle] = useState("active");
+  const [earningsFilter, setEarningsFilter] = useState("All-Time");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const [riders, setRiders] = useState([]);
   const [selectedRider, setSelectedRider] = useState(null);
@@ -112,10 +114,16 @@ function RiderDashboard() {
         return { color: "#198754", backgroundColor: "#d1e7dd", text: "Confirmed" };
       case "preparing":
         return { color: "#2980b9", backgroundColor: "#cfe2ff", text: "Preparing" };
+      case "waitingforpickup":
+        return { color: "#ffffff", backgroundColor: "#9c27b0", text: "Waiting for Pickup" };
       case "readyToPickup":
         return { color: "#8e44ad", backgroundColor: "#e5dbff", text: "Ready to Pickup" };
       case "pickedUp":
         return { color: "#0d6efd", backgroundColor: "#cfe2ff", text: "Picked Up" };
+         case "delivering":
+           return { color: "#ffffff", backgroundColor: "rgb(63, 81, 181)", text: "DELIVERING" };
+      case "completed":
+      return { color: "rgb(25, 135, 84)", backgroundColor: "rgb(209, 231, 221)", text: "COMPLETED"};
       case "inTransit":
         return { color: "#6610f2", backgroundColor: "#e5dbff", text: "In Transit" };
       case "delivered":
@@ -142,15 +150,54 @@ function RiderDashboard() {
 
   const activeOrdersCount = orders.filter(order => !["delivered", "cancelled", "returned"].includes(order.currentStatus)).length;
   const completedOrdersCount = orders.filter(order => order.currentStatus === "delivered").length;
-  const earnings = orders.filter(order => order.currentStatus === "delivered").reduce((sum, order) => sum + (order.total || 0), 0).toFixed(2);
+
+  const calculateEarnings = () => {
+    const now = new Date();
+    let startDate;
+
+    if (earningsFilter === "Daily") {
+      // Filter orders from today
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
+      return orders
+        .filter(order => activeStatuses.includes(order.currentStatus) && new Date(order.orderedAt) >= startOfDay)
+        .reduce((sum, order) => sum + (order.total || 0), 0)
+        .toFixed(2);
+    } else if (earningsFilter === "Weekly") {
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    } else if (earningsFilter === "Monthly") {
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    }
+
+    // For All-Time, include both 'pending' and 'delivered' statuses
+    if (earningsFilter === "All-Time") {
+      const validStatuses = ["pending", "delivered"];
+      return orders
+        .filter(order => validStatuses.includes(order.currentStatus))
+        .reduce((sum, order) => sum + (order.total || 0), 0)
+        .toFixed(2);
+    }
+
+    // For Weekly and Monthly filters, include active statuses and filter by date
+    const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
+    return orders
+      .filter(order => activeStatuses.includes(order.currentStatus) && new Date(order.orderedAt) >= startDate)
+      .reduce((sum, order) => sum + (order.total || 0), 0)
+      .toFixed(2);
+  };
+
+  const earnings = calculateEarnings();
 
   const statusIcons = {
     pending: <FaClock />,
     confirmed: <FaCheckCircle />,
     preparing: <FaBox />,
+    waitingforpickup: <FaClock />,
     readyToPickup: <FaTruckPickup />,
     pickedUp: <FaTruckMoving />,
     pickedup: <FaTruckMoving />,
+    delivering: <FaTruckMoving />,
+    completed: <FaCheckCircle />,
     inTransit: <FaTruckMoving />,
     delivered: <FaCheckCircle />,
     cancelled: <FaTimesCircle />,
@@ -159,7 +206,13 @@ function RiderDashboard() {
   const cardColors = "#a3d3d8"; // Fixed color since riders are dynamic
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="d-flex justify-content-center align-items-center" style={{ height: '100vh' }}>
+        <Spinner animation="border" role="status">
+          <span className="visually-hidden">Loading...</span>
+        </Spinner>
+      </div>
+    );
   }
 
   if (error) {
@@ -171,22 +224,43 @@ function RiderDashboard() {
       <div className="main-content">
         <header className="manage-header">
           <div className="header-left">
-            <button className="menu-toggle" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
-              <FaBars />
-            </button>
+            
             <h2 className="page-title">Rider Dashboard</h2>
           </div>
           <div className="header-right">
-            <div className="header-date">{currentDateFormatted}</div>
-            <div className="header-profile">
-              <div className="bell-icon"><FaBell className="bell-outline" /></div>
-              <div className="profile-pic" style={{ backgroundImage: `url(${riderImage})` }}></div>
-              <div className="profile-info">
-                <div className="profile-role">{getGreeting()}! I'm {userRole}</div>
-                <div className="profile-name">{userName}</div>
-              </div>
-            </div>
-          </div>
+                      <div className="header-date">{currentDateFormatted}</div>
+                      <div className="header-profile">
+                        <div className="profile-pic"></div>
+                        <div className="profile-info">
+                          <div className="profile-role">Hi! I'm {userRole}</div>
+                          <div className="profile-name">Admin OOS</div>
+                        </div>
+                        <div className="dropdown-icon" onClick={() => setDropdownOpen(!dropdownOpen)}><FaChevronDown /></div>
+                        <div className="bell-icon"><FaBell className="bell-outline" /></div>
+                        {dropdownOpen && (
+                          <div className="profile-dropdown" style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "white", border: "1px solid #ccc", borderRadius: "4px", boxShadow: "0 2px 8px rgba(0,0,0,0.15)", zIndex: 1000, width: "150px" }}>
+                            <ul style={{ listStyle: "none", margin: 0, padding: "8px 0" }}>
+                              <li
+                                onClick={() => window.location.reload()}
+                                style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#4b929d" }}
+                                onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f0f0f0"}
+                                onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
+                              >
+                                <FaUndo /> Refresh
+                              </li>
+                              <li
+                                onClick={() => { localStorage.removeItem("access_token"); window.location.href = "http://localhost:4002/"; }}
+                                style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#dc3545" }}
+                                onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8d7da"}
+                                onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
+                              >
+                                <FaSignOutAlt /> Logout
+                              </li>
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
         </header>
 
         <Container fluid className="dashboard-summary-container" style={{ backgroundColor: cardColors }}>
@@ -216,7 +290,24 @@ function RiderDashboard() {
               <span className="card-title">Completed</span>
               <span className="card-value">{completedOrdersCount} orders</span>
             </Card>
-            <Card className="summary-card">
+            <Card className="summary-card" style={{ position: 'relative' }}>
+              <Form.Select
+                size="sm"
+                value={earningsFilter}
+                onChange={(e) => setEarningsFilter(e.target.value)}
+                style={{
+                  position: 'absolute',
+                  top: '10px',
+                  right: '10px',
+                  width: '120px',
+                  fontSize: '12px',
+                  padding: '2px 6px'
+                }}
+              >
+                <option value="Daily">Daily</option>
+                <option value="Weekly">Weekly</option>
+                <option value="Monthly">Monthly</option>
+              </Form.Select>
               <FaDollarSign size={32} color="#fd7e14" />
               <span className="card-title">Earnings</span>
               <span className="card-value">₱{earnings}</span>

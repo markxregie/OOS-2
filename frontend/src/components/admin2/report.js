@@ -514,7 +514,7 @@ const Report = () => {
               <div className="profile-pic" />
               <div className="profile-info">
                 <div className="profile-role">Hi! I'm Admin</div>
-                <div className="profile-name">Lim Alcovendas</div>
+                <div className="profile-name">Admin OOS</div>
               </div>
               <div className="dropdown-icon" onClick={toggleDropdown}>
                 <FaChevronDown />
