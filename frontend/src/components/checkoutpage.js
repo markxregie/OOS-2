@@ -282,6 +282,20 @@ const confirmPayment = async (saved) => {
       reference_number
     }));
 
+    const deliveryFee = orderType === "Delivery" ? 50 : 0;
+    // --- Construct detailed items list for PayMongo ---
+    const itemsForCheckout = cartItems.map(item => {
+      const addonList = item.addons?.map(addon =>
+        `${addon.addon_name || addon.AddOnName || addon.name} (₱${addon.price || addon.Price || 0})`
+      ) || [];
+      const basePrice = item.ProductPrice + (item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0);
+      return {
+        name: item.ProductName,
+        quantity: item.quantity,
+        price: basePrice,
+        addons: addonList
+      };
+    });
     try {
       const response = await fetch("http://localhost:7005/payment/create-checkout", {
         method: "POST",
@@ -290,13 +304,12 @@ const confirmPayment = async (saved) => {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          amount: parseFloat(total.toFixed(2)),
-          description: "Order from OOS",
           reference_number,
           redirect_url: window.location.origin + "/checkout",
+          items: itemsForCheckout,
+          delivery_fee: deliveryFee
         }),
       });
-
       const data = await response.json();
       if (data.checkout_url) {
         window.location.href = data.checkout_url;
@@ -304,7 +317,7 @@ const confirmPayment = async (saved) => {
         Swal.fire({
           icon: 'error',
           title: 'Payment Failed',
-          text: 'Failed to initiate payment',
+          text: data.detail || 'Failed to initiate payment',
         });
       }
     } catch (error) {
