@@ -1,8 +1,11 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, UploadFile, File, Form
 from pydantic import BaseModel
 from database import get_db_connection
-from typing import List
+from typing import List, Optional
 import logging
+import os
+import shutil
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +23,7 @@ class ConcernResponse(BaseModel):
     email: str
     subject: str
     message: str
+    file_path: Optional[str] = None
     status: str
     submitted_at: str
 
@@ -27,21 +31,44 @@ class StatusUpdate(BaseModel):
     status: str
 
 @router.post("/concerns", status_code=status.HTTP_201_CREATED)
-async def submit_concern(concern: ConcernRequest):
+async def submit_concern(
+    name: str = Form(...),
+    email: str = Form(...),
+    subject: str = Form(...),
+    message: str = Form(...),
+    file: UploadFile = File(None)
+):
+    file_path = None
+    if file:
+        # Create uploads directory if it doesn't exist
+        upload_dir = "uploads"
+        os.makedirs(upload_dir, exist_ok=True)
+
+        # Generate unique filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_extension = os.path.splitext(file.filename)[1]
+        unique_filename = f"{timestamp}_{file.filename}"
+        file_path = os.path.join(upload_dir, unique_filename)
+
+        # Save the file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
     conn = await get_db_connection()
     cursor = await conn.cursor()
     try:
         await cursor.execute("""
-            INSERT INTO Concerns (name, email, subject, message)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO Concerns (name, email, subject, message, file_path)
+            VALUES (?, ?, ?, ?, ?)
         """, (
-            concern.name,
-            concern.email,
-            concern.subject,
-            concern.message
+            name,
+            email,
+            subject,
+            message,
+            file_path
         ))
         await conn.commit()
-        logger.info(f"Concern submitted: {concern.dict()}")
+        logger.info(f"Concern submitted: name={name}, email={email}, subject={subject}, file={file_path}")
     except Exception as e:
         logger.error(f"Error submitting concern: {e}")
         raise HTTPException(status_code=500, detail="Failed to submit concern")
@@ -56,7 +83,7 @@ async def get_concerns():
     cursor = await conn.cursor()
     try:
         await cursor.execute("""
-            SELECT id, name, email, subject, message, status, submitted_at
+            SELECT id, name, email, subject, message, file_path, status, submitted_at
             FROM Concerns
             ORDER BY submitted_at DESC
         """)
@@ -69,8 +96,9 @@ async def get_concerns():
                 email=row[2],
                 subject=row[3],
                 message=row[4],
-                status=row[5] or 'Pending',
-                submitted_at=row[6].strftime("%Y-%m-%d %H:%M:%S") if row[6] else None
+                file_path=row[5],
+                status=row[6] or 'Pending',
+                submitted_at=row[7].strftime("%Y-%m-%d %H:%M:%S") if row[7] else None
             ))
     except Exception as e:
         logger.error(f"Error fetching concerns: {e}")

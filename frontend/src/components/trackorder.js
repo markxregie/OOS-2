@@ -164,8 +164,14 @@ const TrackOrder = () => {
         <ul className="product-list">
             {order.products.map((p, idx) => (
                 <li key={idx} className="product-item">
-                    <span className="product-name">{p.name}</span>
-                    <span className="product-quantity">x{p.quantity}</span>
+                    <span className="product-name">{p.name} (x{p.quantity})</span>
+                    {p.addons && p.addons.length > 0 && (
+                        <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.85em", color: "#666", listStyle: 'none' }}>
+                            {p.addons.map((addon, i) => (
+                                <li key={i}>+ {addon.addon_name || addon.AddOnName || addon.name} (₱{(addon.price || addon.Price || 0).toFixed(2)})</li>
+                            ))}
+                        </ul>
+                    )}
                 </li>
             ))}
         </ul>

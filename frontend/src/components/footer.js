@@ -29,14 +29,14 @@ const Footer = () => {
               <Col md={3} className="mb-3 mb-md-0">
                 <h5 className="mb-3 text-custom">Follow Us</h5>
                 <div className="social-icons">
-                  <a href="#" className="text-custom me-3">
+                  <a href="https://www.facebook.com/bleubeancafe.ph" className="text-custom me-3" target="_blank" rel="noopener noreferrer">
                     <i className="bi bi-facebook"></i>
                   </a>
-                  <a href="#" className="text-custom me-3">
+                  <a href="https://www.instagram.com/bleubeancafe.ph?utm_source=ig_web_button_share_sheet&igsh=ZDNlZDc0MzIxNw==" className="text-custom me-3" target="_blank" rel="noopener noreferrer">
                     <i className="bi bi-instagram"></i>
                   </a>
-                  <a href="#" className="text-custom me-3">
-                    <i className="bi bi-twitter"></i>
+                  <a href="https://tiktok.com/@bleu.bean.cafe" className="text-custom me-3" target="_blank" rel="noopener noreferrer">
+                    <i className="bi bi-tiktok"></i>
                   </a>
                 </div>
               </Col>
@@ -45,13 +45,13 @@ const Footer = () => {
               <Col md={3} className="mb-3 mb-md-0">
                 <h5 className="mb-3 text-custom text-start">Contact</h5>
                 <p className="mb-1 text-custom text-start">
-                  <i className="bi bi-geo-alt-fill me-2"></i> 123 Cafe Street
+                  <i className="bi bi-geo-alt-fill me-2"></i> #213 Don Fabian Street Brgy Commonwealth, Quezon City, Philippines
                 </p>
                 <p className="mb-1 text-custom text-start">
-                  <i className="bi bi-telephone-fill me-2"></i> (123) 456-7890
+                  <i className="bi bi-telephone-fill me-2"></i> 0961 687 2463
                 </p>
-                <p className="mb-0 text-custom text-start">
-                  <i className="bi bi-envelope-fill me-2"></i> info@bleubeancafe.com
+                <p className="mb-0 text-custom text-start d-flex align-items-center">
+                  <i className="bi bi-envelope-fill me-2"></i> bleubeancafe.ph@gmail.com
                 </p>
               </Col>
 
