@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Container } from "react-bootstrap";
 import { FaChevronDown, FaBell, FaSignOutAlt, FaBoxOpen, FaCheckCircle, FaSpinner, FaTruck, FaFilter, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTimesCircle, FaTruckPickup, FaTruckMoving, FaUndo, FaAngleDoubleLeft, FaAngleLeft, FaAngleRight, FaAngleDoubleRight } from "react-icons/fa";
 import { Card, Form } from "react-bootstrap";
@@ -8,9 +8,10 @@ import "./deliverymanagement.css";
 
 function DeliveryManagement() {
   const userRole = "Admin";
-  const [searchParams] = React.useState(() => new URLSearchParams(window.location.search));
+  const [searchParams] = useState(() => new URLSearchParams(window.location.search));
   const [authToken, setAuthToken] = useState(null);
   const [userName, setUserName] = useState("Loading...");
+  const [error, setError] = useState(null);
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -24,56 +25,62 @@ function DeliveryManagement() {
   const [showChangeRiderDropdown, setShowChangeRiderDropdown] = useState({});
 
   const [riders, setRiders] = useState([]);
-
-  // 💡 NEW: State for pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const ordersPerPage = 12; // 💡 NEW: Constant for orders per page
+  const ordersPerPage = 12;
 
-  // 💡 NEW: Local state for rider assignments to persist across fetches and navigation
   const [localAssignments, setLocalAssignments] = useState(() => {
     const stored = localStorage.getItem("riderAssignments");
     return stored ? JSON.parse(stored) : {};
   });
 
+  // Optimized data fetching with parallel requests
+  const fetchInitialData = useCallback(async () => {
+    if (!authToken) return;
+    setError(null);
 
+    try {
+      const [ordersResponse, ridersResponse, pendingResponse] = await Promise.all([
+        fetch("http://localhost:7004/delivery/admin/delivery/orders", {
+          headers: { Authorization: `Bearer ${authToken}` },
+        }),
+        fetch("http://localhost:7001/delivery/riders", {
+          headers: { Authorization: `Bearer ${authToken}` },
+        }),
+        fetch("http://localhost:7004/cart/admin/orders/pending", {
+          headers: { Authorization: `Bearer ${authToken}` },
+        })
+      ]);
+
+      if (!ordersResponse.ok || !ridersResponse.ok || !pendingResponse.ok) {
+        throw new Error('Failed to fetch data');
+      }
+
+      const [ordersData, ridersData, pendingData] = await Promise.all([
+        ordersResponse.json(),
+        ridersResponse.json(),
+        pendingResponse.json()
+      ]);
+      const ordersWithAssignments = ordersData.map(order => ({
+        ...order,
+        assignedRider: localAssignments[order.id] ?? order.assignedRider ?? null
+      }));
+      setOrders(ordersWithAssignments);
+      setRiders(Array.isArray(ridersData) ? ridersData : []);
+      setPendingOrdersCount(Array.isArray(pendingData) ? pendingData.length : 0);
+    } catch (err) {
+      console.error('Error fetching data:', err);
+      setError('Failed to load data. Please refresh the page.');
+    }
+  }, [authToken, localAssignments]);
 
   useEffect(() => {
     if (!authToken) return;
-
-    const fetchOrders = async () => {
-      try {
-        const response = await fetch("http://localhost:7004/delivery/admin/delivery/orders", {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        console.log("Fetched orders:", data); 
-
-        const ordersWithAssignments = data.map(order => ({
-          ...order,
-          assignedRider: localAssignments[order.id] ?? order.assignedRider ?? null
-        }));
-
-        setOrders(ordersWithAssignments);
-        setCurrentPage(1); // 💡 NEW: Reset to page 1 on new data fetch
-      } catch (error) {
-        console.error("Failed to fetch delivery orders:", error);
-      }
-    };
-
-    fetchOrders();
-
-    // Optional: auto-refresh every 30s
-    const interval = setInterval(fetchOrders, 30000);
+    // initial fetch
+    fetchInitialData();
+    // periodic refresh every 10 seconds
+    const interval = setInterval(fetchInitialData, 10000);
     return () => clearInterval(interval);
-
-  }, [authToken]);
+  }, [authToken, fetchInitialData]);
 
   useEffect(() => {
     const tokenFromUrl = searchParams.get('authorization');
@@ -316,37 +323,55 @@ function DeliveryManagement() {
   };
 
   
-  const filteredOrders = orders
-    .filter(order => (statusFilter === "all" || order.currentStatus === statusFilter))
-    .filter(order => (riderFilter === "all" || order.assignedRider === riderFilter));
+  // Memoized filtered orders and pagination calculations
+  const { filteredOrders, totalPages, currentOrders, indexOfFirstOrder, indexOfLastOrder } = useMemo(() => {
+    const filtered = orders
+      .filter(order => (statusFilter === "all" || order.currentStatus === statusFilter))
+      .filter(order => (riderFilter === "all" || order.assignedRider === riderFilter));
 
-  // Pagination logic
-  const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
-  const indexOfLastOrder = currentPage * ordersPerPage;
-  const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;
-  const currentOrders = filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder);
+    const total = Math.ceil(filtered.length / ordersPerPage);
+    const lastOrderIndex = currentPage * ordersPerPage;
+    const firstOrderIndex = lastOrderIndex - ordersPerPage;
+    const current = filtered.slice(firstOrderIndex, lastOrderIndex);
 
-  const paginate = (pageNumber) => {
+    return {
+      filteredOrders: filtered,
+      totalPages: total,
+      currentOrders: current,
+      indexOfFirstOrder: firstOrderIndex,
+      indexOfLastOrder: lastOrderIndex
+    };
+  }, [orders, statusFilter, riderFilter, currentPage, ordersPerPage]);
+
+  // Optimized pagination handlers with useCallback
+  const paginate = useCallback((pageNumber) => {
     if (pageNumber >= 1 && pageNumber <= totalPages) {
       setCurrentPage(pageNumber);
     }
-  };
+  }, [totalPages]);
 
-  const handlePrevPage = () => {
-    if (currentPage > 1) setCurrentPage(currentPage - 1);
-  };
+  const handlePrevPage = useCallback(() => {
+    if (currentPage > 1) setCurrentPage(prev => prev - 1);
+  }, [currentPage]);
 
-  const handleNextPage = () => {
-    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-  };
+  const handleNextPage = useCallback(() => {
+    if (currentPage < totalPages) setCurrentPage(prev => prev + 1);
+  }, [currentPage, totalPages]);
 
-  const handleFirstPage = () => {
-    setCurrentPage(1);
-  };
+  const handleFirstPage = useCallback(() => setCurrentPage(1), []);
+  const handleLastPage = useCallback(() => setCurrentPage(totalPages), [totalPages]);
 
-  const handleLastPage = () => {
-    setCurrentPage(totalPages);
-  };
+  if (error) {
+    return (
+      <div className="error-message">
+        <FaTimesCircle size={40} color="#dc3545" />
+        <p>{error}</p>
+        <button onClick={fetchInitialData} className="retry-button">
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="d-flex" style={{ height: "100vh", backgroundColor: "#edf7f9" }}>
