@@ -88,7 +88,7 @@ const CheckoutPage = () => {
   const calculateTotal = () => {
     const subtotal = cartItems.reduce((acc, item) => {
       const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
-      return acc + (item.ProductPrice + addonSum) * item.quantity;
+      return acc + (item.price + addonSum) * item.quantity;
     }, 0);
     const deliveryFee = orderType === 'Delivery' ? 50 : 0;
     return subtotal + deliveryFee;
@@ -103,18 +103,18 @@ const confirmPayment = async (saved) => {
   const { cartItems, orderType, paymentMethod, userData: savedUserData, deliveryNotes, reference_number } = saved;
   const subtotal = cartItems.reduce((acc, item) => {
     const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
-    return acc + (item.ProductPrice + addonSum) * item.quantity;
+    return acc + (item.price + addonSum) * item.quantity;
   }, 0);
   const deliveryFee = orderType === "Delivery" ? 50 : 0;
   const total = subtotal + deliveryFee;
 
   const cartPayload = cartItems.map(item => ({
     product_id: item.product_id,
-    product_name: item.ProductName,
-    product_type: item.ProductType || '',
-    product_category: item.ProductCategory || '',
+    product_name: item.product_name,
+    product_type: item.product_type || '',
+    product_category: item.product_category || '',
     quantity: item.quantity,
-    price: item.ProductPrice,
+    price: item.price,
     addons: item.addons ? item.addons.map(addon => ({
       addon_id: addon.addon_id || addon.AddOnID || 0,
       addon_name: addon.addon_name || addon.AddOnName || addon.name,
@@ -171,6 +171,10 @@ const confirmPayment = async (saved) => {
       console.log("POS Sale ID:", result.pos_sale_id);
       console.log("Status: Order saved to both OOS and POS as PENDING");
 
+      // Clear the cart immediately after successful order
+      await clearCart();
+      localStorage.removeItem("pendingOrderData");
+
       Swal.fire({
         icon: 'success',
         title: 'Success',
@@ -181,10 +185,8 @@ const confirmPayment = async (saved) => {
           </p>
         `,
       }).then(() => {
-        clearCart();
         navigate("/profile/orderhistory");
       });
-      localStorage.removeItem("pendingOrderData");
     } else {
       console.error("❌ Backend Error:");
 
@@ -235,7 +237,7 @@ const confirmPayment = async (saved) => {
   const deliveryNotes = document.getElementById("deliveryNotes")?.value || "";
   const subtotal = cartItems.reduce((acc, item) => {
     const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
-    return acc + (item.ProductPrice + addonSum) * item.quantity;
+    return acc + (item.price + addonSum) * item.quantity;
   }, 0);
   const deliveryFee = orderType === "Delivery" ? 50 : 0;
   const total = subtotal + deliveryFee;
@@ -288,9 +290,9 @@ const confirmPayment = async (saved) => {
       const addonList = item.addons?.map(addon =>
         `${addon.addon_name || addon.AddOnName || addon.name} (₱${addon.price || addon.Price || 0})`
       ) || [];
-      const basePrice = item.ProductPrice + (item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0);
+      const basePrice = item.price + (item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0);
       return {
-        name: item.ProductName,
+        name: item.product_name,
         quantity: item.quantity,
         price: basePrice,
         addons: addonList
@@ -312,6 +314,7 @@ const confirmPayment = async (saved) => {
       });
       const data = await response.json();
       if (data.checkout_url) {
+        // Don't clear cart yet - only clear after successful payment
         window.location.href = data.checkout_url;
       } else {
         Swal.fire({
@@ -358,7 +361,7 @@ const confirmPayment = async (saved) => {
                 cartItems.map((item, index) => (
                   <tr key={index}>
                     <td>
-                      {item.ProductName}
+                      {item.product_name}
                       {item.addons && item.addons.length > 0 && (
                         <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.85em", color: "#666" }}>
                           {item.addons.map((addon, i) => (
@@ -367,12 +370,12 @@ const confirmPayment = async (saved) => {
                         </ul>
                       )}
                     </td>
-                    <td>{item.ProductType || '-'}</td>
-                    <td>{item.ProductCategory || '-'}</td>
+                    <td>{item.product_type || '-'}</td>
+                    <td>{item.product_category || '-'}</td>
                     <td>{item.quantity}</td>
-                    <td>₱{item.ProductPrice.toFixed(2)}</td>
+                    <td>₱{item.price.toFixed(2)}</td>
                     <td>
-                      ₱{((item.ProductPrice + (item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0)) * item.quantity).toFixed(2)}
+                      ₱{((item.price + (item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0)) * item.quantity).toFixed(2)}
                     </td>
                     <td>{orderType}</td>
                     <td>{paymentMethod}</td>
@@ -390,7 +393,7 @@ const confirmPayment = async (saved) => {
           ) : (
             cartItems.map((item, index) => (
               <div key={index} className="checkout-item-card-mobile">
-                <div className="fw-bold">{item.ProductName}</div>
+                <div className="fw-bold">{item.product_name}</div>
                 {item.addons && item.addons.length > 0 && (
                   <ul className="checkout-addons-mobile">
                     {item.addons.map((addon, i) => (
@@ -402,7 +405,7 @@ const confirmPayment = async (saved) => {
                 )}
                 <div className="checkout-details-mobile">
                   <span>Qty: {item.quantity}</span>
-                  <span>Total: ₱{((item.ProductPrice + (item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0)) * item.quantity).toFixed(2)}</span>
+                  <span>Total: ₱{((item.price + (item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0)) * item.quantity).toFixed(2)}</span>
                 </div>
               </div>
             ))

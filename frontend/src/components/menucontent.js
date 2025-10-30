@@ -349,22 +349,19 @@ const MenuContent = () => {
       return;
     }
 
-    addToContextCart({
-      product_id: item.ProductID,
-      ProductName: item.ProductName,
-      ProductPrice: item.ProductPrice,
-      ProductImage: item.ProductImage,
-      ProductType: item.ProductTypeName,
-      ProductCategory: item.ProductCategory,
-      orderType: "Pick Up",
-      // 3. Include notes and add-ons in the cart item
-      orderNotes: notes,
-      addOns: addOns,
-      MerchandiseQuantity: item.MerchandiseQuantity,
-    });
+    await addToContextCart(
+      {
+        product_id: item.ProductID ?? 0,
+        product_name: item.ProductName ?? '',
+        product_type: item.ProductTypeName ?? '',
+        product_category: item.ProductCategory ?? '',
+        price: item.ProductPrice ?? 0,
+        product_image: item.ProductImage ?? null,
+        max_quantity: maxQty,
+      },
+      addOns
+    );
 
-    const finalPrice = (item.ProductPrice ?? 0) + addOnsTotal;
-    toast.success(`${item.ProductName} added to cart! Total: ₱${finalPrice.toFixed(2)}`);
     // Clear temporary states after adding to cart
     setOrderNotes('');
     setSelectedAddOns([]);

@@ -8,7 +8,7 @@ import os
 sys.path.append(os.path.dirname(__file__))
 from routers import cart, delivery
 from database import get_db_connection
-
+from routers import cart_router 
 # Import the auto-cancel function from cart router
 from routers.cart import auto_cancel_expired_oos_orders
 
@@ -68,8 +68,9 @@ app.add_middleware(
 )
 
 # Include cart routes
-app.include_router(cart.router, prefix="/cart", tags=["Cart"])
+app.include_router(cart.router, prefix="/cart", tags=["Orders"])
 app.include_router(delivery.router, prefix="/delivery")
+app.include_router(cart_router.router)
 
 # Health check
 @app.get("/")
