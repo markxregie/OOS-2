@@ -5,6 +5,7 @@ import { Card, Form } from "react-bootstrap";
 import riderImage from "../../assets/rider.jpg";
 import Swal from "sweetalert2";
 import "./deliverymanagement.css";
+import adminImage from "../../assets/administrator.png";
 
 function DeliveryManagement() {
   const userRole = "Admin";
@@ -12,6 +13,7 @@ function DeliveryManagement() {
   const [authToken, setAuthToken] = useState(null);
   const [userName, setUserName] = useState("Loading...");
   const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -37,6 +39,7 @@ function DeliveryManagement() {
   const fetchInitialData = useCallback(async () => {
     if (!authToken) return;
     setError(null);
+    setIsLoading(true);
 
     try {
       const [ordersResponse, ridersResponse, pendingResponse] = await Promise.all([
@@ -70,6 +73,8 @@ function DeliveryManagement() {
     } catch (err) {
       console.error('Error fetching data:', err);
       setError('Failed to load data. Please refresh the page.');
+    } finally {
+      setIsLoading(false);
     }
   }, [authToken, localAssignments]);
 
@@ -376,20 +381,34 @@ function DeliveryManagement() {
   return (
     <div className="d-flex" style={{ height: "100vh", backgroundColor: "#edf7f9" }}>
       <Container fluid className="p-4 main-content" style={{ marginLeft: "0px", width: "calc(100% - 0px)" }}>
-        <header className="manage-header">
+        {isLoading ? (
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center', 
+            minHeight: '60vh',
+            flexDirection: 'column',
+            gap: '1rem'
+          }}>
+            <FaSpinner className="fa-spin" style={{ fontSize: '3rem', color: '#4b929d' }} />
+            <p style={{ color: '#4b929d', fontSize: '1.2rem' }}>Loading data...</p>
+          </div>
+        ) : (
+          <div>
+            <header className="manage-header">
           <div className="header-left">
             <h2 className="page-title">Delivery Management</h2>
           </div>
           <div className="header-right">
             <div className="header-date">{currentDateFormatted}</div>
-            <div className="header-profile">
-              <div className="profile-pic"></div>
+             <div className="header-profile">
+                 <img src={adminImage} alt="Admin" className="profile-pic" />
               <div className="profile-info">
                 <div className="profile-role">Hi! I'm {userRole}</div>
-                <div className="profile-name">{userName}</div>
+                <div className="profile-name">Admin OOS</div>
               </div>
               <div className="dropdown-icon" onClick={() => setDropdownOpen(!dropdownOpen)}><FaChevronDown /></div>
-              <div className="bell-icon"><FaBell className="bell-outline" /></div>
+              
               {dropdownOpen && (
                 <div className="profile-dropdown" style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "white", border: "1px solid #ccc", borderRadius: "4px", boxShadow: "0 2px 8px rgba(0,0,0,0.15)", zIndex: 1000, width: "150px" }}>
                   <ul style={{ listStyle: "none", margin: 0, padding: "8px 0" }}>
@@ -673,6 +692,8 @@ function DeliveryManagement() {
                 <FaAngleDoubleRight />
               </button>
             </div>
+          </div>
+        )}
           </div>
         )}
       </Container>

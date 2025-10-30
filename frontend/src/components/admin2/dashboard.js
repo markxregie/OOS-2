@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import coffeeImage from "../../assets/coffee.jpg";
 import "../admin2/dashboard.css";
+import adminImage from "../../assets/administrator.png";
 import { FaSignOutAlt, FaUndo } from "react-icons/fa";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -351,18 +352,16 @@ const Dashboard = () => {
           </div>
           <div className="header-right">
             <div className="header-date">{currentDate}</div>
-            <div className="header-profile">
-              <div className="profile-pic" />
+             <div className="header-profile">
+                 <img src={adminImage} alt="Admin" className="profile-pic" />
               <div className="profile-info">
                 <div className="profile-role">Hi! I'm {userRole}</div>
-                <div className="profile-name">{userName}</div>
+                <div className="profile-name">Admin OOS</div>
               </div>
               <div className="dropdown-icon" onClick={toggleDropdown}>
                 <FaChevronDown />
               </div>
-              <div className="bell-icon">
-                <FaBell className="bell-outline" />
-              </div>
+
               {isDropdownOpen && (
                 <div className="profile-dropdown" style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "white", border: "1px solid #ccc", borderRadius: "4px", boxShadow: "0 2px 8px rgba(0,0,0,0.15)", zIndex: 1000, width: "150px" }}>
                   <ul style={{ listStyle: "none", margin: 0, padding: "8px 0" }}>

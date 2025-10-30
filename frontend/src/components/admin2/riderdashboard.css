@@ -5,6 +5,17 @@
   background-color: #f0f2f5;
   font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
   color: #333;
+  margin-left: -0.5rem ;
+}
+
+/* Spinner Animation */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.fa-spin {
+  animation: spin 1s linear infinite;
 }
 
 /* Sidebar */

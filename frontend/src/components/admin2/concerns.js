@@ -3,7 +3,7 @@ import { Container, Row, Col, Table, Badge, Nav } from 'react-bootstrap';
 import { FaChevronDown, FaBell, FaSignOutAlt, FaUndo, FaEye, FaTrashAlt, FaTag, FaEnvelope, FaUser, FaClock, FaCommentDots, FaAngleLeft, FaAngleRight, FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa"; // Added new icons for modal content
 import Swal from 'sweetalert2';
 import './concerns.css'; // Assuming this file contains the necessary styles for header, etc.
-
+import adminImage from "../../assets/administrator.png";
 const Concerns = () => {
   const userRole = "Admin";
   const userName = "Lim Alcovendas";
@@ -249,13 +249,14 @@ const Concerns = () => {
           <div className="header-right">
             <div className="header-date">{currentDateFormatted}</div>
             <div className="header-profile">
-              <div className="profile-pic"></div>
+                          <img src={adminImage} alt="Admin" className="profile-pic" />
+              
               <div className="profile-info">
                 <div className="profile-role">Hi! I'm {userRole}</div>
                 <div className="profile-name">Admin OOS</div>
               </div>
               <div className="dropdown-icon" onClick={() => setDropdownOpen(!dropdownOpen)}><FaChevronDown /></div>
-              <div className="bell-icon"><FaBell className="bell-outline" /></div>
+              
               {dropdownOpen && (
                 <div className="profile-dropdown" style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "white", border: "1px solid #ccc", borderRadius: "4px", boxShadow: "0 2px 8px rgba(0,0,0,0.15)", zIndex: 1000, width: "150px" }}>
                   <ul style={{ listStyle: "none", margin: 0, padding: "8px 0" }}>
