@@ -151,13 +151,25 @@ async def add_to_cart(request: AddCartItemRequest, token: str = Depends(oauth2_s
 
         # Check if same product with same add-ons already exists
         await cursor.execute("""
-            SELECT ci.CartItemID, ci.Quantity
+            SELECT ci.CartItemID, ci.Quantity, 
+                   STUFF((SELECT ',' + ca.AddonName
+                   FROM cartItemAddons ca 
+                   WHERE ca.CartItemID = ci.CartItemID 
+                   ORDER BY ca.AddonName
+                   FOR XML PATH('')), 1, 1, '') as AddonList
             FROM cartItems ci
-            LEFT JOIN cartItemAddons ca ON ci.CartItemID = ca.CartItemID
             WHERE ci.Username = ? AND ci.ProductID = ? AND ci.ProductType = ? AND ci.ProductCategory = ?
-            GROUP BY ci.CartItemID, ci.Quantity
-            HAVING STRING_AGG(ca.AddonName, ',') = ?
-        """, (username, request.product_id, request.product_type, request.product_category, addon_signature))
+        """, (username, request.product_id, request.product_type, request.product_category))
+        
+        cart_items = await cursor.fetchall()
+        existing = None
+        
+        # Compare addon signatures
+        for item in cart_items:
+            cart_item_id, current_qty, item_addons = item
+            if (item_addons or '') == addon_signature:
+                existing = (cart_item_id, current_qty)
+                break
         existing = await cursor.fetchone()
 
         if existing:

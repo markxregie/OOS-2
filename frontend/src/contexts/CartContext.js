@@ -78,7 +78,16 @@ export const CartProvider = ({ children }) => {
         });
         if (!res.ok) throw new Error("Failed to load cart");
         const data = await res.json();
-        setCartItems(data);
+        // Sort addons for consistent display
+        const processedData = data.map(item => ({
+          ...item,
+          addons: item.addons ? [...item.addons].sort((a, b) => {
+            const nameA = (a.addon_name || a.AddOnName || a.name || '').toLowerCase();
+            const nameB = (b.addon_name || b.AddOnName || b.name || '').toLowerCase();
+            return nameA.localeCompare(nameB);
+          }) : []
+        }));
+        setCartItems(processedData);
       } catch (err) {
         console.error("Error loading cart:", err);
       }
@@ -88,20 +97,45 @@ export const CartProvider = ({ children }) => {
 
 
   // --- Add item to cart ---
-  const addToCart = async (product, addons = []) => {
+  const addToCart = async (product, addons = [], quantity = 1) => {
     if (!token) {
       toast.error("Please log in to add to cart");
       return;
     }
 
     const normalized = normalizeProductData(product);
+    
+    // Sort and normalize addons for consistent comparison
+    const sortedAddons = [...addons].sort((a, b) => {
+      const nameA = (a.addon_name || a.AddOnName || a.name || '').toLowerCase();
+      const nameB = (b.addon_name || b.AddOnName || b.name || '').toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+
+    // Find if the exact same product with same addons exists in cart
+    const existingItem = cartItems.find(item => {
+      if (item.product_id !== normalized.product_id) return false;
+      if (item.addons?.length !== sortedAddons.length) return false;
+      
+      const itemAddons = [...(item.addons || [])].sort((a, b) => {
+        const nameA = (a.addon_name || a.AddOnName || a.name || '').toLowerCase();
+        const nameB = (b.addon_name || b.AddOnName || b.name || '').toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
+      
+      return itemAddons.every((addon, index) => {
+        const normalizedAddon = sortedAddons[index];
+        return (addon.addon_name || addon.AddOnName || addon.name).toLowerCase() === 
+               (normalizedAddon.addon_name || normalizedAddon.AddOnName || normalizedAddon.name).toLowerCase();
+      });
+    });
 
     const payload = {
       product_id: parseInt(normalized.product_id, 10),
       product_name: normalized.product_name,
       product_type: normalized.product_type,
       product_category: normalized.product_category,
-      quantity: 1,
+      quantity: quantity,
       price: parseFloat(normalized.price),
       product_image: normalized.product_image,
       max_quantity: parseInt(
@@ -111,7 +145,7 @@ export const CartProvider = ({ children }) => {
         0,
         10
       ),
-      addons: (addons || []).map((a) => ({
+      addons: sortedAddons.map((a) => ({
         addon_name: a.addon_name || a.AddOnName || a.name,
         price: parseFloat(a.price || a.Price || 0),
         addon_id: a.addon_id || a.AddOnID ? parseInt(a.addon_id || a.AddOnID, 10) : null,
@@ -119,17 +153,35 @@ export const CartProvider = ({ children }) => {
     };
 
     try {
-      const res = await fetch(`${CART_API_URL}/add`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      if (existingItem) {
+        // If the item exists, update its quantity instead
+        const updatedQuantity = existingItem.quantity + quantity;
+        const updateRes = await fetch(`${CART_API_URL}/update/${existingItem.cart_item_id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ quantity: updatedQuantity }),
+        });
+        
+        if (!updateRes.ok) throw new Error("Failed to update item quantity");
+        toast.success("Cart updated successfully!");
+      } else {
+        // If it's a new item, add it to cart
+        const res = await fetch(`${CART_API_URL}/add`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        });
 
-      if (!res.ok) throw new Error("Failed to add item");
-      toast.success("Item added to cart!");
+        if (!res.ok) throw new Error("Failed to add item");
+        toast.success("Item added to cart!");
+      }
+      
       await reloadCart();
     } catch (err) {
       console.error("Error adding to cart:", err);
