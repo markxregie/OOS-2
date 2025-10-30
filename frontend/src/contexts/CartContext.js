@@ -32,6 +32,13 @@ export const CartProvider = ({ children }) => {
     product_category: product.product_category || '',
     price: product.price || 0,
     product_image: product.product_image,
+    max_quantity: parseInt(
+      product.MerchandiseQuantity ||
+      product.max_quantity ||
+      product.stock ||
+      0,
+      10
+    ),
   });
 
   // --- Fetch username from localStorage or auth service ---
@@ -104,7 +111,7 @@ export const CartProvider = ({ children }) => {
     }
 
     const normalized = normalizeProductData(product);
-    
+
     // Sort and normalize addons for consistent comparison
     const sortedAddons = [...addons].sort((a, b) => {
       const nameA = (a.addon_name || a.AddOnName || a.name || '').toLowerCase();
@@ -112,20 +119,31 @@ export const CartProvider = ({ children }) => {
       return nameA.localeCompare(nameB);
     });
 
+    // Calculate total quantity of this product in cart (across all variants)
+    const totalQuantity = cartItems.reduce((sum, item) => {
+      return item.product_id === normalized.product_id ? sum + item.quantity : sum;
+    }, 0);
+
+    // Check maximum quantity (only if max_quantity > 0, else unlimited)
+    if (normalized.max_quantity > 0 && totalQuantity + quantity > normalized.max_quantity) {
+      toast.error(`Cannot add more. Max quantity is ${normalized.max_quantity}.`);
+      return;
+    }
+
     // Find if the exact same product with same addons exists in cart
     const existingItem = cartItems.find(item => {
       if (item.product_id !== normalized.product_id) return false;
       if (item.addons?.length !== sortedAddons.length) return false;
-      
+
       const itemAddons = [...(item.addons || [])].sort((a, b) => {
         const nameA = (a.addon_name || a.AddOnName || a.name || '').toLowerCase();
         const nameB = (b.addon_name || b.AddOnName || b.name || '').toLowerCase();
         return nameA.localeCompare(nameB);
       });
-      
+
       return itemAddons.every((addon, index) => {
         const normalizedAddon = sortedAddons[index];
-        return (addon.addon_name || addon.AddOnName || addon.name).toLowerCase() === 
+        return (addon.addon_name || addon.AddOnName || addon.name).toLowerCase() ===
                (normalizedAddon.addon_name || normalizedAddon.AddOnName || normalizedAddon.name).toLowerCase();
       });
     });
@@ -138,13 +156,7 @@ export const CartProvider = ({ children }) => {
       quantity: quantity,
       price: parseFloat(normalized.price),
       product_image: normalized.product_image,
-      max_quantity: parseInt(
-        product.MerchandiseQuantity ||
-        product.max_quantity ||
-        product.stock ||
-        0,
-        10
-      ),
+      max_quantity: normalized.max_quantity,
       addons: sortedAddons.map((a) => ({
         addon_name: a.addon_name || a.AddOnName || a.name,
         price: parseFloat(a.price || a.Price || 0),
@@ -167,6 +179,7 @@ export const CartProvider = ({ children }) => {
         
         if (!updateRes.ok) throw new Error("Failed to update item quantity");
         toast.success("Cart updated successfully!");
+        await reloadCart();
       } else {
         // If it's a new item, add it to cart
         const res = await fetch(`${CART_API_URL}/add`, {
@@ -177,12 +190,16 @@ export const CartProvider = ({ children }) => {
           },
           body: JSON.stringify(payload),
         });
-
-        if (!res.ok) throw new Error("Failed to add item");
+        const data = await res.json();
+        if (!res.ok) {
+          // Show backend error message if available
+          const message = data?.detail || "Failed to add to cart";
+          toast.error(message);
+          return;
+        }
         toast.success("Item added to cart!");
+        await reloadCart();
       }
-      
-      await reloadCart();
     } catch (err) {
       console.error("Error adding to cart:", err);
       toast.error("Failed to add to cart");

@@ -145,52 +145,79 @@ async def add_to_cart(request: AddCartItemRequest, token: str = Depends(oauth2_s
     conn = await get_db_connection()
     cursor = await conn.cursor()
     try:
-        # Normalize add-on names for matching
+        # --- Step 1: total quantity across ALL variants of this product
+        await cursor.execute("""
+            SELECT COALESCE(SUM(Quantity), 0)
+            FROM cartItems
+            WHERE Username = ? AND ProductID = ?
+        """, (username, request.product_id))
+        total_in_cart = (await cursor.fetchone())[0]
+
+        # if max reached already -> block immediately
+        if request.max_quantity > 0 and total_in_cart >= request.max_quantity:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot add more than {request.max_quantity} of this product to cart (including all addon variations)."
+            )
+
+        # --- Step 2: Normalize addon signature for variant match
         addon_names = sorted([a["addon_name"] for a in (request.addons or [])])
         addon_signature = ",".join(addon_names) if addon_names else ""
 
-        # Check if same product with same add-ons already exists
+        # --- Step 3: Find if same product+addon combo already exists
         await cursor.execute("""
-            SELECT ci.CartItemID, ci.Quantity, 
+            SELECT ci.CartItemID, ci.Quantity,
                    STUFF((SELECT ',' + ca.AddonName
-                   FROM cartItemAddons ca 
-                   WHERE ca.CartItemID = ci.CartItemID 
-                   ORDER BY ca.AddonName
-                   FOR XML PATH('')), 1, 1, '') as AddonList
+                          FROM cartItemAddons ca
+                          WHERE ca.CartItemID = ci.CartItemID
+                          ORDER BY ca.AddonName
+                          FOR XML PATH('')), 1, 1, '') AS AddonList
             FROM cartItems ci
-            WHERE ci.Username = ? AND ci.ProductID = ? AND ci.ProductType = ? AND ci.ProductCategory = ?
-        """, (username, request.product_id, request.product_type, request.product_category))
-        
-        cart_items = await cursor.fetchall()
-        existing = None
-        
-        # Compare addon signatures
-        for item in cart_items:
-            cart_item_id, current_qty, item_addons = item
-            if (item_addons or '') == addon_signature:
-                existing = (cart_item_id, current_qty)
-                break
-        existing = await cursor.fetchone()
+            WHERE ci.Username = ? AND ci.ProductID = ?
+        """, (username, request.product_id))
+        rows = await cursor.fetchall()
 
+        existing = None
+        for row in rows:
+            cart_item_id, qty, addons = row
+            if (addons or "") == addon_signature:
+                existing = (cart_item_id, qty)
+                break
+
+        # --- Step 4: enforce max limit including this add
+        if total_in_cart + request.quantity > request.max_quantity:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot add more than {request.max_quantity} of this product to cart (including all addon variations)."
+            )
+
+        # --- Step 5: Update or insert
         if existing:
             cart_item_id, current_qty = existing
             new_qty = current_qty + request.quantity
-            await cursor.execute("""
-                UPDATE cartItems SET Quantity = ? WHERE CartItemID = ?
-            """, (new_qty, cart_item_id))
+            if new_qty + (total_in_cart - current_qty) > request.max_quantity:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot add more than {request.max_quantity} of this product to cart (including all addon variations)."
+                )
+            await cursor.execute(
+                "UPDATE cartItems SET Quantity = ? WHERE CartItemID = ?",
+                (new_qty, cart_item_id)
+            )
         else:
-            # Insert new cart item
             await cursor.execute("""
-                INSERT INTO cartItems (Username, ProductID, ProductName, ProductType, ProductCategory,
-                                       Quantity, Price, ProductImage, MaxQuantity)
+                INSERT INTO cartItems (Username, ProductID, ProductName, ProductType,
+                                       ProductCategory, Quantity, Price, ProductImage, MaxQuantity)
                 OUTPUT INSERTED.CartItemID
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (username, request.product_id, request.product_name, request.product_type,
-                  request.product_category, request.quantity, request.price, request.product_image, request.max_quantity))
-            row = await cursor.fetchone()
-            cart_item_id = row[0]
+            """, (
+                username, request.product_id, request.product_name,
+                request.product_type, request.product_category,
+                request.quantity, request.price, request.product_image,
+                request.max_quantity
+            ))
+            cart_item_id = (await cursor.fetchone())[0]
 
-            # Insert add-ons
             for addon in (request.addons or []):
                 await cursor.execute("""
                     INSERT INTO cartItemAddons (CartItemID, AddonName, Price, AddonID)
@@ -198,13 +225,18 @@ async def add_to_cart(request: AddCartItemRequest, token: str = Depends(oauth2_s
                 """, (cart_item_id, addon["addon_name"], addon["price"], addon.get("addon_id")))
 
         await conn.commit()
+        logger.info(f"[Cart Debug] user={username}, product={request.product_id}, total_in_cart={total_in_cart}, after_add={total_in_cart + request.quantity}, max={request.max_quantity}")
         return {"message": "Item added to cart", "cart_item_id": cart_item_id}
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error adding to cart: {e}")
         raise HTTPException(status_code=500, detail="Failed to add item to cart")
     finally:
         await cursor.close()
         await conn.close()
+
 
 
 @router.put("/update/{cart_item_id}")

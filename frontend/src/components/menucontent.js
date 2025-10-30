@@ -357,7 +357,7 @@ const MenuContent = () => {
         product_category: item.ProductCategory ?? '',
         price: item.ProductPrice ?? 0,
         product_image: item.ProductImage ?? null,
-        max_quantity: item.MerchandiseQuantity ?? 0,
+        max_quantity: maxQty,
       },
       addOns
     );
