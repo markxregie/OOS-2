@@ -11,17 +11,23 @@ import L from 'leaflet';
 import Swal from 'sweetalert2';
 import 'leaflet/dist/leaflet.css';
 
+const getImageUrl = (imagePath) => {
+  if (!imagePath) return "https://via.placeholder.com/60";
+  if (imagePath.startsWith("http")) return imagePath;
+  return `http://localhost:8001${imagePath}`;
+};
+
 // Modal component definition
 const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderTypeMain, handleCheckoutClick, setOrderTypeMain }) => {
     // Helper to calculate total (copied from main component)
-    const calculateTotal = (item) => {
-        const basePrice = item.ProductPrice || 0;
+  const calculateTotal = (item) => {
+    const basePrice = item.price || 0;
         const addonsTotal = (item.addons || []).reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0);
         return (basePrice + addonsTotal) * item.quantity;
     };
 
     const subtotal = selectedCartItems.reduce((acc, item) => {
-        const basePrice = item.ProductPrice || 0;
+        const basePrice = item.price || 0;
         const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || addon.Price || 0), 0);
         return acc + (basePrice + addonsTotal) * item.quantity;
     }, 0);
@@ -73,7 +79,7 @@ const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderT
                                 {selectedCartItems.map((item, i) => (
                                     <tr key={i}>
                                         <td style={{ textAlign: 'left', padding: '8px', fontSize: '0.9rem' }}>
-                                            <div className="fw-semibold">{item.ProductName}</div>
+                                            <div className="fw-semibold">{item.product_name}</div>
                                             {/* ADD-ONS INCLUDED */}
                                             {item.addons && item.addons.length > 0 && (
                                                 <ul className="cart-addons mb-0 ps-3">
@@ -86,7 +92,7 @@ const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderT
                                             )}
                                         </td>
                                         <td style={{ textAlign: 'center', padding: '8px', fontSize: '0.9rem' }}>{item.quantity}</td>
-                                        <td style={{ textAlign: 'right', padding: '8px', fontSize: '0.9rem' }}>₱{(item.ProductPrice || 0).toFixed(2)}</td>
+                                        <td style={{ textAlign: 'right', padding: '8px', fontSize: '0.9rem' }}>₱{(item.price || 0).toFixed(2)}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -133,7 +139,7 @@ const Cart = () => {
 
   const PRODUCTS_BASE_URL = "http://127.0.0.1:8001";
 
-  const { cartItems, incrementQuantity, decrementQuantity, removeFromCart, setCartItems } = useContext(CartContext);
+  const { cartItems, updateQuantity, removeFromCart, clearCart } = useContext(CartContext);
 
   const [maxQuantities, setMaxQuantities] = useState({});
   const [showOrderModal, setShowOrderModal] = useState(false);
@@ -149,25 +155,56 @@ const Cart = () => {
     if (!token || cartItems.length === 0) return;
 
     const fetchMaxQuantities = async () => {
-      const headers = { Authorization: `Bearer ${token}` };
-      const results = {};
+      try {
+        const headers = { Authorization: `Bearer ${token}` };
+        const results = {};
 
-      for (const item of cartItems) {
-        if (!item.product_id) continue;
-        try {
-          const res = await fetch(
-            `${PRODUCTS_BASE_URL}/is_products/products/${item.product_id}/max-quantity`,
-            { headers }
-          );
-          if (res.ok) {
-            const data = await res.json();
-            results[item.product_id] = data;
-          }
-        } catch (err) {
-          console.error("Failed to fetch max quantity:", err);
+        // Fetch merchandise data from IMS for merchandise items
+        const merchandiseResponse = await fetch('http://localhost:8002/merchandise/menu', {
+          headers
+        });
+        
+        if (!merchandiseResponse.ok) {
+          throw new Error('Failed to fetch merchandise data');
         }
+        
+        const merchandiseData = await merchandiseResponse.json();
+
+        // Process each cart item
+        for (const item of cartItems) {
+          if (!item.product_id) continue;
+
+          if (item.product_type === "Merchandise") {
+            // For merchandise items, get quantity from IMS
+            const merchandise = merchandiseData.find(m => m.MerchandiseName === item.product_name);
+            if (merchandise) {
+              results[item.product_id] = {
+                maxQuantity: merchandise.MerchandiseQuantity,
+                status: merchandise.Status
+              };
+            }
+          } else {
+            // For non-merchandise items, use existing endpoint
+            try {
+              const res = await fetch(
+                `${PRODUCTS_BASE_URL}/is_products/products/${item.product_id}/max-quantity`,
+                { headers }
+              );
+              if (res.ok) {
+                const data = await res.json();
+                results[item.product_id] = data;
+              }
+            } catch (err) {
+              console.error("Failed to fetch max quantity:", err);
+            }
+          }
+        }
+        
+        setMaxQuantities(results);
+      } catch (error) {
+        console.error('Error fetching quantities:', error);
+        toast.error('Error fetching product quantities');
       }
-      setMaxQuantities(results);
     };
 
     fetchMaxQuantities();
@@ -200,7 +237,7 @@ const Cart = () => {
     if (checked) {
       setSelectedCartItems(prev => [...prev, item]);
     } else {
-      setSelectedCartItems(prev => prev.filter(ci => ci.cartItemId !== item.cartItemId));
+      setSelectedCartItems(prev => prev.filter(ci => ci.cart_item_id !== item.cart_item_id));
     }
   };
 
@@ -212,54 +249,59 @@ const Cart = () => {
     }
   };
 
-  const handleIncrement = (index) => {
-    const item = cartItems[index];
-    const maxQty = item.MerchandiseQuantity ?? maxQuantities[item.product_id]?.maxQuantity ?? 999;
-    const isMerchandise = item.MerchandiseQuantity !== undefined;
-    const isUnavailable = isMerchandise && (maxQty === 0 || item.Status === "Not Available");
+  const handleIncrement = async (item) => {
+    const isMerchandise = item.product_type === "Merchandise";
+
+    // Get max quantity from maxQuantities state for both merchandise and regular products
+    const maxQty = maxQuantities[item.product_id]?.maxQuantity ?? (isMerchandise ? 0 : 999);
+    const status = maxQuantities[item.product_id]?.status;
+
+    const isUnavailable = maxQty === 0 || status === "Not Available";
     if (isUnavailable) {
       toast.error("Item is unavailable.");
       return;
     }
+
     if (item.quantity + 1 > maxQty) {
-      toast.error(`Cannot add more. Max quantity is ${maxQty}.`);
+      toast.error(`Max quantity is ${maxQty}`);
       return;
     }
-    incrementQuantity(item.cartItemId);
 
-    setSelectedCartItems(prevSelected => {
-      return prevSelected.map(selectedItem => {
-        if (selectedItem.cartItemId === item.cartItemId) {
-          return { ...selectedItem, quantity: selectedItem.quantity + 1 };
-        }
-        return selectedItem;
-      });
-    });
+    await updateQuantity(item.cart_item_id, item.quantity + 1);
+
+    setSelectedCartItems((prevSelected) =>
+      prevSelected.map((selectedItem) =>
+        selectedItem.cart_item_id === item.cart_item_id
+          ? { ...selectedItem, quantity: selectedItem.quantity + 1 }
+          : selectedItem
+      )
+    );
   };
 
-  const handleDecrement = (index) => {
-    const item = cartItems[index];
-    decrementQuantity(item.cartItemId);
+  const handleDecrement = async (item) => {
+    if (item.quantity > 1) {
+      await updateQuantity(item.cart_item_id, item.quantity - 1);
 
-    setSelectedCartItems(prevSelected => {
-      return prevSelected.map(selectedItem => {
-        if (selectedItem.cartItemId === item.cartItemId && selectedItem.quantity > 1) {
-          return { ...selectedItem, quantity: selectedItem.quantity - 1 };
-        }
-        return selectedItem;
+      setSelectedCartItems(prevSelected => {
+        return prevSelected.map(selectedItem => {
+          if (selectedItem.cart_item_id === item.cart_item_id) {
+            return { ...selectedItem, quantity: selectedItem.quantity - 1 };
+          }
+          return selectedItem;
+        });
       });
-    });
+    }
   };
 
   const handleRemove = (index) => {
     const item = cartItems[index];
-    removeFromCart(item.cartItemId);
-    setSelectedCartItems(prev => prev.filter(selectedItem => selectedItem.cartItemId !== item.cartItemId));
+    removeFromCart(item.cart_item_id);
+    setSelectedCartItems(prev => prev.filter(selectedItem => selectedItem.cart_item_id !== item.cart_item_id));
   };
 
   const calculateTotal = (item) => {
-    const basePrice = item.ProductPrice || 0;
-    const addonsTotal = (item.addons || []).reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0);
+    const basePrice = item.price || 0;
+    const addonsTotal = (item.addons || []).reduce((sum, ao) => sum + (ao.price || 0), 0);
     return (basePrice + addonsTotal) * item.quantity;
   };
 
@@ -451,7 +493,7 @@ const Cart = () => {
 
   // Calculate total for the floating button preview
   const subtotalForButton = selectedCartItems.reduce((acc, item) => {
-    const basePrice = item.ProductPrice || 0;
+    const basePrice = item.price || 0;
     const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || addon.Price || 0), 0);
     return acc + (basePrice + addonsTotal) * item.quantity;
   }, 0);
@@ -515,19 +557,19 @@ const Cart = () => {
                         <input
                           type="checkbox"
                           onChange={(e) => handleCheckboxChange(item, e.target.checked)}
-                          checked={selectedCartItems.some(ci => ci.cartItemId === item.cartItemId)}
+                          checked={selectedCartItems.some(ci => ci.cart_item_id === item.cart_item_id)}
                         />
                       </td>
                       <td>
                         <div className="d-flex align-items-center">
                           <img
-                            src={item.ProductImage ? (item.ProductImage.startsWith('http') ? item.ProductImage : `http://localhost:8001${item.ProductImage}`) : "https://via.placeholder.com/60"}
-                            alt={item.ProductName}
+                            src={getImageUrl(item.product_image)}
+                            alt={item.product_name}
                             className="img-fluid me-2 rounded"
                             style={{ height: '60px', width: '60px', objectFit: 'cover' }}
                           />
                           <div>
-                            <div className="fw-semibold">{item.ProductName}</div>
+                            <div className="fw-semibold">{item.product_name}</div>
                             {item.addons && item.addons.length > 0 && (
                               <ul className="cart-addons mb-0 ps-3">
                                 {item.addons.map((addon, idx) => (
@@ -540,16 +582,20 @@ const Cart = () => {
                           </div>
                         </div>
                       </td>
-                      <td style={{ verticalAlign: 'middle' }}>{item.ProductType || '-'}</td>
-                      <td style={{ verticalAlign: 'middle' }}>{item.ProductCategory || '-'}</td>
+                      <td style={{ verticalAlign: 'middle' }}>{item.product_type || '-'}</td>
+                      <td style={{ verticalAlign: 'middle' }}>{item.product_category || '-'}</td>
                       <td style={{ textAlign: 'center' }}>
                         <div className="quantity-control">
-                          <button className="btn btn-sm rounded-circle" onClick={() => handleDecrement(i)}>-</button>
+                          <button className="btn btn-sm rounded-circle" onClick={() => handleDecrement(item)}>-</button>
                           <span className="mx-2">{item.quantity}</span>
                           <button
                             className="btn btn-sm rounded-circle"
-                            onClick={() => handleIncrement(i)}
-                            disabled={item.quantity >= (item.MerchandiseQuantity ?? maxQuantities[item.product_id]?.maxQuantity ?? 999) || (item.MerchandiseQuantity !== undefined && (item.MerchandiseQuantity === 0 || item.Status === "Not Available"))}
+                            onClick={() => handleIncrement(item)}
+                            disabled={
+                              item.product_type === "Merchandise"
+                                ? item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 0)
+                                : item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 999)
+                            }
                           >
                             +
                           </button>
@@ -570,7 +616,9 @@ const Cart = () => {
                           })()}
                         </div>
                       </td>
-                      <td style={{ textAlign: 'right' }}>₱{item.ProductPrice.toFixed(2)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        ₱{(item.price + (item.addons?.reduce((sum, a) => sum + (a.price || 0), 0) || 0)).toFixed(2)}
+                      </td>
                       <td style={{ textAlign: 'right' }}>₱{calculateTotal(item).toFixed(2)}</td>
                       <td style={{ textAlign: 'center' }}>
                         <button className="btn btn-link text-danger p-0" onClick={() => handleRemove(i)}>
@@ -602,18 +650,18 @@ const Cart = () => {
                       type="checkbox"
                       className="me-3 mt-1"
                       onChange={(e) => handleCheckboxChange(item, e.target.checked)}
-                      checked={selectedCartItems.some(ci => ci.cartItemId === item.cartItemId)}
+                      checked={selectedCartItems.some(ci => ci.cart_item_id === item.cart_item_id)}
                     />
                     <img
-                      src={item.ProductImage ? (item.ProductImage.startsWith('http') ? item.ProductImage : `http://localhost:8001${item.ProductImage}`) : "https://via.placeholder.com/60"}
-                      alt={item.ProductName}
+                      src={getImageUrl(item.product_image)}
+                      alt={item.product_name}
                       className="img-fluid me-3 rounded"
                       style={{ height: '70px', width: '70px', objectFit: 'cover' }}
                     />
                     {/* Inner container for product details and price (aligned vertically with image) */}
                     <div className="flex-grow-1 product-details-mobile w-100">
-                      <div className="fw-bold mb-1 product-name-mobile">{item.ProductName}</div>
-                      <div className="text-muted small mobile-detail-text">Type: {item.ProductType || '-'} | Category: {item.ProductCategory || '-'}</div>
+                      <div className="fw-bold mb-1 product-name-mobile">{item.product_name}</div>
+                      <div className="text-muted small mobile-detail-text">Type: {item.product_type || '-'} | Category: {item.product_category || '-'}</div>
                       {item.addons && item.addons.length > 0 && (
                         <ul className="cart-addons mb-1 ps-3">
                           {item.addons.map((addon, idx) => (
@@ -637,12 +685,16 @@ const Cart = () => {
                     
                     {/* Quantity Control (Moved out of the main flex block) */}
                     <div className="quantity-control me-3">
-                      <button className="btn btn-sm rounded-circle" onClick={() => handleDecrement(i)}>-</button>
+                      <button className="btn btn-sm rounded-circle" onClick={() => handleDecrement(item)}>-</button>
                       <span className="mx-2">{item.quantity}</span>
                       <button
                         className="btn btn-sm rounded-circle"
-                        onClick={() => handleIncrement(i)}
-                        disabled={item.quantity >= (item.MerchandiseQuantity ?? maxQuantities[item.product_id]?.maxQuantity ?? 999) || (item.MerchandiseQuantity !== undefined && (item.MerchandiseQuantity === 0 || item.Status === "Not Available"))}
+                        onClick={() => handleIncrement(item)}
+                        disabled={
+                          item.product_type === "Merchandise"
+                            ? item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 0)
+                            : item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 999)
+                        }
                       >
                         +
                       </button>
@@ -716,7 +768,7 @@ const Cart = () => {
                   {selectedCartItems.map((item, i) => (
                     <tr key={i}>
                       <td style={{ textAlign: 'left', padding: '8px' }}>
-                        <div className="fw-semibold">{item.ProductName}</div>
+                        <div className="fw-semibold">{item.product_name}</div>
                         {item.addons && item.addons.length > 0 && (
                           <ul className="cart-addons mb-0 ps-3">
                             {item.addons.map((addon, idx) => (
@@ -728,7 +780,7 @@ const Cart = () => {
                         )}
                       </td>
                       <td style={{ textAlign: 'center', padding: '8px' }}>{item.quantity}</td>
-                      <td style={{ textAlign: 'right', padding: '8px' }}>₱{item.ProductPrice.toFixed(2)}</td>
+                      <td style={{ textAlign: 'right', padding: '8px' }}>₱{item.price.toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>
