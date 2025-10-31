@@ -8,7 +8,7 @@
   border-radius: 5px;
   cursor: pointer;
   font-weight: 600;
-  transition: background-color 0.3s ease;
+  transition: all 0.3s ease;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
@@ -16,6 +16,7 @@
   background-color: #4a9ba5;
   color: white;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
 }
 
 .pagination-btn:disabled {
@@ -29,4 +30,54 @@
   color: white;
   cursor: default;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Error Message */
+.error-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background-color: #edf7f9;
+  text-align: center;
+  padding: 2rem;
+}
+
+.error-message p {
+  margin: 1rem 0;
+  color: #dc3545;
+  font-size: 1.1rem;
+}
+
+.retry-button {
+  background-color: #4b929d;
+  color: white;
+  border: none;
+  padding: 0.5rem 1.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.retry-button:hover {
+  background-color: #3a7a84;
+  transform: translateY(-1px);
+}
+
+/* Animations */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Card Optimizations */
+.card {
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }

@@ -6,6 +6,7 @@ import { useSearchParams } from "react-router-dom";
 import './report.css';
 
 import coffeeImage from "../../assets/coffee.jpg";
+import adminImage from "../../assets/administrator.png";
  
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -511,7 +512,7 @@ const Report = () => {
           <div className="header-right">
             <div className="header-date">{new Date().toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: true })}</div>
             <div className="header-profile">
-              <div className="profile-pic" />
+              <img src={adminImage} alt="Admin" className="profile-pic" />
               <div className="profile-info">
                 <div className="profile-role">Hi! I'm Admin</div>
                 <div className="profile-name">Admin OOS</div>
@@ -519,9 +520,7 @@ const Report = () => {
               <div className="dropdown-icon" onClick={toggleDropdown}>
                 <FaChevronDown />
               </div>
-              <div className="bell-icon">
-                <FaBell className="bell-outline" />
-              </div>
+
               {isDropdownOpen && (
 <div className="profile-dropdown" style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "white", border: "1px solid #ccc", borderRadius: "4px", boxShadow: "0 2px 8px rgba(0,0,0,0.15)", zIndex: 1000, width: "150px" }}>
                     <ul style={{ listStyle: "none", margin: 0, padding: "8px 0" }}>

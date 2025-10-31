@@ -6,22 +6,74 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import './cart.css';
 import { CartContext } from '../contexts/CartContext';
-import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
-import L from 'leaflet';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
 import Swal from 'sweetalert2';
-import 'leaflet/dist/leaflet.css';
+
+// Store location coordinates
+const STORE_LOCATION = {
+  lat: 14.69990446244497,
+  lng: 121.08334243448036
+};
+
+// Maximum delivery radius in kilometers
+const MAX_DELIVERY_RADIUS = 3;
+
+// Convert kilometers to meters for the Circle component
+const MAX_DELIVERY_RADIUS_METERS = MAX_DELIVERY_RADIUS * 1000;
+
+// Mapbox access token (shared)
+const MAPBOX_ACCESS_TOKEN = 'pk.eyJ1Ijoia2Vuaml4NDQiLCJhIjoiY21oZWxiM2J2MDBwYzJsczZrc3lpcXA5byJ9.U_4yhz5-tIl9udWvi-4mfQ';
+mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
+// Try to disable telemetry (may be blocked by extensions) to reduce events.mapbox.com noise
+try {
+  if (typeof mapboxgl.setTelemetryEnabled === 'function') mapboxgl.setTelemetryEnabled(false);
+} catch (err) {
+  // ignore
+}
+
+const getImageUrl = (imagePath) => {
+  if (!imagePath) return "https://via.placeholder.com/60";
+  if (imagePath.startsWith("http")) return imagePath;
+  return `http://localhost:8001${imagePath}`;
+};
 
 // Modal component definition
 const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderTypeMain, handleCheckoutClick, setOrderTypeMain }) => {
+    const [userLocation, setUserLocation] = useState(null);
+    const [isLocationAllowed, setIsLocationAllowed] = useState(false);
+    const [distance, setDistance] = useState(null);
+    
+    const checkDeliveryDistance = async (userLat, userLng) => {
+        try {
+            const response = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${STORE_LOCATION.lng},${STORE_LOCATION.lat};${userLng},${userLat}?access_token=${MAPBOX_ACCESS_TOKEN}`);
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch route');
+            }
+            
+            const data = await response.json();
+            if (data.routes && data.routes[0]) {
+                // Convert distance from meters to kilometers
+                const distanceInKm = data.routes[0].distance / 1000;
+                setDistance(distanceInKm);
+                return distanceInKm <= MAX_DELIVERY_RADIUS;
+            }
+            return false;
+        } catch (error) {
+            console.error('Error calculating distance:', error);
+            return false;
+        }
+    };
     // Helper to calculate total (copied from main component)
-    const calculateTotal = (item) => {
-        const basePrice = item.ProductPrice || 0;
+  const calculateTotal = (item) => {
+    const basePrice = item.price || 0;
         const addonsTotal = (item.addons || []).reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0);
         return (basePrice + addonsTotal) * item.quantity;
     };
 
     const subtotal = selectedCartItems.reduce((acc, item) => {
-        const basePrice = item.ProductPrice || 0;
+        const basePrice = item.price || 0;
         const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || addon.Price || 0), 0);
         return acc + (basePrice + addonsTotal) * item.quantity;
     }, 0);
@@ -53,9 +105,49 @@ const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderT
                             <button
                                 type="button"
                                 className={`${orderTypeMain === 'Delivery' ? 'btn-active-custom' : ''}`}
-                                onClick={() => setOrderTypeMain('Delivery')}
+                                onClick={async () => {
+                                    if (!isLocationAllowed) {
+                                        const result = await Swal.fire({
+                                            title: 'Location Access Required',
+                                            text: 'We need your location to check if delivery is available in your area. Allow location access?',
+                                            icon: 'info',
+                                            showCancelButton: true,
+                                            confirmButtonText: 'Allow',
+                                            cancelButtonText: 'Cancel'
+                                        });
+
+                                        if (result.isConfirmed) {
+                                            try {
+                                                const position = await new Promise((resolve, reject) => {
+                                                    navigator.geolocation.getCurrentPosition(resolve, reject);
+                                                });
+
+                                                const { latitude, longitude } = position.coords;
+                                                setUserLocation({ lat: latitude, lng: longitude });
+                                                
+                                                const isWithinRange = await checkDeliveryDistance(latitude, longitude);
+                                                
+                                                if (isWithinRange) {
+                                                    setIsLocationAllowed(true);
+                                                    setOrderTypeMain('Delivery');
+                                                    toast.success('Your location is within our delivery range!');
+                                                } else {
+                                                    toast.error(`Sorry, your location is outside our ${MAX_DELIVERY_RADIUS}km delivery radius.`);
+                                                    setOrderTypeMain('Pick Up');
+                                                }
+                                            } catch (error) {
+                                                console.error('Error getting location:', error);
+                                                toast.error('Could not access your location. Please try again or choose Pick Up.');
+                                                setOrderTypeMain('Pick Up');
+                                            }
+                                        }
+                                    } else {
+                                        setOrderTypeMain('Delivery');
+                                    }
+                                }}
                             >
                                 <i className="bi bi-truck"></i> Delivery
+                                {distance && <span className="ms-2">({distance.toFixed(1)}km)</span>}
                             </button>
                         </div>
                     </div>
@@ -73,7 +165,7 @@ const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderT
                                 {selectedCartItems.map((item, i) => (
                                     <tr key={i}>
                                         <td style={{ textAlign: 'left', padding: '8px', fontSize: '0.9rem' }}>
-                                            <div className="fw-semibold">{item.ProductName}</div>
+                                            <div className="fw-semibold">{item.product_name}</div>
                                             {/* ADD-ONS INCLUDED */}
                                             {item.addons && item.addons.length > 0 && (
                                                 <ul className="cart-addons mb-0 ps-3">
@@ -86,7 +178,7 @@ const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderT
                                             )}
                                         </td>
                                         <td style={{ textAlign: 'center', padding: '8px', fontSize: '0.9rem' }}>{item.quantity}</td>
-                                        <td style={{ textAlign: 'right', padding: '8px', fontSize: '0.9rem' }}>₱{(item.ProductPrice || 0).toFixed(2)}</td>
+                                        <td style={{ textAlign: 'right', padding: '8px', fontSize: '0.9rem' }}>₱{(item.price || 0).toFixed(2)}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -114,11 +206,30 @@ const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderT
                             type="button"
                             className="btn btn-block w-100"
                             style={{ backgroundColor: '#4B929D', color: 'white', padding: '10px' }}
-                            onClick={handleCheckoutClick}
-                            disabled={selectedCartItems.length === 0}
+                            onClick={async () => {
+                                if (orderTypeMain === 'Delivery') {
+                                    if (!userLocation) {
+                                        toast.error('Please allow location access for delivery orders');
+                                        return;
+                                    }
+                                    
+                                    const isWithinRange = await checkDeliveryDistance(userLocation.lat, userLocation.lng);
+                                    if (!isWithinRange) {
+                                        toast.error(`Sorry, your location is outside our ${MAX_DELIVERY_RADIUS}km delivery radius.`);
+                                        return;
+                                    }
+                                }
+                                handleCheckoutClick();
+                            }}
+                            disabled={selectedCartItems.length === 0 || (orderTypeMain === 'Delivery' && !isLocationAllowed)}
                         >
                             <i className="bi bi-cart-check me-2"></i>
                             Checkout (₱{finalTotal.toFixed(2)})
+                            {orderTypeMain === 'Delivery' && distance && (
+                                <small className="ms-2">
+                                    (Distance: {distance.toFixed(1)}km)
+                                </small>
+                            )}
                         </button>
                     </div>
                 </div>
@@ -133,41 +244,70 @@ const Cart = () => {
 
   const PRODUCTS_BASE_URL = "http://127.0.0.1:8001";
 
-  const { cartItems, incrementQuantity, decrementQuantity, removeFromCart, setCartItems } = useContext(CartContext);
+  const { cartItems, updateQuantity, removeFromCart, clearCart } = useContext(CartContext);
 
   const [maxQuantities, setMaxQuantities] = useState({});
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
   const [isCheckingLocation, setIsCheckingLocation] = useState(false);
 
-  // Store Location and Delivery Radius
-  const STORE_LOCATION = [14.699660772061614, 121.08295563928553];
-  const MAX_DELIVERY_RADIUS_KM = 3;
+  // Note: using top-level STORE_LOCATION and MAX_DELIVERY_RADIUS constants
 
   useEffect(() => {
     const token = localStorage.getItem("authToken");
     if (!token || cartItems.length === 0) return;
 
     const fetchMaxQuantities = async () => {
-      const headers = { Authorization: `Bearer ${token}` };
-      const results = {};
+      try {
+        const headers = { Authorization: `Bearer ${token}` };
+        const results = {};
 
-      for (const item of cartItems) {
-        if (!item.product_id) continue;
-        try {
-          const res = await fetch(
-            `${PRODUCTS_BASE_URL}/is_products/products/${item.product_id}/max-quantity`,
-            { headers }
-          );
-          if (res.ok) {
-            const data = await res.json();
-            results[item.product_id] = data;
-          }
-        } catch (err) {
-          console.error("Failed to fetch max quantity:", err);
+        // Fetch merchandise data from IMS for merchandise items
+        const merchandiseResponse = await fetch('http://localhost:8002/merchandise/menu', {
+          headers
+        });
+        
+        if (!merchandiseResponse.ok) {
+          throw new Error('Failed to fetch merchandise data');
         }
+        
+        const merchandiseData = await merchandiseResponse.json();
+
+        // Process each cart item
+        for (const item of cartItems) {
+          if (!item.product_id) continue;
+
+          if (item.product_type === "Merchandise") {
+            // For merchandise items, get quantity from IMS
+            const merchandise = merchandiseData.find(m => m.MerchandiseName === item.product_name);
+            if (merchandise) {
+              results[item.product_id] = {
+                maxQuantity: merchandise.MerchandiseQuantity,
+                status: merchandise.Status
+              };
+            }
+          } else {
+            // For non-merchandise items, use existing endpoint
+            try {
+              const res = await fetch(
+                `${PRODUCTS_BASE_URL}/is_products/products/${item.product_id}/max-quantity`,
+                { headers }
+              );
+              if (res.ok) {
+                const data = await res.json();
+                results[item.product_id] = data;
+              }
+            } catch (err) {
+              console.error("Failed to fetch max quantity:", err);
+            }
+          }
+        }
+        
+        setMaxQuantities(results);
+      } catch (error) {
+        console.error('Error fetching quantities:', error);
+        toast.error('Error fetching product quantities');
       }
-      setMaxQuantities(results);
     };
 
     fetchMaxQuantities();
@@ -200,7 +340,7 @@ const Cart = () => {
     if (checked) {
       setSelectedCartItems(prev => [...prev, item]);
     } else {
-      setSelectedCartItems(prev => prev.filter(ci => ci.cartItemId !== item.cartItemId));
+      setSelectedCartItems(prev => prev.filter(ci => ci.cart_item_id !== item.cart_item_id));
     }
   };
 
@@ -212,54 +352,59 @@ const Cart = () => {
     }
   };
 
-  const handleIncrement = (index) => {
-    const item = cartItems[index];
-    const maxQty = item.MerchandiseQuantity ?? maxQuantities[item.product_id]?.maxQuantity ?? 999;
-    const isMerchandise = item.MerchandiseQuantity !== undefined;
-    const isUnavailable = isMerchandise && (maxQty === 0 || item.Status === "Not Available");
+  const handleIncrement = async (item) => {
+    const isMerchandise = item.product_type === "Merchandise";
+
+    // Get max quantity from maxQuantities state for both merchandise and regular products
+    const maxQty = maxQuantities[item.product_id]?.maxQuantity ?? (isMerchandise ? 0 : 999);
+    const status = maxQuantities[item.product_id]?.status;
+
+    const isUnavailable = maxQty === 0 || status === "Not Available";
     if (isUnavailable) {
       toast.error("Item is unavailable.");
       return;
     }
+
     if (item.quantity + 1 > maxQty) {
-      toast.error(`Cannot add more. Max quantity is ${maxQty}.`);
+      toast.error(`Max quantity is ${maxQty}`);
       return;
     }
-    incrementQuantity(item.cartItemId);
 
-    setSelectedCartItems(prevSelected => {
-      return prevSelected.map(selectedItem => {
-        if (selectedItem.cartItemId === item.cartItemId) {
-          return { ...selectedItem, quantity: selectedItem.quantity + 1 };
-        }
-        return selectedItem;
-      });
-    });
+    await updateQuantity(item.cart_item_id, item.quantity + 1);
+
+    setSelectedCartItems((prevSelected) =>
+      prevSelected.map((selectedItem) =>
+        selectedItem.cart_item_id === item.cart_item_id
+          ? { ...selectedItem, quantity: selectedItem.quantity + 1 }
+          : selectedItem
+      )
+    );
   };
 
-  const handleDecrement = (index) => {
-    const item = cartItems[index];
-    decrementQuantity(item.cartItemId);
+  const handleDecrement = async (item) => {
+    if (item.quantity > 1) {
+      await updateQuantity(item.cart_item_id, item.quantity - 1);
 
-    setSelectedCartItems(prevSelected => {
-      return prevSelected.map(selectedItem => {
-        if (selectedItem.cartItemId === item.cartItemId && selectedItem.quantity > 1) {
-          return { ...selectedItem, quantity: selectedItem.quantity - 1 };
-        }
-        return selectedItem;
+      setSelectedCartItems(prevSelected => {
+        return prevSelected.map(selectedItem => {
+          if (selectedItem.cart_item_id === item.cart_item_id) {
+            return { ...selectedItem, quantity: selectedItem.quantity - 1 };
+          }
+          return selectedItem;
+        });
       });
-    });
+    }
   };
 
   const handleRemove = (index) => {
     const item = cartItems[index];
-    removeFromCart(item.cartItemId);
-    setSelectedCartItems(prev => prev.filter(selectedItem => selectedItem.cartItemId !== item.cartItemId));
+    removeFromCart(item.cart_item_id);
+    setSelectedCartItems(prev => prev.filter(selectedItem => selectedItem.cart_item_id !== item.cart_item_id));
   };
 
   const calculateTotal = (item) => {
-    const basePrice = item.ProductPrice || 0;
-    const addonsTotal = (item.addons || []).reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0);
+    const basePrice = item.price || 0;
+    const addonsTotal = (item.addons || []).reduce((sum, ao) => sum + (ao.price || 0), 0);
     return (basePrice + addonsTotal) * item.quantity;
   };
 
@@ -288,53 +433,116 @@ const Cart = () => {
         navigator.geolocation.getCurrentPosition(
           (position) => {
             const { latitude, longitude } = position.coords;
-            const userCoords = [latitude, longitude];
-            
+            const userLat = latitude;
+            const userLng = longitude;
+
             const distance = getDistanceFromLatLonInKm(
               latitude,
               longitude,
-              STORE_LOCATION[0],
-              STORE_LOCATION[1]
+              STORE_LOCATION.lat,
+              STORE_LOCATION.lng
             );
 
-            const isWithinRange = distance <= MAX_DELIVERY_RADIUS_KM;
+            const isWithinRange = distance <= MAX_DELIVERY_RADIUS;
 
-            // Update Swal content with the map
+            // Update Swal content with the map container and a message element
             Swal.update({
               title: isWithinRange ? 'Location Verified!' : 'Outside Delivery Range',
               html: `
                 <div id="map-container" style="height: 400px; width: 100%;"></div>
-                <p class="mt-2">${isWithinRange ? 'You are within our delivery area. Proceeding to checkout...' : `Sorry, your location is outside our ${MAX_DELIVERY_RADIUS_KM}km delivery radius.`}</p>
+                <p id="swal-map-msg" class="mt-2">${isWithinRange ? 'You are within our delivery area. Proceeding to checkout...' : `Sorry, your location is outside our ${MAX_DELIVERY_RADIUS}km delivery radius.`}</p>
               `,
-              showConfirmButton: !isWithinRange, // Show button only if out of range
+              showConfirmButton: !isWithinRange,
               confirmButtonText: 'Close',
               confirmButtonColor: '#dc3545',
               showCancelButton: false,
               allowOutsideClick: !isWithinRange,
             });
 
-            // Render the map
-            const map = L.map('map-container').setView(userCoords, 15);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-              attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            }).addTo(map);
+            // Helper to create an approximate circular polygon as GeoJSON around store
+            const createGeoJSONCircle = (center, radiusInMeters, points = 64) => {
+              const coords = [];
+              const [cx, cy] = center; // lng, lat
+              for (let i = 0; i < points; i++) {
+                const theta = (i / points) * (2 * Math.PI);
+                const dx = radiusInMeters * Math.cos(theta);
+                const dy = radiusInMeters * Math.sin(theta);
+                // Convert meters to degrees approximation
+                const lng = cx + (dx / (111320 * Math.cos(cy * Math.PI / 180)));
+                const lat = cy + (dy / 110540);
+                coords.push([lng, lat]);
+              }
+              coords.push(coords[0]);
+              return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [coords] } };
+            };
 
-            L.marker(userCoords, { icon: new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34] }) }).addTo(map).bindPopup('Your Location').openPopup();
-            L.marker(STORE_LOCATION, { icon: new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34] }) }).addTo(map).bindPopup('Store Location');
-            L.circle(STORE_LOCATION, { radius: MAX_DELIVERY_RADIUS_KM * 1000, color: isWithinRange ? 'green' : 'red', fillColor: isWithinRange ? 'green' : 'red', fillOpacity: 0.2 }).addTo(map);
-
-            if (isWithinRange) {
-              setTimeout(() => {
-                Swal.close();
-                navigate('/checkout', {
-                  state: {
-                    cartItems: selectedCartItems,
-                    orderType: orderTypeMain,
-                    paymentMethod: paymentMethodMain
-                  }
-                });
-              }, 3000); // Wait 3 seconds then proceed
+            // Validate coordinates before creating map (prevent NaN LngLat)
+            if (![STORE_LOCATION.lng, STORE_LOCATION.lat, userLng, userLat].every(v => Number.isFinite(v))) {
+              const msgEl = document.getElementById('swal-map-msg');
+              if (msgEl) msgEl.innerText = 'Could not determine coordinates. Please try again.';
+              console.error('Invalid coordinates', { store: STORE_LOCATION, userLat, userLng });
+              return;
             }
+
+            // Initialize Mapbox GL map
+            const map = new mapboxgl.Map({
+              container: 'map-container',
+              style: 'mapbox://styles/mapbox/streets-v11',
+              center: [STORE_LOCATION.lng, STORE_LOCATION.lat],
+              zoom: 13
+            });
+            map.addControl(new mapboxgl.NavigationControl());
+
+            map.on('load', async () => {
+              try {
+                // Add markers
+                new mapboxgl.Marker({ color: 'red' }).setLngLat([STORE_LOCATION.lng, STORE_LOCATION.lat]).setPopup(new mapboxgl.Popup().setText('Store Location')).addTo(map);
+                new mapboxgl.Marker({ color: 'blue' }).setLngLat([userLng, userLat]).setPopup(new mapboxgl.Popup().setText('Your Location')).addTo(map);
+
+                // Add delivery radius polygon
+                const circleFeature = createGeoJSONCircle([STORE_LOCATION.lng, STORE_LOCATION.lat], MAX_DELIVERY_RADIUS * 1000);
+                if (!map.getSource('delivery-radius')) {
+                  map.addSource('delivery-radius', { type: 'geojson', data: circleFeature });
+                  map.addLayer({ id: 'delivery-radius-fill', type: 'fill', source: 'delivery-radius', paint: { 'fill-color': isWithinRange ? '#2ecc71' : '#e74c3c', 'fill-opacity': 0.15 } });
+                }
+
+                // Fit bounds to include both points
+                const bounds = new mapboxgl.LngLatBounds();
+                bounds.extend([STORE_LOCATION.lng, STORE_LOCATION.lat]);
+                bounds.extend([userLng, userLat]);
+                map.fitBounds(bounds, { padding: 40, maxZoom: 15 });
+                setTimeout(() => map.resize(), 200);
+
+                // Fetch and draw driving route
+                const dirRes = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${STORE_LOCATION.lng},${STORE_LOCATION.lat};${userLng},${userLat}?geometries=geojson&access_token=${MAPBOX_ACCESS_TOKEN}`);
+                if (dirRes.ok) {
+                  const dirData = await dirRes.json();
+                  if (dirData.routes && dirData.routes[0]) {
+                    const route = dirData.routes[0].geometry;
+                    if (map.getSource('route')) {
+                      map.getSource('route').setData({ type: 'Feature', geometry: route });
+                    } else {
+                      map.addSource('route', { type: 'geojson', data: { type: 'Feature', geometry: route } });
+                      map.addLayer({ id: 'route-line', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#3b82f6', 'line-width': 4 } });
+                    }
+
+                    const distanceKm = (dirData.routes[0].distance / 1000).toFixed(2);
+                    const msgEl = document.getElementById('swal-map-msg');
+                    if (msgEl) msgEl.innerText = isWithinRange ? `You are within our delivery area (${distanceKm} km). Proceeding to checkout...` : `Sorry, your location is outside our ${MAX_DELIVERY_RADIUS}km delivery radius (${distanceKm} km).`;
+
+                    if (isWithinRange) {
+                      setTimeout(() => {
+                        Swal.close();
+                        navigate('/checkout', { state: { cartItems: selectedCartItems, orderType: orderTypeMain, paymentMethod: paymentMethodMain } });
+                      }, 2500);
+                    }
+                  }
+                }
+              } catch (err) {
+                console.error('Mapbox render error', err);
+              }
+            });
+            // Note: map will be removed automatically when the container is removed; no explicit cleanup here
           },
           (error) => {
             let title = 'Location Access Denied';
@@ -451,7 +659,7 @@ const Cart = () => {
 
   // Calculate total for the floating button preview
   const subtotalForButton = selectedCartItems.reduce((acc, item) => {
-    const basePrice = item.ProductPrice || 0;
+    const basePrice = item.price || 0;
     const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || addon.Price || 0), 0);
     return acc + (basePrice + addonsTotal) * item.quantity;
   }, 0);
@@ -515,19 +723,19 @@ const Cart = () => {
                         <input
                           type="checkbox"
                           onChange={(e) => handleCheckboxChange(item, e.target.checked)}
-                          checked={selectedCartItems.some(ci => ci.cartItemId === item.cartItemId)}
+                          checked={selectedCartItems.some(ci => ci.cart_item_id === item.cart_item_id)}
                         />
                       </td>
                       <td>
                         <div className="d-flex align-items-center">
                           <img
-                            src={item.ProductImage ? (item.ProductImage.startsWith('http') ? item.ProductImage : `http://localhost:8001${item.ProductImage}`) : "https://via.placeholder.com/60"}
-                            alt={item.ProductName}
+                            src={getImageUrl(item.product_image)}
+                            alt={item.product_name}
                             className="img-fluid me-2 rounded"
                             style={{ height: '60px', width: '60px', objectFit: 'cover' }}
                           />
                           <div>
-                            <div className="fw-semibold">{item.ProductName}</div>
+                            <div className="fw-semibold">{item.product_name}</div>
                             {item.addons && item.addons.length > 0 && (
                               <ul className="cart-addons mb-0 ps-3">
                                 {item.addons.map((addon, idx) => (
@@ -540,16 +748,20 @@ const Cart = () => {
                           </div>
                         </div>
                       </td>
-                      <td style={{ verticalAlign: 'middle' }}>{item.ProductType || '-'}</td>
-                      <td style={{ verticalAlign: 'middle' }}>{item.ProductCategory || '-'}</td>
+                      <td style={{ verticalAlign: 'middle' }}>{item.product_type || '-'}</td>
+                      <td style={{ verticalAlign: 'middle' }}>{item.product_category || '-'}</td>
                       <td style={{ textAlign: 'center' }}>
                         <div className="quantity-control">
-                          <button className="btn btn-sm rounded-circle" onClick={() => handleDecrement(i)}>-</button>
+                          <button className="btn btn-sm rounded-circle" onClick={() => handleDecrement(item)}>-</button>
                           <span className="mx-2">{item.quantity}</span>
                           <button
                             className="btn btn-sm rounded-circle"
-                            onClick={() => handleIncrement(i)}
-                            disabled={item.quantity >= (item.MerchandiseQuantity ?? maxQuantities[item.product_id]?.maxQuantity ?? 999) || (item.MerchandiseQuantity !== undefined && (item.MerchandiseQuantity === 0 || item.Status === "Not Available"))}
+                            onClick={() => handleIncrement(item)}
+                            disabled={
+                              item.product_type === "Merchandise"
+                                ? item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 0)
+                                : item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 999)
+                            }
                           >
                             +
                           </button>
@@ -570,7 +782,9 @@ const Cart = () => {
                           })()}
                         </div>
                       </td>
-                      <td style={{ textAlign: 'right' }}>₱{item.ProductPrice.toFixed(2)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        ₱{(item.price + (item.addons?.reduce((sum, a) => sum + (a.price || 0), 0) || 0)).toFixed(2)}
+                      </td>
                       <td style={{ textAlign: 'right' }}>₱{calculateTotal(item).toFixed(2)}</td>
                       <td style={{ textAlign: 'center' }}>
                         <button className="btn btn-link text-danger p-0" onClick={() => handleRemove(i)}>
@@ -602,18 +816,18 @@ const Cart = () => {
                       type="checkbox"
                       className="me-3 mt-1"
                       onChange={(e) => handleCheckboxChange(item, e.target.checked)}
-                      checked={selectedCartItems.some(ci => ci.cartItemId === item.cartItemId)}
+                      checked={selectedCartItems.some(ci => ci.cart_item_id === item.cart_item_id)}
                     />
                     <img
-                      src={item.ProductImage ? (item.ProductImage.startsWith('http') ? item.ProductImage : `http://localhost:8001${item.ProductImage}`) : "https://via.placeholder.com/60"}
-                      alt={item.ProductName}
+                      src={getImageUrl(item.product_image)}
+                      alt={item.product_name}
                       className="img-fluid me-3 rounded"
                       style={{ height: '70px', width: '70px', objectFit: 'cover' }}
                     />
                     {/* Inner container for product details and price (aligned vertically with image) */}
                     <div className="flex-grow-1 product-details-mobile w-100">
-                      <div className="fw-bold mb-1 product-name-mobile">{item.ProductName}</div>
-                      <div className="text-muted small mobile-detail-text">Type: {item.ProductType || '-'} | Category: {item.ProductCategory || '-'}</div>
+                      <div className="fw-bold mb-1 product-name-mobile">{item.product_name}</div>
+                      <div className="text-muted small mobile-detail-text">Type: {item.product_type || '-'} | Category: {item.product_category || '-'}</div>
                       {item.addons && item.addons.length > 0 && (
                         <ul className="cart-addons mb-1 ps-3">
                           {item.addons.map((addon, idx) => (
@@ -637,12 +851,16 @@ const Cart = () => {
                     
                     {/* Quantity Control (Moved out of the main flex block) */}
                     <div className="quantity-control me-3">
-                      <button className="btn btn-sm rounded-circle" onClick={() => handleDecrement(i)}>-</button>
+                      <button className="btn btn-sm rounded-circle" onClick={() => handleDecrement(item)}>-</button>
                       <span className="mx-2">{item.quantity}</span>
                       <button
                         className="btn btn-sm rounded-circle"
-                        onClick={() => handleIncrement(i)}
-                        disabled={item.quantity >= (item.MerchandiseQuantity ?? maxQuantities[item.product_id]?.maxQuantity ?? 999) || (item.MerchandiseQuantity !== undefined && (item.MerchandiseQuantity === 0 || item.Status === "Not Available"))}
+                        onClick={() => handleIncrement(item)}
+                        disabled={
+                          item.product_type === "Merchandise"
+                            ? item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 0)
+                            : item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 999)
+                        }
                       >
                         +
                       </button>
@@ -716,7 +934,7 @@ const Cart = () => {
                   {selectedCartItems.map((item, i) => (
                     <tr key={i}>
                       <td style={{ textAlign: 'left', padding: '8px' }}>
-                        <div className="fw-semibold">{item.ProductName}</div>
+                        <div className="fw-semibold">{item.product_name}</div>
                         {item.addons && item.addons.length > 0 && (
                           <ul className="cart-addons mb-0 ps-3">
                             {item.addons.map((addon, idx) => (
@@ -728,7 +946,7 @@ const Cart = () => {
                         )}
                       </td>
                       <td style={{ textAlign: 'center', padding: '8px' }}>{item.quantity}</td>
-                      <td style={{ textAlign: 'right', padding: '8px' }}>₱{item.ProductPrice.toFixed(2)}</td>
+                      <td style={{ textAlign: 'right', padding: '8px' }}>₱{item.price.toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>

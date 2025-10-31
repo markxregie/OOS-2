@@ -1,10 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { jwtDecode } from 'jwt-decode';
+import { AddressAutofill, useConfirmAddress } from '@mapbox/search-js-react';
 import './ProfilePage.css';
 
 const ProfilePage = () => {
+  const { formRef, showConfirm } = useConfirmAddress({
+    accessToken: 'pk.eyJ1Ijoia2Vuaml4NDQiLCJhIjoiY21oZWxiM2J2MDBwYzJsczZrc3lpcXA5byJ9.U_4yhz5-tIl9udWvi-4mfQ',
+    minimap: true,
+  });
+  
+  const handleAddressSubmit = useCallback(async () => {
+    const result = await showConfirm();
+    if (result.type === 'change') {
+      // Update the form with the confirmed address
+      const feature = result.feature;
+      const address = feature.properties;
+      
+      setUserData(prev => ({
+        ...prev,
+        blockStreetSubdivision: address.address || '',
+        city: address.place || '',
+        province: address.district || ''
+      }));
+    }
+  }, [showConfirm]);
   const [userData, setUserData] = useState({
     username: '',
     firstName: '',
@@ -127,7 +148,7 @@ const ProfilePage = () => {
     // Validation regex patterns
     const usernamePattern = /^[a-zA-Z0-9_]+$/;
     const namePattern = /^[a-zA-Z\s'-]+$/;
-    const blockStreetSubdivisionPattern = /^[a-zA-Z0-9\s',.-]+$/;
+    const blockStreetSubdivisionPattern = /^[a-zA-ZÀ-ÿ0-9\s',.\-#ñÑ]+$/;
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     // const phonePattern = /^\+63\d{10}$/;
 
@@ -147,7 +168,7 @@ const ProfilePage = () => {
     }
 
     if (!blockStreetSubdivisionPattern.test(blockStreetSubdivision)) {
-      toast.error('Block, Street, Subdivision can only contain letters, numbers, spaces, apostrophes, commas, periods, and hyphens.');
+      toast.error('Block, Street, Subdivision can only contain letters (including ñ and special characters), numbers, spaces, apostrophes, commas, periods, and hyphens.');
       return;
     }
 
@@ -265,7 +286,11 @@ const ProfilePage = () => {
 
       <div className="account-details-card card">
         <h3>Account Details</h3>
-        <form className="account-form" onSubmit={handleSubmit}>
+        <form ref={formRef} className="account-form" onSubmit={async (e) => {
+          e.preventDefault();
+          await handleAddressSubmit();
+          handleSubmit(e);
+        }}>
           <label htmlFor="username" className="form-label">
             Username <span style={{color: 'red'}}>*</span> 
           </label>
@@ -306,49 +331,56 @@ const ProfilePage = () => {
             </div>
           </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="blockStreetSubdivision" className="form-label">Block, Street, Subdivision <span style={{color: 'red'}}>*</span></label>
-              <input
-                type="text"
-                id="blockStreetSubdivision"
-                name="blockStreetSubdivision"
-                placeholder="Block, Street, Subdivision"
-                className="form-input block-street-subdivision-input"
-                value={userData.blockStreetSubdivision || ''}
-                onChange={handleInputChange}
-              />
+          <AddressAutofill accessToken="pk.eyJ1Ijoia2Vuaml4NDQiLCJhIjoiY21oZWxiM2J2MDBwYzJsczZrc3lpcXA5byJ9.U_4yhz5-tIl9udWvi-4mfQ" options={{
+            country: 'ph',
+            language: 'en',
+            minimap: true,
+          }}>
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="blockStreetSubdivision" className="form-label">Block, Street, Subdivision <span style={{color: 'red'}}>*</span></label>
+                <input
+                  type="text"
+                  id="blockStreetSubdivision"
+                  name="blockStreetSubdivision"
+                  placeholder="Block, Street, Subdivision"
+                  className="form-input block-street-subdivision-input"
+                  value={userData.blockStreetSubdivision || ''}
+                  onChange={handleInputChange}
+                  autoComplete="address-line1"
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="form-row city-province-row">
-            <div className="form-group city-group">
-              <label htmlFor="city" className="form-label">City <span style={{color: 'red'}}>*</span></label>
-              <select
-                id="city"
-                name="city"
-                className="form-input"
-                value={userData.city || ''}
-                onChange={handleInputChange}
-              >
-                <option value="">Select City</option>
-                <option value="Quezon City">Quezon City</option>
-              </select>
+            <div className="form-row city-province-row">
+              <div className="form-group city-group">
+                <label htmlFor="city" className="form-label">City <span style={{color: 'red'}}>*</span></label>
+                <input
+                  type="text"
+                  id="city"
+                  name="city"
+                  className="form-input"
+                  value={userData.city || ''}
+                  onChange={handleInputChange}
+                  autoComplete="address-level2"
+                  placeholder="Enter city"
+                />
+              </div>
+              <div className="form-group province-group">
+                <label htmlFor="province" className="form-label">Baranggay<span style={{color: 'red'}}>*</span></label>
+                <input
+                  type="text"
+                  id="province"
+                  name="province"
+                  className="form-input"
+                  value={userData.province || ''}
+                  onChange={handleInputChange}
+                  autoComplete="address-level3"
+                  placeholder="Enter baranggay"
+                />
+              </div>
             </div>
-            <div className="form-group province-group">
-              <label htmlFor="province" className="form-label">Baranggay<span style={{color: 'red'}}>*</span></label>
-              <select
-                id="province"
-                name="province"
-                className="form-input"
-                value={userData.province || ''}
-                onChange={handleInputChange}
-              >
-                <option value="">Select Baranggay</option>
-                <option value="Commonwealth">Commonwealth</option>
-              </select>
-            </div>
-          </div>
+          </AddressAutofill>
 
           <div className="form-row">
             <div className="form-group">
