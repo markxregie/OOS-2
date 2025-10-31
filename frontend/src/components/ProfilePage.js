@@ -1,31 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { jwtDecode } from 'jwt-decode';
-import { AddressAutofill, useConfirmAddress } from '@mapbox/search-js-react';
 import './ProfilePage.css';
 
 const ProfilePage = () => {
-  const { formRef, showConfirm } = useConfirmAddress({
-    accessToken: 'pk.eyJ1Ijoia2Vuaml4NDQiLCJhIjoiY21oZWxiM2J2MDBwYzJsczZrc3lpcXA5byJ9.U_4yhz5-tIl9udWvi-4mfQ',
-    minimap: true,
-  });
-  
-  const handleAddressSubmit = useCallback(async () => {
-    const result = await showConfirm();
-    if (result.type === 'change') {
-      // Update the form with the confirmed address
-      const feature = result.feature;
-      const address = feature.properties;
-      
-      setUserData(prev => ({
-        ...prev,
-        blockStreetSubdivision: address.address || '',
-        city: address.place || '',
-        province: address.district || ''
-      }));
-    }
-  }, [showConfirm]);
   const [userData, setUserData] = useState({
     username: '',
     firstName: '',
@@ -33,9 +12,12 @@ const ProfilePage = () => {
     lastName: '',
     email: '',
     phone: '',
-    blockStreetSubdivision: '',
-    city: '',
+    region: '',
     province: '',
+    city: '',
+    street: '',
+    baranggay: '',
+    postalCode: '',
     landmark: '',
     birthday: '',
   });
@@ -43,12 +25,86 @@ const ProfilePage = () => {
   const [profileImage, setProfileImage] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
 
+  const mapRef = useRef(null);
+  const [map, setMap] = useState(null);
+  const [marker, setMarker] = useState(null);
+
+  const reverseGeocode = (latLng) => {
+    const geocoder = new window.google.maps.Geocoder();
+    geocoder.geocode({ location: latLng }, (results, status) => {
+      if (status === 'OK' && results[0]) {
+        const addressComponents = results[0].address_components;
+        const addressData = {
+          region: '',
+          province: '',
+          city: '',
+          street: '',
+          baranggay: '',
+          postalCode: '',
+        };
+
+        addressComponents.forEach(component => {
+          const types = component.types;
+          if (types.includes('administrative_area_level_1')) {
+            addressData.region = component.long_name;
+          } else if (types.includes('administrative_area_level_2')) {
+            addressData.province = component.long_name;
+          } else if (types.includes('locality') || types.includes('administrative_area_level_3')) {
+            addressData.city = component.long_name;
+          } else if (types.includes('route')) {
+            addressData.street = component.long_name;
+          } else if (types.includes('sublocality') || types.includes('sublocality_level_1')) {
+            addressData.baranggay = component.long_name;
+          } else if (types.includes('postal_code')) {
+            addressData.postalCode = component.long_name;
+          }
+        });
+
+        setUserData(prevData => ({
+          ...prevData,
+          ...addressData,
+        }));
+      } else {
+        console.error('Geocoder failed due to: ' + status);
+      }
+    });
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setUserData((prevData) => ({
       ...prevData,
       [name]: value,
     }));
+  };
+
+  const handleGetCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation is not supported by this browser.');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        const latLng = { lat: latitude, lng: longitude };
+
+        if (map && marker) {
+          map.setCenter(latLng);
+          marker.setPosition(latLng);
+          reverseGeocode(latLng);
+        }
+      },
+      (error) => {
+        console.error('Error getting location:', error);
+        toast.error('Unable to retrieve your location. Please check your browser settings.');
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000, // 5 minutes
+      }
+    );
   };
 
   const handleFileChange = async (e) => {
@@ -107,9 +163,12 @@ const ProfilePage = () => {
           lastName: data.lastName || '',
           email: data.email || '',
           phone: data.phoneNumber || data.phone || '',
-          blockStreetSubdivision: (data.block || '') + ' ' + (data.street || '') + ' ' + (data.subdivision || ''),
-          city: data.city || '',
+          region: data.region || '',
           province: data.province || '',
+          city: data.city || '',
+          street: data.street || '',
+          baranggay: data.baranggay || '',
+          postalCode: data.postalCode || '',
           landmark: data.landmark || '',
           birthday: data.birthday || '',
           profileImage: data.profileImage || null,
@@ -121,7 +180,79 @@ const ProfilePage = () => {
     };
 
     fetchUserProfile();
+
+    // Load Google Maps API and initialize map
+    const loadGoogleMaps = () => {
+      if (window.google && window.google.maps) {
+        initMap();
+      } else {
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyD6EOABHCBSZvUvXnLlUC1Ib0D5VLslJQQ`;
+        script.async = true;
+        script.defer = true;
+        script.onload = initMap;
+        document.head.appendChild(script);
+      }
+    };
+
+    const initMap = () => {
+      if (mapRef.current && window.google && window.google.maps) {
+        // Default center: Manila, Philippines
+        const defaultCenter = { lat: 14.5995, lng: 120.9842 };
+
+        const mapInstance = new window.google.maps.Map(mapRef.current, {
+          center: defaultCenter,
+          zoom: 12,
+          mapTypeId: window.google.maps.MapTypeId.ROADMAP,
+          mapTypeControl: false,
+          streetViewControl: false,
+        });
+
+        const markerInstance = new window.google.maps.Marker({
+          position: defaultCenter,
+          map: mapInstance,
+          draggable: true,
+        });
+
+        // Add click listener to map
+        mapInstance.addListener('click', (event) => {
+          markerInstance.setPosition(event.latLng);
+          reverseGeocode(event.latLng);
+        });
+
+        // Add dragend listener to marker
+        markerInstance.addListener('dragend', (event) => {
+          reverseGeocode(event.latLng);
+        });
+
+        setMap(mapInstance);
+        setMarker(markerInstance);
+      }
+    };
+
+    loadGoogleMaps();
   }, []);
+
+  // Geocode address when address fields change
+  useEffect(() => {
+    if (!map || !marker) return;
+
+    const { region, province, city, street, baranggay, postalCode } = userData;
+    if (!region || !province || !city || !street || !baranggay) return; // Require at least these fields
+
+    const address = `${street}, ${baranggay}, ${city}, ${province}, ${region}, Philippines`;
+
+    const geocoder = new window.google.maps.Geocoder();
+    geocoder.geocode({ address }, (results, status) => {
+      if (status === 'OK' && results[0]) {
+        const location = results[0].geometry.location;
+        map.setCenter(location);
+        marker.setPosition(location);
+      } else {
+        console.error('Geocode failed due to: ' + status);
+      }
+    });
+  }, [userData.region, userData.province, userData.city, userData.street, userData.baranggay, userData.postalCode, map, marker]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -129,9 +260,12 @@ const ProfilePage = () => {
     const username = form.username.value.trim();
     const firstName = form.firstName.value.trim();
     const lastName = form.lastName.value.trim();
-    const blockStreetSubdivision = form.blockStreetSubdivision.value.trim();
-    const city = form.city.value.trim();
+    const region = form.region.value.trim();
     const province = form.province.value.trim();
+    const city = form.city.value.trim();
+    const street = form.street.value.trim();
+    const baranggay = form.baranggay.value.trim();
+    const postalCode = form.postalCode.value.trim();
     const landmark = form.landmark.value.trim();
     const email = form.email.value.trim();
     const phone = form.phone.value.trim();
@@ -140,7 +274,7 @@ const ProfilePage = () => {
     // Basic sanitation already done by trim()
 
     // Check for empty required fields
-    if (!username || !firstName || !lastName || !blockStreetSubdivision || !city || !province || !landmark || !email || !phone /*|| !birthday*/) {
+    if (!username || !firstName || !lastName || !region || !province || !city || !street || !baranggay || !postalCode || !landmark || !email || !phone /*|| !birthday*/) {
       toast.error('Please fill in all required fields.');
       return;
     }
@@ -148,7 +282,7 @@ const ProfilePage = () => {
     // Validation regex patterns
     const usernamePattern = /^[a-zA-Z0-9_]+$/;
     const namePattern = /^[a-zA-Z\s'-]+$/;
-    const blockStreetSubdivisionPattern = /^[a-zA-ZÀ-ÿ0-9\s',.\-#ñÑ]+$/;
+    const postalCodePattern = /^\d{4}$/;
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     // const phonePattern = /^\+63\d{10}$/;
 
@@ -167,8 +301,13 @@ const ProfilePage = () => {
       return;
     }
 
-    if (!blockStreetSubdivisionPattern.test(blockStreetSubdivision)) {
-      toast.error('Block, Street, Subdivision can only contain letters (including ñ and special characters), numbers, spaces, apostrophes, commas, periods, and hyphens.');
+    if (!namePattern.test(region)) {
+      toast.error('Region can only contain letters, spaces, apostrophes, and hyphens.');
+      return;
+    }
+
+    if (!namePattern.test(province)) {
+      toast.error('Province can only contain letters, spaces, apostrophes, and hyphens.');
       return;
     }
 
@@ -177,8 +316,18 @@ const ProfilePage = () => {
       return;
     }
 
-    if (!namePattern.test(province)) {
-      toast.error('Province can only contain letters, spaces, apostrophes, and hyphens.');
+    if (!namePattern.test(street)) {
+      toast.error('Street can only contain letters, spaces, apostrophes, and hyphens.');
+      return;
+    }
+
+    if (!namePattern.test(baranggay)) {
+      toast.error('Baranggay can only contain letters, spaces, apostrophes, and hyphens.');
+      return;
+    }
+
+    if (!postalCodePattern.test(postalCode)) {
+      toast.error('Postal code must be exactly 4 digits.');
       return;
     }
 
@@ -209,12 +358,6 @@ const ProfilePage = () => {
     //   return;
     // }
 
-    // Prepare data for update
-    const blockStreetParts = blockStreetSubdivision.split(' ');
-    const block = blockStreetParts[0] || '';
-    const street = blockStreetParts[1] || '';
-    const subdivision = blockStreetParts.slice(2).join(' ') || '';
-
     const token = localStorage.getItem('authToken');
     if (!token) {
       toast.error('User not authenticated.');
@@ -226,11 +369,12 @@ const ProfilePage = () => {
       formData.append('username', username);
       formData.append('firstName', firstName);
       formData.append('lastName', lastName);
-      formData.append('block', block);
-      formData.append('street', street);
-      formData.append('subdivision', subdivision);
-      formData.append('city', city);
+      formData.append('region', region);
       formData.append('province', province);
+      formData.append('city', city);
+      formData.append('street', street);
+      formData.append('baranggay', baranggay);
+      formData.append('postalCode', postalCode);
       formData.append('landmark', landmark);
       formData.append('email', email);
       formData.append('phoneNumber', phone);
@@ -286,11 +430,7 @@ const ProfilePage = () => {
 
       <div className="account-details-card card">
         <h3>Account Details</h3>
-        <form ref={formRef} className="account-form" onSubmit={async (e) => {
-          e.preventDefault();
-          await handleAddressSubmit();
-          handleSubmit(e);
-        }}>
+        <form className="account-form" onSubmit={handleSubmit}>
           <label htmlFor="username" className="form-label">
             Username <span style={{color: 'red'}}>*</span> 
           </label>
@@ -331,56 +471,111 @@ const ProfilePage = () => {
             </div>
           </div>
 
-          <AddressAutofill accessToken="pk.eyJ1Ijoia2Vuaml4NDQiLCJhIjoiY21oZWxiM2J2MDBwYzJsczZrc3lpcXA5byJ9.U_4yhz5-tIl9udWvi-4mfQ" options={{
-            country: 'ph',
-            language: 'en',
-            minimap: true,
-          }}>
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="blockStreetSubdivision" className="form-label">Block, Street, Subdivision <span style={{color: 'red'}}>*</span></label>
-                <input
-                  type="text"
-                  id="blockStreetSubdivision"
-                  name="blockStreetSubdivision"
-                  placeholder="Block, Street, Subdivision"
-                  className="form-input block-street-subdivision-input"
-                  value={userData.blockStreetSubdivision || ''}
-                  onChange={handleInputChange}
-                  autoComplete="address-line1"
-                />
-              </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label">Pin Your Location on the Map <span style={{color: 'red'}}>*</span></label>
+              <div id="map" ref={mapRef} style={{ height: '400px', width: '100%' }}></div>
+              <p className="map-info">Click on the map or drag the marker to set your location. The address fields below will be auto-filled.</p>
+              <button type="button" className="profile-btn location-btn" onClick={handleGetCurrentLocation}>Use My Current Location</button>
             </div>
+          </div>
 
-            <div className="form-row city-province-row">
-              <div className="form-group city-group">
-                <label htmlFor="city" className="form-label">City <span style={{color: 'red'}}>*</span></label>
-                <input
-                  type="text"
-                  id="city"
-                  name="city"
-                  className="form-input"
-                  value={userData.city || ''}
-                  onChange={handleInputChange}
-                  autoComplete="address-level2"
-                  placeholder="Enter city"
-                />
-              </div>
-              <div className="form-group province-group">
-                <label htmlFor="province" className="form-label">Baranggay<span style={{color: 'red'}}>*</span></label>
-                <input
-                  type="text"
-                  id="province"
-                  name="province"
-                  className="form-input"
-                  value={userData.province || ''}
-                  onChange={handleInputChange}
-                  autoComplete="address-level3"
-                  placeholder="Enter baranggay"
-                />
-              </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="region" className="form-label">Region <span style={{color: 'red'}}>*</span></label>
+              <input
+                type="text"
+                id="region"
+                name="region"
+                placeholder="Region"
+                className="form-input"
+                value={userData.region || ''}
+                onChange={handleInputChange}
+                autoComplete="address-level1"
+              />
             </div>
-          </AddressAutofill>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="province" className="form-label">Province <span style={{color: 'red'}}>*</span></label>
+              <input
+                type="text"
+                id="province"
+                name="province"
+                className="form-input"
+                value={userData.province || ''}
+                onChange={handleInputChange}
+                autoComplete="address-level2"
+                placeholder="Enter province"
+              />
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="city" className="form-label">City <span style={{color: 'red'}}>*</span></label>
+              <input
+                type="text"
+                id="city"
+                name="city"
+                className="form-input"
+                value={userData.city || ''}
+                onChange={handleInputChange}
+                autoComplete="address-level3"
+                placeholder="Enter city"
+              />
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="street" className="form-label">Street <span style={{color: 'red'}}>*</span></label>
+              <input
+                type="text"
+                id="street"
+                name="street"
+                className="form-input"
+                value={userData.street || ''}
+                onChange={handleInputChange}
+                autoComplete="address-line1"
+                placeholder="Enter street"
+              />
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="baranggay" className="form-label">Baranggay <span style={{color: 'red'}}>*</span></label>
+              <input
+                type="text"
+                id="baranggay"
+                name="baranggay"
+                className="form-input"
+                value={userData.baranggay || ''}
+                onChange={handleInputChange}
+                autoComplete="address-level4"
+                placeholder="Enter baranggay"
+              />
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="postalCode" className="form-label">Postal Code <span style={{color: 'red'}}>*</span></label>
+              <input
+                type="text"
+                id="postalCode"
+                name="postalCode"
+                className="form-input"
+                value={userData.postalCode || ''}
+                onChange={handleInputChange}
+                autoComplete="postal-code"
+                placeholder="Enter postal code"
+                maxLength={4}
+              />
+            </div>
+          </div>
 
           <div className="form-row">
             <div className="form-group">
