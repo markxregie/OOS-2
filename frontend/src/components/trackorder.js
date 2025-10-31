@@ -10,7 +10,7 @@ import './TrackOrder.css';
 // Mapbox GL will be used for map rendering in this file.
 
 // Mapbox access token
-const MAPBOX_ACCESS_TOKEN = 'pk.eyJ1Ijoia2Vuaml4NDQiLCJhIjoiY21oZWxiM2J2MDBwYzJsczZrc3lpcXA5byJ9.U_4yhz5-tIl9udWvi-4mfQ';
+const MAPBOX_ACCESS_TOKEN = process.env.REACT_APP_MAPBOX_ACCESS_TOKEN;
 mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
 try { if (typeof mapboxgl.setTelemetryEnabled === 'function') mapboxgl.setTelemetryEnabled(false); } catch (e) { /* ignore */ }
 

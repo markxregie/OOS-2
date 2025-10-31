@@ -23,7 +23,7 @@ const MAX_DELIVERY_RADIUS = 3;
 const MAX_DELIVERY_RADIUS_METERS = MAX_DELIVERY_RADIUS * 1000;
 
 // Mapbox access token (shared)
-const MAPBOX_ACCESS_TOKEN = 'pk.eyJ1Ijoia2Vuaml4NDQiLCJhIjoiY21oZWxiM2J2MDBwYzJsczZrc3lpcXA5byJ9.U_4yhz5-tIl9udWvi-4mfQ';
+const MAPBOX_ACCESS_TOKEN = process.env.REACT_APP_MAPBOX_ACCESS_TOKEN;
 mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
 // Try to disable telemetry (may be blocked by extensions) to reduce events.mapbox.com noise
 try {
@@ -481,6 +481,14 @@ const Cart = () => {
               const msgEl = document.getElementById('swal-map-msg');
               if (msgEl) msgEl.innerText = 'Could not determine coordinates. Please try again.';
               console.error('Invalid coordinates', { store: STORE_LOCATION, userLat, userLng });
+              return;
+            }
+
+            // Check if access token is set
+            if (!mapboxgl.accessToken) {
+              const msgEl = document.getElementById('swal-map-msg');
+              if (msgEl) msgEl.innerText = 'Map configuration error. Please try again later.';
+              console.error('Mapbox access token not set');
               return;
             }
 
