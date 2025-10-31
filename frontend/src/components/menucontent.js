@@ -612,16 +612,14 @@ const MenuContent = () => {
       state: {
         cartItems: [{
           product_id: item.ProductID,
-          ProductName: item.ProductName,
-          ProductPrice: item.ProductPrice,
-          ProductImage: item.ProductImage,
-          ProductType: item.ProductTypeName,
-          ProductCategory: item.ProductCategory,
+          product_name: item.ProductName,
+          price: item.ProductPrice,
+          product_image: item.ProductImage,
+          product_type: item.ProductTypeName,
+          product_category: item.ProductCategory,
           quantity: 1,
           orderNotes: notes,
-          // --- THIS IS THE FIX ---
-          addons: addOns, // Change 'addOns' to 'addons' (lowercase)
-          // -----------------------
+          addons: addOns,
           MerchandiseQuantity: item.MerchandiseQuantity,
         }],
         orderType: delivery,
