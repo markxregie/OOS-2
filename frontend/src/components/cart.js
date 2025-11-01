@@ -40,31 +40,6 @@ const getImageUrl = (imagePath) => {
 
 // Modal component definition
 const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderTypeMain, handleCheckoutClick, setOrderTypeMain }) => {
-    const [userLocation, setUserLocation] = useState(null);
-    const [isLocationAllowed, setIsLocationAllowed] = useState(false);
-    const [distance, setDistance] = useState(null);
-    
-    const checkDeliveryDistance = async (userLat, userLng) => {
-        try {
-            const response = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${STORE_LOCATION.lng},${STORE_LOCATION.lat};${userLng},${userLat}?access_token=${MAPBOX_ACCESS_TOKEN}`);
-            
-            if (!response.ok) {
-                throw new Error('Failed to fetch route');
-            }
-            
-            const data = await response.json();
-            if (data.routes && data.routes[0]) {
-                // Convert distance from meters to kilometers
-                const distanceInKm = data.routes[0].distance / 1000;
-                setDistance(distanceInKm);
-                return distanceInKm <= MAX_DELIVERY_RADIUS;
-            }
-            return false;
-        } catch (error) {
-            console.error('Error calculating distance:', error);
-            return false;
-        }
-    };
     // Helper to calculate total (copied from main component)
   const calculateTotal = (item) => {
     const basePrice = item.price || 0;
@@ -105,49 +80,9 @@ const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderT
                             <button
                                 type="button"
                                 className={`${orderTypeMain === 'Delivery' ? 'btn-active-custom' : ''}`}
-                                onClick={async () => {
-                                    if (!isLocationAllowed) {
-                                        const result = await Swal.fire({
-                                            title: 'Location Access Required',
-                                            text: 'We need your location to check if delivery is available in your area. Allow location access?',
-                                            icon: 'info',
-                                            showCancelButton: true,
-                                            confirmButtonText: 'Allow',
-                                            cancelButtonText: 'Cancel'
-                                        });
-
-                                        if (result.isConfirmed) {
-                                            try {
-                                                const position = await new Promise((resolve, reject) => {
-                                                    navigator.geolocation.getCurrentPosition(resolve, reject);
-                                                });
-
-                                                const { latitude, longitude } = position.coords;
-                                                setUserLocation({ lat: latitude, lng: longitude });
-                                                
-                                                const isWithinRange = await checkDeliveryDistance(latitude, longitude);
-                                                
-                                                if (isWithinRange) {
-                                                    setIsLocationAllowed(true);
-                                                    setOrderTypeMain('Delivery');
-                                                    toast.success('Your location is within our delivery range!');
-                                                } else {
-                                                    toast.error(`Sorry, your location is outside our ${MAX_DELIVERY_RADIUS}km delivery radius.`);
-                                                    setOrderTypeMain('Pick Up');
-                                                }
-                                            } catch (error) {
-                                                console.error('Error getting location:', error);
-                                                toast.error('Could not access your location. Please try again or choose Pick Up.');
-                                                setOrderTypeMain('Pick Up');
-                                            }
-                                        }
-                                    } else {
-                                        setOrderTypeMain('Delivery');
-                                    }
-                                }}
+                                onClick={() => setOrderTypeMain('Delivery')}
                             >
                                 <i className="bi bi-truck"></i> Delivery
-                                {distance && <span className="ms-2">({distance.toFixed(1)}km)</span>}
                             </button>
                         </div>
                     </div>
@@ -206,30 +141,11 @@ const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderT
                             type="button"
                             className="btn btn-block w-100"
                             style={{ backgroundColor: '#4B929D', color: 'white', padding: '10px' }}
-                            onClick={async () => {
-                                if (orderTypeMain === 'Delivery') {
-                                    if (!userLocation) {
-                                        toast.error('Please allow location access for delivery orders');
-                                        return;
-                                    }
-                                    
-                                    const isWithinRange = await checkDeliveryDistance(userLocation.lat, userLocation.lng);
-                                    if (!isWithinRange) {
-                                        toast.error(`Sorry, your location is outside our ${MAX_DELIVERY_RADIUS}km delivery radius.`);
-                                        return;
-                                    }
-                                }
-                                handleCheckoutClick();
-                            }}
-                            disabled={selectedCartItems.length === 0 || (orderTypeMain === 'Delivery' && !isLocationAllowed)}
+                            onClick={handleCheckoutClick}
+                            disabled={selectedCartItems.length === 0}
                         >
                             <i className="bi bi-cart-check me-2"></i>
                             Checkout (₱{finalTotal.toFixed(2)})
-                            {orderTypeMain === 'Delivery' && distance && (
-                                <small className="ms-2">
-                                    (Distance: {distance.toFixed(1)}km)
-                                </small>
-                            )}
                         </button>
                     </div>
                 </div>

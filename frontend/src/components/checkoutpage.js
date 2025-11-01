@@ -97,6 +97,16 @@ const CheckoutPage = () => {
   // Replace the confirmPayment function in your CheckoutPage.js
 
 const confirmPayment = async (saved) => {
+  // Show loader immediately
+  Swal.fire({
+    title: 'Processing Order...',
+    text: 'Please wait while we confirm your payment and place your order.',
+    allowOutsideClick: false,
+    didOpen: () => {
+      Swal.showLoading();
+    },
+  });
+
   const token = localStorage.getItem("authToken");
   if (!token || !saved) return;
 
