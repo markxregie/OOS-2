@@ -15,8 +15,8 @@ const ProfilePage = () => {
     region: '',
     province: '',
     city: '',
-    street: '',
-    baranggay: '',
+    streetName: '',
+    barangay: '',
     postalCode: '',
     landmark: '',
     birthday: '',
@@ -38,8 +38,8 @@ const ProfilePage = () => {
           region: '',
           province: '',
           city: '',
-          street: '',
-          baranggay: '',
+          streetName: '',
+          barangay: '',
           postalCode: '',
         };
 
@@ -52,9 +52,9 @@ const ProfilePage = () => {
           } else if (types.includes('locality') || types.includes('administrative_area_level_3')) {
             addressData.city = component.long_name;
           } else if (types.includes('route')) {
-            addressData.street = component.long_name;
+            addressData.streetName = component.long_name;
           } else if (types.includes('sublocality') || types.includes('sublocality_level_1')) {
-            addressData.baranggay = component.long_name;
+            addressData.barangay = component.long_name;
           } else if (types.includes('postal_code')) {
             addressData.postalCode = component.long_name;
           }
@@ -166,8 +166,8 @@ const ProfilePage = () => {
           region: data.region || '',
           province: data.province || '',
           city: data.city || '',
-          street: data.street || '',
-          baranggay: data.baranggay || '',
+          streetName: data.streetName || '',
+          barangay: data.barangay || '',
           postalCode: data.postalCode || '',
           landmark: data.landmark || '',
           birthday: data.birthday || '',
@@ -237,10 +237,10 @@ const ProfilePage = () => {
   useEffect(() => {
     if (!map || !marker) return;
 
-    const { region, province, city, street, baranggay, postalCode } = userData;
-    if (!region || !province || !city || !street || !baranggay) return; // Require at least these fields
+    const { region, province, city, streetName, barangay, postalCode } = userData;
+    if (!region || !province || !city || !streetName || !barangay) return; // Require at least these fields
 
-    const address = `${street}, ${baranggay}, ${city}, ${province}, ${region}, Philippines`;
+    const address = `${streetName}, ${barangay}, ${city}, ${province}, ${region}, Philippines`;
 
     const geocoder = new window.google.maps.Geocoder();
     geocoder.geocode({ address }, (results, status) => {
@@ -252,7 +252,7 @@ const ProfilePage = () => {
         console.error('Geocode failed due to: ' + status);
       }
     });
-  }, [userData.region, userData.province, userData.city, userData.street, userData.baranggay, userData.postalCode, map, marker]);
+  }, [userData.region, userData.province, userData.city, userData.streetName, userData.barangay, userData.postalCode, map, marker]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -263,8 +263,8 @@ const ProfilePage = () => {
     const region = form.region.value.trim();
     const province = form.province.value.trim();
     const city = form.city.value.trim();
-    const street = form.street.value.trim();
-    const baranggay = form.baranggay.value.trim();
+    const streetName = form.streetName.value.trim();
+    const barangay = form.barangay.value.trim();
     const postalCode = form.postalCode.value.trim();
     const landmark = form.landmark.value.trim();
     const email = form.email.value.trim();
@@ -274,7 +274,7 @@ const ProfilePage = () => {
     // Basic sanitation already done by trim()
 
     // Check for empty required fields
-    if (!username || !firstName || !lastName || !region || !province || !city || !street || !baranggay || !postalCode || !landmark || !email || !phone /*|| !birthday*/) {
+    if (!username || !firstName || !lastName || !region || !province || !city || !streetName || !barangay || !postalCode || !landmark || !email || !phone /*|| !birthday*/) {
       toast.error('Please fill in all required fields.');
       return;
     }
@@ -282,6 +282,7 @@ const ProfilePage = () => {
     // Validation regex patterns
     const usernamePattern = /^[a-zA-Z0-9_]+$/;
     const namePattern = /^[a-zA-Z\s'-]+$/;
+    const addressPattern = /^[a-zA-Z0-9\s'-]+$/;
     const postalCodePattern = /^\d{4}$/;
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     // const phonePattern = /^\+63\d{10}$/;
@@ -316,13 +317,13 @@ const ProfilePage = () => {
       return;
     }
 
-    if (!namePattern.test(street)) {
-      toast.error('Street can only contain letters, spaces, apostrophes, and hyphens.');
+    if (!addressPattern.test(streetName)) {
+      toast.error('Street can only contain letters, numbers, spaces, apostrophes, and hyphens.');
       return;
     }
 
-    if (!namePattern.test(baranggay)) {
-      toast.error('Baranggay can only contain letters, spaces, apostrophes, and hyphens.');
+    if (!namePattern.test(barangay)) {
+      toast.error('Barangay can only contain letters, spaces, apostrophes, and hyphens.');
       return;
     }
 
@@ -372,8 +373,8 @@ const ProfilePage = () => {
       formData.append('region', region);
       formData.append('province', province);
       formData.append('city', city);
-      formData.append('street', street);
-      formData.append('baranggay', baranggay);
+      formData.append('streetName', streetName);
+      formData.append('barangay', barangay);
       formData.append('postalCode', postalCode);
       formData.append('landmark', landmark);
       formData.append('email', email);
@@ -530,13 +531,13 @@ const ProfilePage = () => {
 
           <div className="form-row">
             <div className="form-group">
-              <label htmlFor="street" className="form-label">Street <span style={{color: 'red'}}>*</span></label>
+              <label htmlFor="streetName" className="form-label">Street <span style={{color: 'red'}}>*</span></label>
               <input
                 type="text"
-                id="street"
-                name="street"
+                id="streetName"
+                name="streetName"
                 className="form-input"
-                value={userData.street || ''}
+                value={userData.streetName || ''}
                 onChange={handleInputChange}
                 autoComplete="address-line1"
                 placeholder="Enter street"
@@ -546,16 +547,16 @@ const ProfilePage = () => {
 
           <div className="form-row">
             <div className="form-group">
-              <label htmlFor="baranggay" className="form-label">Baranggay <span style={{color: 'red'}}>*</span></label>
+              <label htmlFor="barangay" className="form-label">Barangay <span style={{color: 'red'}}>*</span></label>
               <input
                 type="text"
-                id="baranggay"
-                name="baranggay"
+                id="barangay"
+                name="barangay"
                 className="form-input"
-                value={userData.baranggay || ''}
+                value={userData.barangay || ''}
                 onChange={handleInputChange}
                 autoComplete="address-level4"
-                placeholder="Enter baranggay"
+                placeholder="Enter Barangay"
               />
             </div>
           </div>
