@@ -215,23 +215,34 @@ async def update_delivery_order_status(
 
         # --- Notify user about status change ---
         try:
-            # Fetch username to know who to notify
-            await cursor.execute("SELECT UserName FROM Orders WHERE OrderID = ?", (order_id,))
-            user_row = await cursor.fetchone()
-            if user_row:
-                username = user_row[0]
+            # Fetch username, reference number, and assigned rider ID
+            await cursor.execute("""
+                SELECT UserName, ReferenceNumber, AssignedRiderID
+                FROM Orders
+                WHERE OrderID = ?
+            """, (order_id,))
+            order_row = await cursor.fetchone()
 
-                # Get reference number
-                await cursor.execute("SELECT ReferenceNumber FROM Orders WHERE OrderID = ?", (order_id,))
-                ref = await cursor.fetchone()
-                reference_number = ref.ReferenceNumber if ref else f"#{order_id}"
+            if order_row:
+                username, reference_number, rider_id = order_row
 
-                # Prepare notification message
                 notif_title = "Order Update"
-                notif_message = f"Your order {reference_number} is now {request.status.capitalize()}."
                 notif_type = "OrderStatus"
+                notif_message = f"Your order #{reference_number} is now {request.status.capitalize()}."
 
-                # Send POST to Notification microservice
+                # ✅ Match lowercase "pickedup" (no space)
+                if request.status.strip().lower() == "pickedup" and rider_id:
+                    try:
+                        async with httpx.AsyncClient() as client:
+                            rider_res = await client.get(f"http://localhost:4000/users/riders/{rider_id}")
+                            if rider_res.status_code == 200:
+                                rider = rider_res.json()
+                                rider_name = rider.get("FullName", "your rider")
+                                notif_message = f"Your order #{reference_number} has been picked up by {rider_name}."
+                    except Exception as re:
+                        print(f"⚠️ Failed to fetch rider info for notification: {re}")
+
+                # Send notification to Notification microservice
                 async with httpx.AsyncClient() as client:
                     await client.post(
                         "http://localhost:7002/notifications/create",
@@ -244,6 +255,7 @@ async def update_delivery_order_status(
                         },
                         headers={"Authorization": f"Bearer {token}"}
                     )
+
         except Exception as notify_err:
             logger.warning(f"⚠️ Failed to send notification: {notify_err}")
 

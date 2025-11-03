@@ -76,16 +76,24 @@ function DeliveryManagement() {
     } finally {
       setIsLoading(false);
     }
-  }, [authToken, localAssignments]);
+  }, [authToken]);
 
   useEffect(() => {
     if (!authToken) return;
-    // initial fetch
-    fetchInitialData();
-    // periodic refresh every 10 seconds
-    const interval = setInterval(fetchInitialData, 10000);
-    return () => clearInterval(interval);
-  }, [authToken, fetchInitialData]);
+
+    let interval;
+    const initialize = async () => {
+      await fetchInitialData();
+      // Start refresh loop
+      interval = setInterval(fetchInitialData, 10000);
+    };
+
+    initialize();
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [authToken]);
 
   useEffect(() => {
     const tokenFromUrl = searchParams.get('authorization');
@@ -204,6 +212,7 @@ function DeliveryManagement() {
         <div style="text-align: left;">
           <p><strong>Rider:</strong> ${rider.FullName}</p>
           <p><strong>Phone:</strong> ${rider.Phone}</p>
+          <p><strong>Plate No:</strong> ${rider.PlateNumber || 'N/A'}</p>
         </div>
         <p style="margin-top: 15px; font-size: 14px; color: #666;">
           Are you sure you want to assign this rider to this order?
@@ -381,20 +390,6 @@ function DeliveryManagement() {
   return (
     <div className="d-flex" style={{ height: "100vh", backgroundColor: "#edf7f9" }}>
       <Container fluid className="p-4 main-content" style={{ marginLeft: "0px", width: "calc(100% - 0px)" }}>
-        {isLoading ? (
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center', 
-            minHeight: '60vh',
-            flexDirection: 'column',
-            gap: '1rem'
-          }}>
-            <FaSpinner className="fa-spin" style={{ fontSize: '3rem', color: '#4b929d' }} />
-            <p style={{ color: '#4b929d', fontSize: '1.2rem' }}>Loading data...</p>
-          </div>
-        ) : (
-          <div>
             <header className="manage-header">
           <div className="header-left">
             <h2 className="page-title">Delivery Management</h2>
@@ -601,6 +596,11 @@ function DeliveryManagement() {
                       <div>
                         <div style={{ fontWeight: "600" }}>{assignedRider.FullName}</div>
                         <div>{assignedRider.Phone}</div>
+                        {assignedRider.PlateNumber && (
+                          <div style={{ fontStyle: "italic", color: "#4b929d", fontSize: "0.9rem" }}>
+                            Plate No: {assignedRider.PlateNumber}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : null;
@@ -692,8 +692,6 @@ function DeliveryManagement() {
                 <FaAngleDoubleRight />
               </button>
             </div>
-          </div>
-        )}
           </div>
         )}
       </Container>
