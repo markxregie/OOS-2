@@ -571,6 +571,26 @@ const TrackOrder = () => {
                                 {renderProductList()}
                             </Col>
                         </Row>
+
+{/* Rider Information (visible only when status is picked up or delivering) */}
+{['picked up', 'delivering'].includes(order.status) && order.rider_name && (
+  <>
+    <hr className="my-4" />
+    <h5 className="section-title">Rider Information</h5>
+    <div className="rider-info-box p-3 rounded border bg-light">
+      <div className="rider-info-item">
+        <strong>Name:</strong> <span>{order.rider_name}</span>
+      </div>
+      <div className="rider-info-item">
+        <strong>Phone:</strong> <span>{order.rider_phone || 'N/A'}</span>
+      </div>
+      <div className="rider-info-item">
+        <strong>Plate Number:</strong> <span>{order.rider_plate || 'N/A'}</span>
+      </div>
+    </div>
+  </>
+)}
+
                     </Card.Body>
                 </Card>
             </div>
