@@ -16,9 +16,12 @@ const CheckoutPage = () => {
     lastName: '',
     email: '',
     phone: '',
-    blockStreetSubdivision: '',
-    city: '',
+    region: '',
     province: '',
+    streetName: '',
+    city: '',
+    barangay: '',
+    postalCode: '',
     landmark: '',
   });
 
@@ -47,9 +50,12 @@ const CheckoutPage = () => {
           lastName: data.lastName || '',
           email: data.email || '',
           phone: data.phoneNumber || data.phone || '',
-          blockStreetSubdivision: (data.block || '') + ' ' + (data.street || '') + ' ' + (data.subdivision || ''),
-          city: data.city || '',
+          region: data.region || '',
           province: data.province || '',
+          streetName: data.streetName || '',
+          city: data.city || '',
+          barangay: data.barangay || '',
+          postalCode: data.postalCode || '',
           landmark: data.landmark || '',
         });
       } catch (error) {
@@ -137,9 +143,7 @@ const confirmPayment = async (saved) => {
     FirstName: savedUserData.username,
     MiddleName: savedUserData.middleName,
     LastName: savedUserData.lastName,
-    Address: savedUserData.blockStreetSubdivision,
-    City: savedUserData.city,
-    Province: savedUserData.province,
+    Address: `${savedUserData.region}, ${savedUserData.province}, ${savedUserData.street}, ${savedUserData.city}`,
     Landmark: savedUserData.landmark,
     EmailAddress: savedUserData.email,
     PhoneNumber: savedUserData.phone,
@@ -255,7 +259,7 @@ const confirmPayment = async (saved) => {
 
   // Validate required fields
   if (orderType === "Delivery") {
-    const requiredFields = ['firstName', 'lastName', 'blockStreetSubdivision', 'city', 'province', 'landmark', 'email', 'phone'];
+    const requiredFields = ['firstName', 'lastName', 'region', 'province', 'streetName', 'barangay', 'city', 'postalCode', 'landmark', 'email', 'phone'];
     const missingFields = requiredFields.filter(field => !userData[field]);
 
     if (missingFields.length > 0) {
@@ -459,16 +463,31 @@ const confirmPayment = async (saved) => {
 
           <div className="checkout-form-row">
             <div className="form-group">
-              <label>Block, Street, Subdivision <span className="text-danger">*</span></label>
-              <input type="text" placeholder="Block, Street, Subdivision" className="form-control" value={userData.blockStreetSubdivision} onChange={e => handleInputChange('blockStreetSubdivision', e.target.value)} />
+              <label>Region <span className="text-danger">*</span></label>
+              <input type="text" placeholder="Region" className="form-control" value={userData.region} onChange={e => handleInputChange('region', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Province <span className="text-danger">*</span></label>
+              <input type="text" placeholder="Province" className="form-control" value={userData.province} onChange={e => handleInputChange('province', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Street Name <span className="text-danger">*</span></label>
+              <input type="text" placeholder="Street Name" className="form-control" value={userData.streetName} onChange={e => handleInputChange('streetName', e.target.value)} />
+            </div>
+          </div>
+
+          <div className="checkout-form-row">
+            <div className="form-group">
+              <label>Barangay <span className="text-danger">*</span></label>
+              <input type="text" placeholder="Barangay" className="form-control" value={userData.barangay} onChange={e => handleInputChange('barangay', e.target.value)} />
             </div>
             <div className="form-group">
               <label>City <span className="text-danger">*</span></label>
               <input type="text" placeholder="City" className="form-control" value={userData.city} onChange={e => handleInputChange('city', e.target.value)} />
             </div>
             <div className="form-group">
-              <label>Baranggay <span className="text-danger">*</span></label>
-              <input type="text" placeholder="Baranggay" className="form-control" value={userData.province} onChange={e => handleInputChange('province', e.target.value)} />
+              <label>Postal Code <span className="text-danger">*</span></label>
+              <input type="text" placeholder="Postal Code" className="form-control" value={userData.postalCode} onChange={e => handleInputChange('postalCode', e.target.value)} />
             </div>
           </div>
 
@@ -486,6 +505,8 @@ const confirmPayment = async (saved) => {
               <input type="text" placeholder="Phone Number" className="form-control" value={userData.phone} onChange={e => handleInputChange('phone', e.target.value)} />
             </div>
           </div>
+
+
 
           <div style={{ marginTop: '10px' }}>
             <label htmlFor="deliveryNotes" style={{ color: '#4B929D', display: 'block', marginBottom: '5px' }}>Delivery Notes</label>
