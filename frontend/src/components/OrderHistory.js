@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Form, Button } from 'react-bootstrap';
+import { Form, Button } from 'react-bootstrap';
 import { EyeFill, XCircle } from 'react-bootstrap-icons';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
@@ -52,6 +52,21 @@ const OrderHistory = () => {
     const fetchOrders = async () => {
       if (!token || !username) return;
 
+      // --- 1. Fetch all product/merchandise data to get images ---
+      const [productsRes, merchRes] = await Promise.all([
+        fetch(`http://localhost:8001/is_products/public/products/`),
+        fetch(`http://localhost:8002/merchandise/public/menu`)
+      ]);
+
+      const productsList = productsRes.ok ? await productsRes.json() : [];
+      const merchList = merchRes.ok ? await merchRes.json() : [];
+
+      const imageMap = new Map();
+      productsList.forEach(p => imageMap.set(p.ProductName, { image: p.ProductImage, type: p.ProductTypeName }));
+      merchList.forEach(m => imageMap.set(m.MerchandiseName, { image: m.MerchandiseImage, type: 'Merchandise' }));
+
+      // --- 2. Fetch order history ---
+
       try {
         const response = await fetch(`http://localhost:7004/cart/orders/history`, {
           headers: { 'Authorization': `Bearer ${token}` },
@@ -72,6 +87,12 @@ const OrderHistory = () => {
             const addonSum = p.addons ? p.addons.reduce((s, a) => s + (a.price || a.Price || 0), 0) : 0;
             return sum + (p.price + addonSum) * p.quantity;
           }, 0) + (order.orderType === 'Delivery' ? 50 : 0);
+
+          // --- 3. Map images to products in the order ---
+          const productsWithImages = order.products.map(p => ({
+            ...p,
+            ...imageMap.get(p.name) // Gets { image, type }
+          }));
           const originalStatus = order.status.toLowerCase();
           const isCompleted = originalStatus === 'delivered' || originalStatus === 'completed';
           let displayStatus = originalStatus;
@@ -79,7 +100,7 @@ const OrderHistory = () => {
           const orderData = {
             id: order.id,
             orderType: order.orderType,
-            products: order.products,
+            products: productsWithImages, // Use products with image data
             status: isCompleted ? 'completed' : displayStatus,
             date: order.date,
             total,
@@ -134,56 +155,68 @@ const OrderHistory = () => {
   };
 
   const handleShowInvoice = (order) => {
+    const subtotal = order.products.reduce((sum, p) => {
+      const addonSum = p.addons ? p.addons.reduce((s, a) => s + (a.price || a.Price || 0), 0) : 0;
+      return sum + (p.price + addonSum) * p.quantity;
+    }, 0);
+    const deliveryFee = order.orderType === 'Delivery' ? 50 : 0;
+
     const invoiceHtml = `
-      <div style="text-align: left; font-family: Arial, sans-serif;">
-        <div style="margin-bottom: 20px;">
-          <p style="margin: 5px 0;"><strong>Date:</strong> ${new Date(order.date).toLocaleString()}</p>
-          <p style="margin: 5px 0;"><strong>Order Type:</strong> ${order.orderType}</p>
+      <div class="receipt-container" style="font-family: 'Courier New', Courier, monospace; text-align: left; max-width: 450px; margin: auto; font-size: 1.05em;">
+        <div class="receipt-header" style="text-align: center; margin-bottom: 20px;">
+          <h4 style="margin: 0; font-weight: bold; ">Bleu Bean Cafe</h4>
+          <p style="margin: 5px 0; color: #333;">#213 Don Fabian St., Quezon City</p>
+          <p style="margin: 5px 0; color: #333;">Order #${order.id}</p>
+          <p style="margin: 5px 0; font-size: 0.9em; color: #333;">${new Date(order.date).toLocaleString()}</p>
         </div>
-        <h6 style="border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 15px;">Order Summary</h6>
+        <div class="receipt-body">
+          <div class="receipt-items-header" style="display: flex; justify-content: space-between; font-weight: bold; border-bottom: 1px dashed #999; padding-bottom: 5px; margin-bottom: 10px;">
+            <span>ITEM</span>
+            <span>TOTAL</span>
+          </div>
         ${order.products.map(p => {
           const addonsTotal = p.addons ? p.addons.reduce((s, a) => s + (a.price || a.Price || 0), 0) : 0;
           const itemTotal = (p.price + addonsTotal) * p.quantity;
           return `
-            <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #f0f0f0;">
-              <p style="font-weight: bold; font-size: 1.1em; margin: 0 0 5px 0;">${p.name}</p>
+            <div class="receipt-item" style="margin-bottom: 15px;">
               <div style="display: flex; justify-content: space-between;">
-                <span>Base Price:</span>
-                <span>₱${p.price.toFixed(2)}</span>
+                <span style="font-weight: bold;">${p.quantity}x ${p.name}</span>
+                <span>₱${itemTotal.toFixed(2)}</span>
+              </div>
+              <div style="padding-left: 15px; font-size: 0.9em; color: #555;">
+                <span> ₱${p.price.toFixed(2)} each</span>
               </div>
               ${p.addons && p.addons.length > 0 ? `
-                <div style="padding-left: 15px; font-size: 0.9em; color: #555;">
+                <div class="receipt-addons" style="padding-left: 15px; font-size: 0.85em; color: #666;">
                   ${p.addons.map(ao => `
-                    <div style="display: flex; justify-content: space-between;">
-                      <span>+ ${ao.addon_name || ao.AddOnName || ao.name}</span>
-                      <span>₱${(ao.price || ao.Price || 0).toFixed(2)}</span>
-                    </div>
+                    <div style="display: flex; justify-content: space-between; padding-left: 10px;"><span>+ ${ao.addon_name || ao.AddOnName || ao.name}</span><span>₱${(ao.price || ao.Price || 0).toFixed(2)}</span></div>
                   `).join('')}
                 </div>
               ` : ""}
-              <div style="display: flex; justify-content: space-between; margin-top: 5px;">
-                <span>Quantity:</span>
-                <span>x${p.quantity}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-weight: bold; margin-top: 8px;">
-                <span>Item Total:</span>
-                <span>₱${itemTotal.toFixed(2)}</span>
-              </div>
             </div>
           `;
         }).join('')}
-        <div style="text-align: right; margin-top: 20px; padding-top: 10px; border-top: 2px solid #333;">
-          <h5 style="margin: 0; font-size: 1.2em;">Total: ₱${order.total.toFixed(2)}</h5>
+        </div>
+        <div class="receipt-footer" style="margin-top: 20px; padding-top: 10px; border-top: 1px dashed #999;">
+          <div style="display: flex; justify-content: space-between;"><span>Subtotal:</span> <span>₱${subtotal.toFixed(2)}</span></div>
+          ${deliveryFee > 0 ? `<div style="display: flex; justify-content: space-between;"><span>Delivery Fee:</span> <span>₱${deliveryFee.toFixed(2)}</span></div>` : ''}
+          <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 1.1em; margin-top: 10px; border-top: 2px solid #333; padding-top: 5px;">
+            <span>TOTAL:</span>
+            <span>₱${order.total.toFixed(2)}</span>
+          </div>
+        </div>
+        <div class="receipt-thank-you" style="text-align: center; margin-top: 30px; font-size: 0.9em;">
+          <p>Thank you for your order!</p>
         </div>
       </div>
     `;
     Swal.fire({
-      title: `Invoice for Order #${order.id}`,
+      title: ``,
       html: invoiceHtml,
       showConfirmButton: true,
       confirmButtonText: 'Close',
-      width: '30%',
-      customClass: { popup: 'invoice-modal' }
+      width: '500px',
+      customClass: { popup: 'receipt-modal' }
     });
   };
 
@@ -237,7 +270,7 @@ const OrderHistory = () => {
   };
 
   const renderProductDetails = (products) => (
-    <ul style={{ margin: 0, paddingLeft: '15px', fontSize: '0.9em', listStyle: 'none' }}>
+    <ul style={{ margin: 0, paddingLeft: '15px', fontSize: '1.1em', listStyle: 'none' }}>
       {products.map((p, idx) => (
         <li key={idx} style={{ marginBottom: '5px', fontWeight: 'bold' }}>
           {p.name} (x{p.quantity})
@@ -260,23 +293,81 @@ const OrderHistory = () => {
         {getStatusBadge(order.status)}
       </div>
       <div className="card-body" style={{ textAlign: 'left' }}>
-        <p><strong>Type:</strong> {order.orderType}</p>
-        <p><strong>Date:</strong> {new Date(order.date).toLocaleDateString()}</p>
-        <p>
-          <strong>Products:</strong>
+        <div className="order-card-detail"><strong>Type:</strong> {order.orderType}</div>
+        <div className="order-card-detail" style={{ fontSize: '1.1em' }}><strong>Date:</strong> {new Date(order.date).toLocaleDateString()}</div>
+        <div className="order-card-detail">
+          <strong className="d-block mb-1">Products:</strong>
           {renderProductDetails(order.products)}
-        </p>
-        <p className="card-total"><strong>Total:</strong> ₱{order.total.toFixed(2)}</p>
+        </div>
+        <div className="card-total"><strong>Total:</strong> ₱{order.total.toFixed(2)}</div>
       </div>
       <div className="card-actions">
         <button className="action-btn view" title="View Invoice" onClick={() => handleShowInvoice(order)}>
-          <EyeFill /> View
+          <EyeFill /> <span className="action-text">View</span>
         </button>
         {order.status === 'pending' && (
           <button
             className="action-btn cancel"
             title="Cancel Order"
             onClick={() => handleCancelClick(order)}
+          >
+            <XCircle /> <span className="action-text">Cancel</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderDesktopOrderCard = (order) => (
+    <div className="order-card-desktop" key={order.id} onClick={() => handleRowClick(order)}>
+      <div className="card-header-desktop">
+        <div className="order-info">
+          <span className="order-id">Order #{order.id}</span>
+          <span className="order-type">{order.orderType}</span>
+        </div>
+        {getStatusBadge(order.status)}
+      </div>
+      <div className="card-body-desktop">
+        <div className="order-image-section">
+          {order.products.length > 0 && order.products[0].image && (
+            <div className="order-image-container">
+              <img
+                src={order.products[0].image.startsWith('http') ? order.products[0].image : `http://localhost:8001${order.products[0].image}`}
+                alt={order.products[0].name}
+                className="order-item-image"
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+            </div>
+          )}  
+        </div>
+        <div className="order-details">
+          <div className="detail-item">
+            <strong style={{ fontSize: '1.1em' }}>Date:</strong> <span style={{ fontSize: '1.1em' }}>{new Date(order.date).toLocaleDateString()}</span>
+          </div>
+          <div className="detail-item">
+            <strong style={{ fontSize: '1.1em' }}>Products:</strong>
+            {renderProductDetails(order.products)}
+          </div>
+        </div>
+        <div className="order-total">
+          <strong>Total: ₱{order.total.toFixed(2)}</strong>
+        </div>
+      </div>
+      <div className="card-actions-desktop">
+        <button className="action-btn view" title="View Invoice" onClick={(e) => {
+          e.stopPropagation();
+          handleShowInvoice(order);
+        }}> 
+          <EyeFill /> View Invoice
+        </button>
+        {order.status === 'pending' && (
+          <button
+            className="action-btn cancel"
+            title="Cancel Order"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleCancelClick(order);
+            }}
           >
             <XCircle /> Cancel
           </button>
@@ -304,67 +395,10 @@ const OrderHistory = () => {
         </div>
       );
     } else {
-      // Desktop View: Render a full table
+      // Desktop View: Render card list instead of table
       return (
-        <div className="table-responsive">
-          <Table className="orders-table">
-            <thead>
-              <tr>
-             
-                <th>Order Type</th>
-                <th>Products</th>
-                <th>Total</th>
-                <th>Date</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ordersToRender.map((order) => (
-                <tr key={order.id} onClick={() => handleRowClick(order)} className="desktop-order-row">
-                  
-                  <td>{order.orderType}</td>
-                  <td>
-                    {order.products.map((p, idx) => (
-                      <div key={idx}>
-                        {p.name} (x{p.quantity})
-                        {p.addons && p.addons.length > 0 && (
-                          <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.85em", color: "#666" }}>
-                            {p.addons.map((addon, i) => (
-                              <li key={i}>+ {addon.addon_name || addon.AddOnName || addon.name} (₱{(addon.price || addon.Price || 0).toFixed(2)})</li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    ))}
-                  </td>
-                  <td>₱{order.total.toFixed(2)}</td>
-                  <td>{new Date(order.date).toLocaleDateString()}</td>
-                  <td>{getStatusBadge(order.status)}</td>
-                  <td>
-                    <button className="action-btn view" title="View Invoice" onClick={(e) => {
-                      e.stopPropagation();
-                      handleShowInvoice(order);
-                    }}>
-                      <EyeFill />
-                    </button>
-                    {order.status === 'pending' && (
-                      <button
-                        className="action-btn cancel"
-                        title="Cancel Order"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCancelClick(order);
-                        }}
-                      >
-                        <XCircle />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
+        <div className="orders-desktop-list">
+          {ordersToRender.map(renderDesktopOrderCard)}
         </div>
       );
     }

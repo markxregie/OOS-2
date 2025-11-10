@@ -140,10 +140,12 @@ const confirmPayment = async (saved) => {
   }));
 
   const deliveryInfoPayload = orderType === "Delivery" ? {
-    FirstName: savedUserData.username,
+    FirstName: savedUserData.firstName,
     MiddleName: savedUserData.middleName,
     LastName: savedUserData.lastName,
-    Address: `${savedUserData.region}, ${savedUserData.province}, ${savedUserData.street}, ${savedUserData.city}`,
+    Address: `${savedUserData.region}, ${savedUserData.province}, ${savedUserData.streetName}, ${savedUserData.barangay}`,
+    City: savedUserData.city,
+    Province: savedUserData.province,
     Landmark: savedUserData.landmark,
     EmailAddress: savedUserData.email,
     PhoneNumber: savedUserData.phone,
@@ -323,7 +325,9 @@ const confirmPayment = async (saved) => {
           reference_number,
           redirect_url: window.location.origin + "/checkout",
           items: itemsForCheckout,
-          delivery_fee: deliveryFee
+          delivery_fee: deliveryFee,
+          order_type: orderType,
+          user_data: currentUserData
         }),
       });
       const data = await response.json();
