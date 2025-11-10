@@ -264,11 +264,7 @@ function DeliveryManagement() {
         return updated;
       });
 
-      // Hide dropdown after assignment
-      setShowChangeRiderDropdown(prev => ({
-        ...prev,
-        [orderId]: false
-      }));
+
 
       Swal.fire({
         title: "Rider Assigned Successfully!",
@@ -277,6 +273,9 @@ function DeliveryManagement() {
         confirmButtonColor: "#198754",
         confirmButtonText: "OK"
       });
+
+      // Close the change rider dropdown after successful assignment
+      setShowChangeRiderDropdown(prev => ({ ...prev, [orderId]: false }));
 
     } catch (error) {
       console.error("Failed to assign rider:", error);
@@ -290,10 +289,26 @@ function DeliveryManagement() {
   };
 
   const handleChangeRiderClick = (orderId) => {
-    setShowChangeRiderDropdown(prev => ({
-      ...prev,
-      [orderId]: !prev[orderId]
-    }));
+    Swal.fire({
+      title: 'Confirm Change Rider',
+      text: 'Are you sure you want to change the rider for this order?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#4b929d',
+      cancelButtonColor: '#dc3545',
+      confirmButtonText: 'Yes, Change Rider',
+      cancelButtonText: 'Cancel',
+      customClass: {
+        popup: 'swal-wide'
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        setShowChangeRiderDropdown(prev => ({
+          ...prev,
+          [orderId]: !prev[orderId]
+        }));
+      }
+    });
   };
 
   const handleStatusChange = (orderId, newStatus) => {
@@ -528,7 +543,7 @@ function DeliveryManagement() {
             const restrictedStatuses = ["pickedup", "delivered", "cancelled", "returned"];
             const canChangeRider = !restrictedStatuses.includes(order.currentStatus?.toLowerCase());
             return (
-              <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "350px", height: "500px", overflowY: "auto" }}>
+              <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "350px", height: "570px", overflow: "hidden" }}>
               <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
                 <h5 style={{ color: "#2c3e50", fontWeight: "700" }}>Order #{order.id}</h5>
                 <p style={{
