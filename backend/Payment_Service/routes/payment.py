@@ -54,6 +54,8 @@ class CheckoutRequest(BaseModel):
     redirect_url: str
     items: List[CheckoutItem]
     delivery_fee: float
+    order_type: str
+    user_data: Optional[dict] = None
 
 class CartItem(BaseModel):
     product_id: int

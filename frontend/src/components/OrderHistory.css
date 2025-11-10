@@ -261,3 +261,130 @@
     white-space: nowrap;
   }
 }
+
+/* Desktop Card Styles */
+.orders-desktop-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  padding: 20px 0;
+}
+
+.order-card-desktop {
+  background-color: #fff;
+  border: 1px solid #e9ecef;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+}
+
+.order-card-desktop:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+}
+
+.card-header-desktop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.order-info {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.order-id {
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: #4a9ba5;
+}
+
+.order-type {
+  font-size: 0.9rem;
+  color: #6c757d;
+  background-color: #f8f9fa;
+  padding: 2px 8px;
+  border-radius: 10px;
+  display: inline-block;
+}
+
+.card-body-desktop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 15px;
+}
+
+.order-image-section {
+  flex-shrink: 0;
+  margin-right: 20px;
+}
+
+.order-item-image {
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 2px solid #e9ecef;
+}
+
+.order-details {
+  flex: 1;
+  margin-right: 20px;
+}
+
+.detail-item {
+  margin-bottom: 10px;
+  font-size: 0.95rem;
+  color: #495057;
+}
+
+.detail-item strong {
+  color: #343a40;
+  margin-right: 8px;
+}
+
+.order-total {
+  font-size: 1.1rem;
+  color: #4a9ba5;
+  text-align: right;
+  min-width: 120px;
+}
+
+.card-actions-desktop {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.card-actions-desktop .action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background-color: #f8f9fa;
+  border: 1px solid #ddd;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.card-actions-desktop .action-btn:hover {
+  background-color: #e9ecef;
+}
+
+.card-actions-desktop .action-btn.view {
+  color: #17a2b8;
+}
+
+.card-actions-desktop .action-btn.cancel {
+  color: #dc3545;
+}
