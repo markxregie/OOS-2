@@ -76,16 +76,24 @@ function DeliveryManagement() {
     } finally {
       setIsLoading(false);
     }
-  }, [authToken, localAssignments]);
+  }, [authToken]);
 
   useEffect(() => {
     if (!authToken) return;
-    // initial fetch
-    fetchInitialData();
-    // periodic refresh every 10 seconds
-    const interval = setInterval(fetchInitialData, 10000);
-    return () => clearInterval(interval);
-  }, [authToken, fetchInitialData]);
+
+    let interval;
+    const initialize = async () => {
+      await fetchInitialData();
+      // Start refresh loop
+      interval = setInterval(fetchInitialData, 10000);
+    };
+
+    initialize();
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [authToken]);
 
   useEffect(() => {
     const tokenFromUrl = searchParams.get('authorization');
@@ -204,6 +212,7 @@ function DeliveryManagement() {
         <div style="text-align: left;">
           <p><strong>Rider:</strong> ${rider.FullName}</p>
           <p><strong>Phone:</strong> ${rider.Phone}</p>
+          <p><strong>Plate No:</strong> ${rider.PlateNumber || 'N/A'}</p>
         </div>
         <p style="margin-top: 15px; font-size: 14px; color: #666;">
           Are you sure you want to assign this rider to this order?
@@ -255,11 +264,7 @@ function DeliveryManagement() {
         return updated;
       });
 
-      // Hide dropdown after assignment
-      setShowChangeRiderDropdown(prev => ({
-        ...prev,
-        [orderId]: false
-      }));
+
 
       Swal.fire({
         title: "Rider Assigned Successfully!",
@@ -268,6 +273,9 @@ function DeliveryManagement() {
         confirmButtonColor: "#198754",
         confirmButtonText: "OK"
       });
+
+      // Close the change rider dropdown after successful assignment
+      setShowChangeRiderDropdown(prev => ({ ...prev, [orderId]: false }));
 
     } catch (error) {
       console.error("Failed to assign rider:", error);
@@ -281,10 +289,26 @@ function DeliveryManagement() {
   };
 
   const handleChangeRiderClick = (orderId) => {
-    setShowChangeRiderDropdown(prev => ({
-      ...prev,
-      [orderId]: !prev[orderId]
-    }));
+    Swal.fire({
+      title: 'Confirm Change Rider',
+      text: 'Are you sure you want to change the rider for this order?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#4b929d',
+      cancelButtonColor: '#dc3545',
+      confirmButtonText: 'Yes, Change Rider',
+      cancelButtonText: 'Cancel',
+      customClass: {
+        popup: 'swal-wide'
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        setShowChangeRiderDropdown(prev => ({
+          ...prev,
+          [orderId]: !prev[orderId]
+        }));
+      }
+    });
   };
 
   const handleStatusChange = (orderId, newStatus) => {
@@ -381,20 +405,6 @@ function DeliveryManagement() {
   return (
     <div className="d-flex" style={{ height: "100vh", backgroundColor: "#edf7f9" }}>
       <Container fluid className="p-4 main-content" style={{ marginLeft: "0px", width: "calc(100% - 0px)" }}>
-        {isLoading ? (
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center', 
-            minHeight: '60vh',
-            flexDirection: 'column',
-            gap: '1rem'
-          }}>
-            <FaSpinner className="fa-spin" style={{ fontSize: '3rem', color: '#4b929d' }} />
-            <p style={{ color: '#4b929d', fontSize: '1.2rem' }}>Loading data...</p>
-          </div>
-        ) : (
-          <div>
             <header className="manage-header">
           <div className="header-left">
             <h2 className="page-title">Delivery Management</h2>
@@ -533,7 +543,7 @@ function DeliveryManagement() {
             const restrictedStatuses = ["pickedup", "delivered", "cancelled", "returned"];
             const canChangeRider = !restrictedStatuses.includes(order.currentStatus?.toLowerCase());
             return (
-              <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "350px", height: "500px", overflowY: "auto" }}>
+              <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "350px", height: "570px", overflow: "hidden" }}>
               <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
                 <h5 style={{ color: "#2c3e50", fontWeight: "700" }}>Order #{order.id}</h5>
                 <p style={{
@@ -601,6 +611,11 @@ function DeliveryManagement() {
                       <div>
                         <div style={{ fontWeight: "600" }}>{assignedRider.FullName}</div>
                         <div>{assignedRider.Phone}</div>
+                        {assignedRider.PlateNumber && (
+                          <div style={{ fontStyle: "italic", color: "#4b929d", fontSize: "0.9rem" }}>
+                            Plate No: {assignedRider.PlateNumber}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : null;
@@ -692,8 +707,6 @@ function DeliveryManagement() {
                 <FaAngleDoubleRight />
               </button>
             </div>
-          </div>
-        )}
           </div>
         )}
       </Container>

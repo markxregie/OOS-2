@@ -1,56 +1,39 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Container, Row, Col, Card } from 'react-bootstrap';
+import { Row, Col, Card } from 'react-bootstrap';
 import { ArrowLeft, Shop, HouseDoorFill, CheckCircleFill, XCircleFill, ArrowRightCircleFill } from 'react-bootstrap-icons';
 import Swal from 'sweetalert2';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
 import './TrackOrder.css';
 
-// Mapbox GL will be used for map rendering in this file.
+// Simple in-memory caches to avoid repeating expensive external requests
+const geocodeCache = new Map(); // address -> { lat, lng }
+const pendingGeocode = new Map(); // address -> Promise
 
-// Mapbox access token
-const MAPBOX_ACCESS_TOKEN = 'pk.eyJ1Ijoia2Vuaml4NDQiLCJhIjoiY21oZWxiM2J2MDBwYzJsczZrc3lpcXA5byJ9.U_4yhz5-tIl9udWvi-4mfQ';
-mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
-try { if (typeof mapboxgl.setTelemetryEnabled === 'function') mapboxgl.setTelemetryEnabled(false); } catch (e) { /* ignore */ }
+async function geocodeAddress(address) {
+    if (!address) return null;
+    const key = address.trim().toLowerCase();
+    if (geocodeCache.has(key)) return geocodeCache.get(key);
+    if (pendingGeocode.has(key)) return pendingGeocode.get(key);
 
-const trackMapRef = { map: null, containerId: 'trackorder-map' };
-// Persistent refs for markers and route state to avoid re-creating map repeatedly
-const storeMarkerRef = { marker: null };
-const custMarkerRef = { marker: null };
-const riderMarkerRef = { marker: null };
-const routeStateRef = { fitted: false, styleHandler: null };
-
-// Caches and dedupe maps for directions
-const directionsCache = new Map();
-const pendingDirections = new Map();
-
-async function fetchDirectionsCached(fromLng, fromLat, toLng, toLat) {
-    const key = `${fromLng},${fromLat}:${toLng},${toLat}`;
-    if (directionsCache.has(key)) return directionsCache.get(key);
-    if (pendingDirections.has(key)) return pendingDirections.get(key);
-
-    const p = (async () => {
-        try {
-            const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${fromLng},${fromLat};${toLng},${toLat}?geometries=geojson&access_token=${MAPBOX_ACCESS_TOKEN}`;
-            const res = await fetch(url);
-            if (!res.ok) return null;
-            const data = await res.json();
-            if (data && data.routes && data.routes[0]) {
-                const route = data.routes[0];
-                directionsCache.set(key, route);
-                return route;
-            }
-            return null;
-        } catch (err) {
-            console.error('fetchDirectionsCached error', err);
-            return null;
-        } finally {
-            pendingDirections.delete(key);
+    const p = new Promise((resolve) => {
+        if (window.google && window.google.maps) {
+            const geocoder = new window.google.maps.Geocoder();
+            geocoder.geocode({ address }, (results, status) => {
+                if (status === 'OK' && results[0]) {
+                    const location = results[0].geometry.location;
+                    const val = { lat: location.lat(), lng: location.lng() };
+                    geocodeCache.set(key, val);
+                    resolve(val);
+                } else {
+                    resolve(null);
+                }
+            });
+        } else {
+            resolve(null);
         }
-    })();
+    });
 
-    pendingDirections.set(key, p);
+    pendingGeocode.set(key, p);
     return p;
 }
 
@@ -95,25 +78,29 @@ const TrackOrder = () => {
     const { orderId } = useParams();
     const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [userLocation, setUserLocation] = useState(null); // customer's browser location
+    const [userLocation, setUserLocation] = useState(null); // customer's pinned location from profile
     const [riderLocationState, setRiderLocationState] = useState(null); // latest rider location from backend
-    const mapContainerRef = useRef(null);
+    const mapRef = useRef(null);
+    const [map, setMap] = useState(null);
+    const [marker, setMarker] = useState(null);
+    const [riderMarker, setRiderMarker] = useState(null);
+    const [routePolyline, setRoutePolyline] = useState(null);
     const [riderIdState, setRiderIdState] = useState(null);
     const [riderLastUpdated, setRiderLastUpdated] = useState(null);
-    const [mapLoaded, setMapLoaded] = useState(false);
+    const [scriptLoaded, setScriptLoaded] = useState(!!(window.google && window.google.maps));
 
-    // Helper to create small colored marker elements
-    const makeMarkerEl = (color, label) => {
-        const el = document.createElement('div');
-        el.style.width = '18px';
-        el.style.height = '18px';
-        el.style.background = color;
-        el.style.border = '2px solid white';
-        el.style.borderRadius = '50%';
-        el.style.boxShadow = '0 0 2px rgba(0,0,0,0.5)';
-        el.title = label;
-        return el;
-    };
+    // Load Google Maps API script if not already loaded
+    useEffect(() => {
+      if (!scriptLoaded) {
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}`;
+        script.async = true;
+        script.defer = true;
+        script.onload = () => setScriptLoaded(true);
+        script.onerror = () => console.error('Failed to load Google Maps API');
+        document.head.appendChild(script);
+      }
+    }, [scriptLoaded]);
 
     const orderStatusSteps = ['pending', 'processing', 'waiting for pickup', 'picked up', 'delivering', 'completed'];
     const pickupStatusSteps = ['pending', 'processing', 'waiting for pickup', 'picked up', 'completed'];
@@ -217,7 +204,69 @@ const TrackOrder = () => {
         return () => clearInterval(interval); // Cleanup interval on component unmount
     }, [orderId, loading]);
 
-    // Poll rider location from backend if we have a riderId
+    // Poll for user's pinned location from their profile based on address fields
+    useEffect(() => {
+        const fetchProfileLocation = async () => {
+            try {
+                const token = localStorage.getItem('authToken');
+                if (token) {
+                    const profileRes = await fetch('http://localhost:4000/users/profile', {
+                        headers: { 'Authorization': `Bearer ${token}` },
+                    });
+                    if (profileRes.ok) {
+                        const profileData = await profileRes.json();
+                        const { region, province, city, streetName, barangay, postalCode, lat, lng } = profileData;
+
+                        const geocodeAddress = () => {
+                            // First, set to stored lat/lng if available
+                            if (lat && lng && Number.isFinite(parseFloat(lat)) && Number.isFinite(parseFloat(lng))) {
+                                setUserLocation([parseFloat(lat), parseFloat(lng)]);
+                                console.log('TrackOrder: Set to stored user profile location:', [parseFloat(lat), parseFloat(lng)]);
+                            }
+
+                            // Then, try to geocode if address fields are complete
+                            if (region && province && city && streetName && barangay) {
+                                const address = `${streetName}, ${barangay}, ${city}, ${province}, ${region}, Philippines`;
+
+                                // Geocode the address to get lat/lng
+                                const geocoder = new window.google.maps.Geocoder();
+                                geocoder.geocode({ address }, (results, status) => {
+                                    if (status === 'OK' && results[0]) {
+                                        const location = results[0].geometry.location;
+                                        const newLat = location.lat();
+                                        const newLng = location.lng();
+                                        setUserLocation([newLat, newLng]);
+                                        console.log('TrackOrder: Updated to geocoded user profile location:', [newLat, newLng]);
+                                    }
+                                });
+                            }
+                        };
+
+                        if (window.google && window.google.maps) {
+                            geocodeAddress();
+                        } else {
+                            // Load Google Maps API if not loaded
+                            const script = document.createElement('script');
+                            script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}`;
+                            script.async = true;
+                            script.defer = true;
+                            script.onload = geocodeAddress;
+                            document.head.appendChild(script);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to get profile location:', e);
+            }
+        };
+
+        fetchProfileLocation(); // Initial fetch
+        const profileInterval = setInterval(fetchProfileLocation, 10000); // Poll every 10 seconds
+
+        return () => clearInterval(profileInterval);
+    }, []);
+
+    // Poll rider location from backend if we have a riderId and order is not completed
     useEffect(() => {
         let interval = null;
         const startPolling = async () => {
@@ -230,226 +279,111 @@ const TrackOrder = () => {
                 }
             } catch (e) { /* ignore */ }
         };
-        if (riderIdState) {
+        if (riderIdState && order && order.status !== 'completed') {
             // initial fetch
             startPolling();
             interval = setInterval(startPolling, 5000);
         }
         return () => { if (interval) clearInterval(interval); };
-    }, [riderIdState]);
+    }, [riderIdState, order]);
 
-    // Initialize the map once when order is loaded and conditions are met
+    // Initialize and update Google Map
     useEffect(() => {
-        try {
-            if (trackMapRef.map) return;
-            if (!order || order.orderType !== 'Delivery' || !['pending', 'processing', 'picked up', 'delivering', 'waiting for pickup'].includes(order.status)) return;
-            if (!mapContainerRef || !mapContainerRef.current) {
-                console.warn('trackorder: map container not available yet');
-                return; // wait until DOM element exists
-            }
+        if (!scriptLoaded || !mapRef.current || !order || order.orderType !== 'Delivery') {
+            return;
+        }
 
-            // Center on user's location if available, otherwise a default.
-            const center = userLocation
-                ? [userLocation[1], userLocation[0]]
-                : [121.0, 14.6]; // Default center (e.g., Metro Manila)
+        const storeLocation = { lat: 14.5547, lng: 121.0244 }; // Default store location
+        const customerLoc = userLocation ? { lat: userLocation[0], lng: userLocation[1] } : null;
+        const riderLoc = riderLocationState ? { lat: riderLocationState[0], lng: riderLocationState[1] } : null;
 
-            // Create the map. Use element container (safer than id string here).
-            const map = new mapboxgl.Map({
-                container: mapContainerRef.current,
-                style: 'mapbox://styles/mapbox/streets-v11',
-                center,
-                zoom: 12
+        // Initialize map
+        if (!map) {
+            const newMap = new window.google.maps.Map(mapRef.current, {
+                center: storeLocation,
+                zoom: 12,
+                mapTypeControl: false,
             });
-            trackMapRef.map = map;
-            map.addControl(new mapboxgl.NavigationControl());
+            setMap(newMap);
 
-            // ensure correct sizing once idle
-            map.once('idle', () => { try { map.resize(); } catch (e) {} });
+            // Add store marker
+            new window.google.maps.Marker({
+                position: storeLocation,
+                map: newMap,
+                title: 'Store Location',
+                icon: {
+                    path: window.google.maps.SymbolPath.CIRCLE,
+                    scale: 8,
+                    fillColor: '#4285F4', // Blue for store
+                    fillOpacity: 1,
+                    strokeWeight: 2,
+                    strokeColor: 'white',
+                },
+            });
 
-            // Debug / resilience handlers to help with white/blank map issues
-            try {
-                map.on('load', () => {
-                    console.debug('trackorder: map load event fired, style is', map.getStyle && map.getStyle().name);
-                    try { map.resize(); } catch (e) {}
-                    setMapLoaded(true);
-                });
-
-                map.on('styledata', () => {
-                    console.debug('trackorder: styledata event');
-                });
-
-                map.on('error', (e) => {
-                    console.error('trackorder: map error event', e.error || e);
-                    // Try a simple style reload once if style failed to load
-                    try {
-                        if (e && e.error && /style/i.test(String(e.error.message || ''))) {
-                            // attempt to reset style after short delay
-                            setTimeout(() => {
-                                try { map.setStyle('mapbox://styles/mapbox/streets-v11'); } catch (er) { console.warn('style reload failed', er); }
-                            }, 1000);
-                        }
-                    } catch (er) { /* ignore */ }
-                });
-            } catch (e) { console.warn('trackorder: could not attach map event handlers', e); }
-
-            // ask for customer's browser location to center/map pin (non-blocking)
-            try {
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition((pos) => {
-                        setUserLocation([pos.coords.latitude, pos.coords.longitude]);
-                    }, (err) => {
-                        // user denied or error — we'll fallback to order delivery location
-                    }, { maximumAge: 60000, timeout: 5000 });
-                }
-            } catch (e) { }
-
-            return () => {
-                try {
-                    if (routeStateRef.styleHandler && trackMapRef.map) trackMapRef.map.off('styledata', routeStateRef.styleHandler);
-                } catch (e) { }
-            };
-        } catch (err) {
-            console.error('Track map init error:', err);
+            return; // Map is set, next render will handle updates
         }
-    }, [order]);
 
-    // Center map on user's location when available
-    useEffect(() => {
-        if (trackMapRef.map && userLocation && userLocation.every(v => Number.isFinite(v))) {
-            try {
-                trackMapRef.map.setCenter([userLocation[1], userLocation[0]]);
-                trackMapRef.map.setZoom(15); // Zoom in for better pinpointing
-            } catch (e) {
-                console.warn('Failed to center map on user location:', e);
+        // --- Update map with markers and route ---
+
+        // Update or create customer marker
+        if (customerLoc) {
+            if (marker) {
+                marker.setPosition(customerLoc);
+            } else {
+                setMarker(new window.google.maps.Marker({
+                    position: customerLoc,
+                    map: map,
+                    title: 'Your Location',
+                }));
             }
         }
-    }, [userLocation]);
 
-    // Update markers and route whenever `order`, `riderLocationState`, or `userLocation` change
-    useEffect(() => {
-        const updateRouteAndMarkers = async () => {
-            try {
-                if (!order || order.orderType !== 'Delivery' || !mapLoaded) return;
-                const map = trackMapRef.map;
-                if (!map) return;
-
-                // Ensure the map is resized, in case it was initialized while the container was hidden.
-                try {
-                    map.resize();
-                } catch (e) { /* ignore */ }
-
-                // Determine coordinates
-                // Rider: prefer real-time riderLocationState, otherwise check order fields
-                let riderLatLng = null;
-                if (riderLocationState && riderLocationState.every(v => Number.isFinite(v))) {
-                    riderLatLng = riderLocationState;
-                } else {
-                    try {
-                        if (order.rider_lat && order.rider_lng) riderLatLng = [parseFloat(order.rider_lat), parseFloat(order.rider_lng)];
-                        else if (order.riderLocation && order.riderLocation.lat && order.riderLocation.lng) riderLatLng = [parseFloat(order.riderLocation.lat), parseFloat(order.riderLocation.lng)];
-                        else if (order.driver_lat && order.driver_lng) riderLatLng = [parseFloat(order.driver_lat), parseFloat(order.driver_lng)];
-                    } catch (e) { riderLatLng = null; }
-                }
-
-                // Temporary fix: if no rider location available, use a default location to show the rider pin
-                if (!riderLatLng) {
-                    riderLatLng = [14.5995, 120.9842]; // Default Manila location as fallback
-                }
-
-                // Customer: use browser geolocation.
-                const custLatLng = (userLocation && userLocation.every(v => Number.isFinite(v))) ? userLocation : null;
-
-                // Update or create markers (use small colored HTML markers for clarity)
-                try {
-                    if (storeMarkerRef.marker) { storeMarkerRef.marker.remove(); storeMarkerRef.marker = null; }
-                    // Customer Marker
-                    if (custLatLng) {
-                        if (custMarkerRef.marker) {
-                            custMarkerRef.marker.setLngLat([custLatLng[1], custLatLng[0]]);
-                        } else {
-                            custMarkerRef.marker = new mapboxgl.Marker({ element: makeMarkerEl('#ff4d4f', 'You') }).setLngLat([custLatLng[1], custLatLng[0]]).setPopup(new mapboxgl.Popup().setText('You')).addTo(map);
-                        }
-                    }
-
-                    // Rider Marker
-                    if (riderLatLng && riderLatLng.every(v => Number.isFinite(v))) {
-                        if (riderMarkerRef.marker) riderMarkerRef.marker.setLngLat([riderLatLng[1], riderLatLng[0]]);
-                        else riderMarkerRef.marker = new mapboxgl.Marker({ element: makeMarkerEl('#007bff', 'Rider') }).setLngLat([riderLatLng[1], riderLatLng[0]]).setPopup(new mapboxgl.Popup().setText('Rider')).addTo(map);
-                    } else {
-                        // If no current rider location, remove existing rider marker
-                        try { if (riderMarkerRef.marker) { riderMarkerRef.marker.remove(); riderMarkerRef.marker = null; } } catch (er) {}
-                    }
-                } catch (e) { console.warn('marker error', e); }
-
-                // Draw route from rider to customer if both locations are known
-                let route = null;
-                if (riderLatLng && custLatLng) {
-                    route = await fetchDirectionsCached(riderLatLng[1], riderLatLng[0], custLatLng[1], custLatLng[0]);
-                } else {
-                    // If no locations, clear any existing route (do not chain removeLayer/removeSource)
-                    try {
-                        if (map.getLayer && map.getLayer('route-line')) {
-                            try { map.removeLayer('route-line'); } catch (e) { console.warn('removeLayer(route-line) failed', e); }
-                        }
-                        if (map.getSource && map.getSource('route')) {
-                            try { map.removeSource('route'); } catch (e) { console.warn('removeSource(route) failed', e); }
-                        }
-                    } catch (e) { console.warn('clearing route failed', e); }
-                    routeStateRef.fitted = false;
-                }
-
-                if (route && route.geometry) {
-                    const routeGeo = { type: 'Feature', geometry: route.geometry };
-
-                    const addOrUpdateRoute = (m) => {
-                        try {
-                            if (!m || !m.getStyle) return;
-                            if (m.getSource && m.getSource('route')) {
-                                try { m.getSource('route').setData(routeGeo); } catch (e) { console.warn('setData failed', e); }
-                                return;
-                            }
-                            try { m.addSource('route', { type: 'geojson', data: routeGeo }); } catch (e) { try { if (m.getSource && m.getSource('route')) m.getSource('route').setData(routeGeo); } catch (er) { console.warn('addSource/setData fallback failed', er); } }
-                            try { if (!m.getLayer || !m.getLayer('route-line')) m.addLayer({ id: 'route-line', type: 'line', source: 'route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1d7fa6', 'line-width': 5 } }); } catch (e) { console.warn('addLayer failed', e); }
-                        } catch (e) { console.warn('addOrUpdateRoute error', e); }
-                    };
-
-                    const safeAddRoute = () => {
-                        try { if (typeof map.isStyleLoaded === 'function' && !map.isStyleLoaded()) return; } catch (e) {}
-                        addOrUpdateRoute(map);
-                        if (!routeStateRef.fitted) {
-                            try {
-                                const coordsArray = route.geometry.coordinates;
-                                const bounds = coordsArray.reduce((b, c) => b.extend(c), new mapboxgl.LngLatBounds(coordsArray[0], coordsArray[0]));
-                                map.fitBounds(bounds, { padding: 60 });
-                                routeStateRef.fitted = true;
-                            } catch (e) { console.warn('fitBounds failed', e); }
-                        }
-                    };
-
-                    try {
-                        if (typeof map.isStyleLoaded === 'function' && map.isStyleLoaded()) safeAddRoute();
-                        else map.once('load', safeAddRoute);
-                    } catch (e) { setTimeout(safeAddRoute, 200); }
-
-                    try {
-                        if (!routeStateRef.styleHandler) {
-                            let timeout = null;
-                            routeStateRef.styleHandler = () => {
-                                if (timeout) clearTimeout(timeout);
-                                timeout = setTimeout(() => { try { safeAddRoute(); } catch (e) { } }, 150);
-                            };
-                            map.on('styledata', routeStateRef.styleHandler);
-                        }
-                    } catch (e) { console.warn('styledata handler install failed', e); }
-                }
-
-            } catch (err) {
-                console.error('updateRouteAndMarkers error:', err);
+        // Update or create rider marker
+        if (riderLoc) {
+            if (riderMarker) {
+                riderMarker.setPosition(riderLoc);
+            } else {
+                setRiderMarker(new window.google.maps.Marker({
+                    position: riderLoc,
+                    map: map,
+                    title: 'Rider Location',
+                    icon: {
+                        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+                            <svg width="24" height="24" viewBox="0 0 384 512" xmlns="http://www.w3.org/2000/svg">
+                                <path fill="#f44336" d="M172.268 501.67C26.97 291.031 0 269.413 0 192 0 85.961 85.961 0 192 0s192 85.961 192 192c0 77.413-26.97 99.031-172.268 309.67-9.535 13.774-29.93 13.773-39.464 0zM192 272c44.183 0 80-35.817 80-80s-35.817-80-80-80-80 35.817-80 80 35.817 80 80 80z"/>
+                            </svg>
+                        `),
+                        scaledSize: new window.google.maps.Size(30, 40),
+                        anchor: new window.google.maps.Point(15, 40),
+                    },
+                }));
             }
-        };
+        }
 
-        updateRouteAndMarkers();
-    }, [order, riderLocationState, userLocation, mapLoaded]);
+        // Draw route from rider to customer if both are available
+        if (riderLoc && customerLoc && ['picked up', 'delivering'].includes(order.status)) {
+            if (routePolyline) routePolyline.setMap(null); // Clear old route
+
+            const directionsService = new window.google.maps.DirectionsService();
+            const directionsRenderer = new window.google.maps.DirectionsRenderer({
+                map: map,
+                suppressMarkers: true,
+                polylineOptions: { strokeColor: '#1d7fa6', strokeWeight: 5 },
+            });
+
+            directionsService.route({
+                origin: riderLoc,
+                destination: customerLoc,
+                travelMode: 'DRIVING',
+            }, (result, status) => {
+                if (status === 'OK') directionsRenderer.setDirections(result);
+            });
+            setRoutePolyline(directionsRenderer);
+        }
+
+    }, [scriptLoaded, order, userLocation, riderLocationState, map, marker, riderMarker, routePolyline]);
+
 
     if (loading) {
         return <div className="text-center my-5">Loading order details...</div>;
@@ -468,7 +402,7 @@ const TrackOrder = () => {
         if (index === currentStepIndex) return 'active';
         return 'pending';
     };
-    
+
     // Helper to render the appropriate icon for the step
     const renderStepIcon = (status) => {
         if (status === 'completed') return <CheckCircleFill />;
@@ -493,8 +427,8 @@ const TrackOrder = () => {
     );
 
     const renderMap = () => (
-        <div className="map-container mb-4 mt-n3">
-            <div id={trackMapRef.containerId} ref={mapContainerRef} className="track-map-content" style={{ width: '100%', height: '400px', borderRadius: '8px', overflow: 'hidden' }} />
+        <div className="map-container mb-5 mt-n3">
+            <div ref={mapRef} className="track-map-content" style={{ width: '100%', height: '450px', borderRadius: '8px', overflow: 'hidden' }} />
         </div>
     );
 
@@ -528,8 +462,8 @@ const TrackOrder = () => {
                         
                     </Card.Header>
                     <Card.Body className="track-order-card-body">
-                        {/* Render map only for Delivery orders with status pending, processing, picked up, delivering, or waiting for pickup */}
-                        {order.orderType === 'Delivery' && ['pending', 'processing', 'picked up', 'delivering', 'waiting for pickup'].includes(order.status) && (
+                        {/* Render map only for Delivery orders with status pending, processing, picked up, delivering, waiting for pickup, or completed */}
+                        {order.orderType === 'Delivery' && ['pending', 'processing', 'picked up', 'delivering', 'waiting for pickup', 'completed'].includes(order.status) && (
                             <>
                                 {renderMap()}
                             </>
@@ -571,6 +505,26 @@ const TrackOrder = () => {
                                 {renderProductList()}
                             </Col>
                         </Row>
+
+{/* Rider Information (visible only when status is picked up or delivering) */}
+{['picked up', 'delivering'].includes(order.status) && order.rider_name && (
+  <>
+    <hr className="my-4" />
+    <h5 className="section-title">Rider Information</h5>
+    <div className="rider-info-box p-3 rounded border bg-light">
+      <div className="rider-info-item">
+        <strong>Name:</strong> <span>{order.rider_name}</span>
+      </div>
+      <div className="rider-info-item">
+        <strong>Phone:</strong> <span>{order.rider_phone || 'N/A'}</span>
+      </div>
+      <div className="rider-info-item">
+        <strong>Plate Number:</strong> <span>{order.rider_plate || 'N/A'}</span>
+      </div>
+    </div>
+  </>
+)}
+
                     </Card.Body>
                 </Card>
             </div>
