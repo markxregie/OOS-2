@@ -37,8 +37,15 @@
 
 .order-card {
 
-  width: 400px;
+  width: 380px;
   margin-bottom: 15px;
+}
+
+.order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap; /* Allow wrapping if space is tight */
 }
 
 .item-row {
@@ -47,10 +54,18 @@
   align-items: center;
 }
 
+.order-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.order-actions .btn {
+  width: 130%;
+}
 .active-orders-container.two-cards .active-order-card {
   width: 45%;
 }
-
 /* ----------------------------------------------------
     RESPONSIVENESS AND MOBILE VIEW (Sidebar to Bottom Nav)
     ---------------------------------------------------- */
@@ -170,7 +185,7 @@
     flex-wrap: wrap;
     justify-content: center;
   }
-
+ 
   /* =======================================================
      DEFINITIVE MOBILE TABLE FIX 
      ======================================================= */
@@ -236,5 +251,64 @@
     white-space: nowrap; /* Keep the label on one line */
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .order-actions {
+    flex-direction: column;
+    align-items: center;
+  }
+  .order-actions .btn {
+    width: 90%; /* Or a width that you prefer */
+  }
+}
+
+/* Desktop view */
+@media (min-width: 992px) {
+  .order-actions {
+    flex-direction: column;
+    align-items: center;
+  }
+  .order-actions .btn {
+    width: 90%; /* Or a width that you prefer */
+  }
+}
+
+/* Tablet view */
+@media (min-width: 768px) and (max-width: 991px) {
+  .order-card {
+    width: 95%;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
+
+
+/* Mobile view */
+@media (max-width: 767px) {
+  .order-card {
+    width: 90%;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .order-actions {
+    flex-direction: column;
+    align-items: center;
+    margin-left: -10px;
+  }
+    .order-actions .btn {
+    width: 120%; /* Or a width that you prefer */
+  }
+}
+
+
+@media (max-width: 852px) {
+  .order-actions {
+    flex-direction: column;
+    align-items: center;
+    margin-left: 7px;
+  }
+    .order-actions .btn {
+    width: 130%; /* Or a width that you prefer */
   }
 }
