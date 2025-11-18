@@ -213,6 +213,33 @@ async def update_delivery_order_status(
 
         await conn.commit()
 
+        # --- Update Rider Earnings if order is delivered ---
+        if request.status.lower() == 'delivered':
+            try:
+                # Get rider ID and total amount
+                await cursor.execute("""
+                    SELECT AssignedRiderID, TotalAmount
+                    FROM Orders
+                    WHERE OrderID = ?
+                """, (order_id,))
+                order_info = await cursor.fetchone()
+                if order_info and order_info[0]:  # rider_id exists
+                    rider_id = order_info[0]
+                    total_amount = float(order_info[1]) if order_info[1] else 0.0
+
+                    # Update RiderOrders: increment CompletedOrders and add to Earnings
+                    await cursor.execute("""
+                        UPDATE RiderOrders
+                        SET CompletedOrders = CompletedOrders + 1,
+                            Earnings = Earnings + ?
+                        WHERE RiderID = ? AND OrderID = ?
+                    """, (total_amount, rider_id, order_id))
+
+                    await conn.commit()
+                    logger.info(f"Updated earnings for rider {rider_id}, order {order_id}: +{total_amount}")
+            except Exception as earn_err:
+                logger.warning(f"Failed to update rider earnings: {earn_err}")
+
         # --- Notify user about status change ---
         try:
             # Fetch username, reference number, and assigned rider ID
