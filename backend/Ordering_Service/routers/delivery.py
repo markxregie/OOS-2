@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from typing import Optional
 from database import get_db_connection
+from datetime import date, timedelta
 import httpx
 import logging
 
@@ -87,6 +88,177 @@ async def get_delivery_info(order_id: int, token: str = Depends(oauth2_scheme)):
     finally:
         await cursor.close()
         await conn.close()
+
+# --- Rider Earnings Endpoints (On-the-Fly Calculation) ---
+
+@router.get("/rider/{rider_id}/earnings/yearly")
+async def get_rider_yearly_earnings(
+    rider_id: int,
+    year: int = Query(..., description="The year to calculate earnings for, e.g., 2023"),
+    token: str = Depends(oauth2_scheme)
+):
+    """
+    Calculates total earnings for a specific rider for a given year.
+    """
+    await validate_token_and_roles(token, ["rider", "admin"])
+
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+    try:
+        await cursor.execute("""
+            SELECT
+                ISNULL(SUM(o.DeliveryFee), 0) AS TotalEarnings,
+                COUNT(o.OrderID) AS TotalDeliveries
+            FROM Orders o
+            WHERE o.AssignedRiderID = ?
+              AND o.Status = 'Delivered'
+              AND YEAR(o.OrderDate) = ?
+        """, (rider_id, year))
+        row = await cursor.fetchone()
+
+        if not row:
+            # This case is unlikely with SUM/COUNT but good practice
+            return {"riderID": rider_id, "year": year, "totalEarnings": 0.0, "totalDeliveries": 0}
+
+        return {
+            "riderID": rider_id,
+            "year": year,
+            "totalEarnings": float(row[0]),
+            "totalDeliveries": row[1]
+        }
+    finally:
+        await cursor.close()
+        await conn.close()
+
+
+@router.get("/rider/{rider_id}/earnings/monthly")
+async def get_rider_monthly_earnings(
+    rider_id: int,
+    year: int = Query(..., description="The year for the month, e.g., 2023"),
+    month: int = Query(..., ge=1, le=12, description="The month to calculate earnings for (1-12)"),
+    token: str = Depends(oauth2_scheme)
+):
+    """
+    Calculates total earnings for a specific rider for a given month and year.
+    """
+    await validate_token_and_roles(token, ["rider", "admin"])
+
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+    try:
+        await cursor.execute("""
+            SELECT
+                ISNULL(SUM(o.DeliveryFee), 0) AS TotalEarnings,
+                COUNT(o.OrderID) AS TotalDeliveries
+            FROM Orders o
+            WHERE o.AssignedRiderID = ?
+              AND o.Status = 'Delivered'
+              AND YEAR(o.OrderDate) = ?
+              AND MONTH(o.OrderDate) = ?
+        """, (rider_id, year, month))
+        row = await cursor.fetchone()
+
+        if not row:
+            return {"riderID": rider_id, "year": year, "month": month, "totalEarnings": 0.0, "totalDeliveries": 0}
+
+        return {
+            "riderID": rider_id,
+            "year": year,
+            "month": month,
+            "totalEarnings": float(row[0]),
+            "totalDeliveries": row[1]
+        }
+    finally:
+        await cursor.close()
+        await conn.close()
+
+
+@router.get("/rider/{rider_id}/earnings/weekly")
+async def get_rider_weekly_earnings(
+    rider_id: int,
+    target_date: date = Query(..., description="A date within the desired week (YYYY-MM-DD)"),
+    token: str = Depends(oauth2_scheme)
+):
+    """
+    Calculates total earnings for a specific rider for the week containing the target_date.
+    The week is considered to run from Monday to Sunday.
+    """
+    await validate_token_and_roles(token, ["rider", "admin"])
+
+    # Calculate the start of the week (Monday) and end of the week (Sunday)
+    start_of_week = target_date - timedelta(days=target_date.weekday())
+    end_of_week = start_of_week + timedelta(days=6)
+
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+    try:
+        # Using BETWEEN for the date range. Note that OrderDate should be a DATE or DATETIME type.
+        await cursor.execute("""
+            SELECT
+                ISNULL(SUM(o.DeliveryFee), 0) AS TotalEarnings,
+                COUNT(o.OrderID) AS TotalDeliveries
+            FROM Orders o
+            WHERE o.AssignedRiderID = ?
+              AND o.Status = 'Delivered'
+              AND o.OrderDate >= ?
+              AND o.OrderDate < ?
+        """, (rider_id, start_of_week, end_of_week + timedelta(days=1))) # Use < next day for DATETIME compatibility
+        row = await cursor.fetchone()
+
+        if not row:
+            return {
+                "riderID": rider_id,
+                "weekOf": str(start_of_week),
+                "totalEarnings": 0.0,
+                "totalDeliveries": 0
+            }
+
+        return {
+            "riderID": rider_id,
+            "weekOf": str(start_of_week),
+            "totalEarnings": float(row[0]),
+            "totalDeliveries": row[1]
+        }
+    finally:
+        await cursor.close()
+        await conn.close()
+
+
+@router.get("/rider/{rider_id}/earnings/daily")
+async def get_rider_daily_earnings(
+    rider_id: int,
+    target_date: date = Query(..., description="The date to calculate earnings for (YYYY-MM-DD)"),
+    token: str = Depends(oauth2_scheme)
+):
+    """
+    Calculates total earnings for a specific rider for a given day.
+    """
+    await validate_token_and_roles(token, ["rider", "admin"])
+
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+    try:
+        await cursor.execute("""
+            SELECT
+                ISNULL(SUM(o.DeliveryFee), 0) AS TotalEarnings,
+                COUNT(o.OrderID) AS TotalDeliveries
+            FROM Orders o
+            WHERE o.AssignedRiderID = ?
+              AND o.Status = 'Delivered'
+              AND CAST(o.OrderDate AS DATE) = ?
+        """, (rider_id, target_date))
+        row = await cursor.fetchone()
+
+        return {
+            "riderID": rider_id,
+            "date": str(target_date),
+            "totalEarnings": float(row[0]) if row else 0.0,
+            "totalDeliveries": row[1] if row else 0
+        }
+    finally:
+        await cursor.close()
+        await conn.close()
+
 
 @router.put("/orders/{order_id}/assign-rider")
 async def assign_rider(order_id: int, rider_id: int, token: str = Depends(oauth2_scheme)):
