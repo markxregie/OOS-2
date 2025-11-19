@@ -573,7 +573,7 @@ function DeliveryManagement() {
                 </p>
               </div>
               <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaClock color="#4b929d" /> Ordered at <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.orderedAt}</span></p>
-              <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaUser color="#4b929d" /> Customer: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.customerName}</span></p>
+              <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaUser color="#4b929d" /> Customer: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{(() => { const parts = order.customerName.split(' '); return parts.length > 0 && /\d/.test(parts[0]) ? parts.slice(1).join(' ') : order.customerName; })()}</span></p>
               <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaPhone color="#4b929d" /> Phone: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.phone?.replace(/^\+1-/, "63") || "N/A"}</span></p>
               <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaMapMarkerAlt color="#4b929d" /> Address: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.address}</span></p>
               <p style={{ fontWeight: "600", marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaBox color="#4b929d" /> Items ({order.items.length})</p>
