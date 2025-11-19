@@ -87,10 +87,10 @@ const Dashboard = () => {
   const [recentOrders, setRecentOrders] = useState([]);
   const [allOrders, setAllOrders] = useState([]);
   const [riderEarningsData, setRiderEarningsData] = useState([]);
-  const [earningsFilter, setEarningsFilter] = useState("Weekly");
+  const [earningsFilter, setEarningsFilter] = useState("Daily");
   const [allDeliveryOrders, setAllDeliveryOrders] = useState([]);
   const [riders, setRiders] = useState([]);
-
+  const [topRiders, setTopRiders] = useState([]);
   // --- useEffects for Auth and Data Fetching ---
   useEffect(() => {
   const tokenFromUrl = searchParams.get('authorization');
@@ -167,10 +167,9 @@ const Dashboard = () => {
         }));
         setAllOrders(transformedOrders);
         setRecentOrders(transformedOrders.slice(0, 10));
-        const cancelledCount = transformedOrders.filter(order => order.status.toLowerCase() === "cancelled").length;
-        const deliveredCount = transformedOrders.filter(order => order.orderType.toLowerCase() === "delivery" && order.status.toLowerCase() === "completed").length;
+        const cancelledCount = transformedOrders.filter(order => order.status.toLowerCase() === "cancelled").length; 
         const confirmedCount = transformedOrders.filter(order => order.orderType.toLowerCase() === "pick up" && order.status.toLowerCase() === "completed").length;
-        setDashboardData(prev => ({ ...prev, cancelledOrders: cancelledCount, deliveredOrders: deliveredCount, confirmedOrders: confirmedCount }));
+        setDashboardData(prev => ({ ...prev, cancelledOrders: cancelledCount, confirmedOrders: confirmedCount }));
       })
       .catch((err) => console.error("Failed to fetch recent orders:", err));
   }, [authToken]);
@@ -195,51 +194,93 @@ const Dashboard = () => {
       .then((data) => {
         console.log("Fetched delivery orders:", data);
         setAllDeliveryOrders(data);
+        // Correctly count delivered orders from the delivery-specific endpoint
+        const deliveredCount = data.filter(order => order.currentStatus && order.currentStatus.toLowerCase() === "delivered").length;
+        setDashboardData(prev => ({ ...prev, deliveredOrders: deliveredCount }));
       })
       .catch((err) => console.error("Failed to fetch delivery orders:", err));
   }, [authToken]);
 
+  // New useEffect for time-based rider earnings
   useEffect(() => {
-    if (!riders.length || !allDeliveryOrders.length) { return; }
-    // Initialize earnings map with all riders at 0
-    const earningsMap = {};
-    riders.forEach(rider => {
-      earningsMap[rider.FullName] = 0;
-    });
-
-    // Filter active orders: not delivered, cancelled, returned
-    const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
-    let activeOrders = allDeliveryOrders.filter(order => activeStatuses.includes(order.currentStatus) && order.assignedRider);
-
-    // Filter by date based on earningsFilter
-    const now = new Date();
-    if (earningsFilter === "Daily") {
-      const today = now.toISOString().split('T')[0];
-      activeOrders = activeOrders.filter(order => order.orderedAt.startsWith(today));
-    } else if (earningsFilter === "Weekly") {
-      const sevenDaysAgo = new Date(now);
-      sevenDaysAgo.setDate(now.getDate() - 7);
-      activeOrders = activeOrders.filter(order => new Date(order.orderedAt) >= sevenDaysAgo);
-    } else if (earningsFilter === "Monthly") {
-      const thirtyDaysAgo = new Date(now);
-      thirtyDaysAgo.setDate(now.getDate() - 30);
-      activeOrders = activeOrders.filter(order => new Date(order.orderedAt) >= thirtyDaysAgo);
+    if (!allDeliveryOrders.length) {
+      return;
     }
 
-    // Sum totals for filtered active orders
-    activeOrders.forEach(order => {
-      const riderName = order.assignedRider.fullName;
-      if (earningsMap.hasOwnProperty(riderName)) {
-        earningsMap[riderName] += order.total;
-      }
-    });
+    const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
+    const activeOrders = allDeliveryOrders.filter(order => activeStatuses.includes(order.currentStatus) && order.assignedRider);
 
-    const transformedData = Object.entries(earningsMap).map(([name, earnings]) => ({
-      name,
-      earnings,
-    }));
+    let transformedData = [];
+    const riderTotals = {};
+    const now = new Date();
+
+    if (earningsFilter === 'Daily') {
+      const last7Days = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date();
+        d.setDate(now.getDate() - i);
+        return d;
+      }).reverse();
+
+      const dailyEarnings = last7Days.map(day => {
+        const dayStr = day.toISOString().split('T')[0];
+        const total = activeOrders
+          .filter(order => new Date(order.orderedAt).toISOString().split('T')[0] === dayStr)
+          .reduce((sum, order) => sum + (order.total || 0), 0);
+        
+        activeOrders.filter(order => new Date(order.orderedAt).toISOString().split('T')[0] === dayStr).forEach(order => {
+            const riderName = order.assignedRider.fullName;
+            riderTotals[riderName] = (riderTotals[riderName] || 0) + (order.total || 0);
+        });
+
+        return { name: day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), earnings: total };
+      });
+      transformedData = dailyEarnings;
+
+    } else if (earningsFilter === 'Weekly') {
+      const last4Weeks = Array.from({ length: 4 }, (_, i) => {
+        const end = new Date();
+        end.setDate(now.getDate() - (i * 7));
+        const start = new Date(end);
+        start.setDate(end.getDate() - 6);
+        return { start, end };
+      }).reverse();
+
+      const weeklyEarnings = last4Weeks.map(week => {
+        const total = activeOrders
+          .filter(order => new Date(order.orderedAt) >= week.start && new Date(order.orderedAt) <= week.end)
+          .reduce((sum, order) => sum + (order.total || 0), 0);
+
+        activeOrders.filter(order => new Date(order.orderedAt) >= week.start && new Date(order.orderedAt) <= week.end).forEach(order => {
+            const riderName = order.assignedRider.fullName;
+            riderTotals[riderName] = (riderTotals[riderName] || 0) + (order.total || 0);
+        });
+        return { name: `Week of ${week.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`, earnings: total };
+      });
+      transformedData = weeklyEarnings;
+
+    } else if (earningsFilter === 'Monthly') {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const monthlyEarnings = months.map((month, index) => {
+        const total = activeOrders.filter(order => new Date(order.orderedAt).getMonth() === index).reduce((sum, order) => sum + (order.total || 0), 0);
+        
+        activeOrders.filter(order => new Date(order.orderedAt).getMonth() === index).forEach(order => {
+            const riderName = order.assignedRider.fullName;
+            riderTotals[riderName] = (riderTotals[riderName] || 0) + (order.total || 0);
+        });
+
+        return { name: month, earnings: total };
+      });
+      transformedData = monthlyEarnings;
+    }
     setRiderEarningsData(transformedData);
-  }, [riders, allDeliveryOrders, earningsFilter]);
+
+    const sortedRiders = Object.entries(riderTotals)
+      .map(([name, earnings]) => ({ name, earnings }))
+      .sort((a, b) => b.earnings - a.earnings)
+      .slice(0, 10);
+
+    setTopRiders(sortedRiders);
+  }, [allDeliveryOrders, earningsFilter, riders]);
   // --- End of useEffects ---
 
   const toggleDropdown = () => {
@@ -457,26 +498,44 @@ const Dashboard = () => {
           </div>
 
           {/* --- Rider Earnings Chart --- */}
-          <div className="dashboard-charts" style={{ marginTop: '20px', display: 'block' }}>
-              <div className="chart-box" style={{ width: '100%', margin: '0', padding: '20px' }}>
-                  <div className="chart-header">
-                      <span>Rider Earnings - {earningsFilter}</span>
-                      <select className="chart-dropdown" value={earningsFilter} onChange={(e) => setEarningsFilter(e.target.value)}>
-                          <option value="Daily">Daily</option>
-                          <option value="Weekly">Weekly</option>
-                          <option value="Monthly">Monthly</option>
-                      </select>
-                  </div>
-                  <ResponsiveContainer width="100%" height={350}>
-                      <BarChart data={riderEarningsData} margin={{ top: 10, right: 30, left: 20, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                          <YAxis tickFormatter={(value) => `₱${value.toLocaleString()}`} />
-                          <Tooltip formatter={(value) => [`₱${value.toLocaleString()}`, 'Earnings']} />
-                          <Bar dataKey="earnings" fill="#00b4d8" name="Rider Earnings" />
-                      </BarChart>
-                  </ResponsiveContainer>
+          <div className="dashboard-charts" style={{ marginTop: '20px', gridTemplateColumns: '2fr 1fr' }}>
+            <div className="chart-box">
+              <div className="chart-header">
+                  <span>Rider Earnings - {earningsFilter}</span>
+                  <select className="chart-dropdown" value={earningsFilter} onChange={(e) => setEarningsFilter(e.target.value)}>
+                      <option value="Daily">Daily</option>
+                      <option value="Weekly">Weekly</option>
+                      <option value="Monthly">Monthly</option>
+                  </select>
               </div>
+              <ResponsiveContainer width="100%" height={350}>
+                  <BarChart data={riderEarningsData} margin={{ top: 10, right: 30, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                      <YAxis tickFormatter={(value) => `₱${value.toLocaleString()}`} />
+                      <Tooltip formatter={(value) => [`₱${value.toLocaleString()}`, 'Total Earnings']} />
+                      <Bar dataKey="earnings" fill="#00b4d8" name="Total Rider Earnings" />
+                  </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="chart-box">
+              <div className="chart-header" style={{ marginBottom: '15px' }}>
+                <span>Top Earner Riders - {earningsFilter}</span>
+              </div>
+              <div style={{ maxHeight: '310px', overflowY: 'auto' }}>
+                {topRiders.map((rider, index) => (
+                  <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 8px', borderBottom: '1px solid #eee' }}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 'bold', marginRight: '15px', color: '#4b929d', minWidth: '20px' }}>{index + 1}.</span>
+                      <span style={{ fontSize: '15px' }}>{rider.name}</span>
+                    </div>
+                    <span style={{ fontSize: '15px', fontWeight: '600', color: '#007bff' }}>
+                      ₱{rider.earnings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* --- Recent Orders and Popular Items Chart Section --- */}
