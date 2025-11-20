@@ -203,84 +203,80 @@ const Dashboard = () => {
 
   // New useEffect for time-based rider earnings
   useEffect(() => {
-    if (!allDeliveryOrders.length) {
+    if (!riders.length || !authToken) {
       return;
     }
 
-    const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
-    const activeOrders = allDeliveryOrders.filter(order => activeStatuses.includes(order.currentStatus) && order.assignedRider);
-
-    let transformedData = [];
-    const riderTotals = {};
     const now = new Date();
+    let periods = [];
 
     if (earningsFilter === 'Daily') {
-      const last7Days = Array.from({ length: 7 }, (_, i) => {
+      periods = Array.from({ length: 7 }, (_, i) => {
         const d = new Date();
         d.setDate(now.getDate() - i);
-        return d;
+        return d.toISOString().split('T')[0];
       }).reverse();
-
-      const dailyEarnings = last7Days.map(day => {
-        const dayStr = day.toISOString().split('T')[0];
-        const total = activeOrders
-          .filter(order => new Date(order.orderedAt).toISOString().split('T')[0] === dayStr)
-          .reduce((sum, order) => sum + (order.total || 0), 0);
-        
-        activeOrders.filter(order => new Date(order.orderedAt).toISOString().split('T')[0] === dayStr).forEach(order => {
-            const riderName = order.assignedRider.fullName;
-            riderTotals[riderName] = (riderTotals[riderName] || 0) + (order.total || 0);
-        });
-
-        return { name: day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), earnings: total };
-      });
-      transformedData = dailyEarnings;
-
     } else if (earningsFilter === 'Weekly') {
-      const last4Weeks = Array.from({ length: 4 }, (_, i) => {
+      periods = Array.from({ length: 4 }, (_, i) => {
         const end = new Date();
         end.setDate(now.getDate() - (i * 7));
-        const start = new Date(end);
-        start.setDate(end.getDate() - 6);
-        return { start, end };
+        return end.toISOString().split('T')[0];
       }).reverse();
-
-      const weeklyEarnings = last4Weeks.map(week => {
-        const total = activeOrders
-          .filter(order => new Date(order.orderedAt) >= week.start && new Date(order.orderedAt) <= week.end)
-          .reduce((sum, order) => sum + (order.total || 0), 0);
-
-        activeOrders.filter(order => new Date(order.orderedAt) >= week.start && new Date(order.orderedAt) <= week.end).forEach(order => {
-            const riderName = order.assignedRider.fullName;
-            riderTotals[riderName] = (riderTotals[riderName] || 0) + (order.total || 0);
-        });
-        return { name: `Week of ${week.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`, earnings: total };
-      });
-      transformedData = weeklyEarnings;
-
     } else if (earningsFilter === 'Monthly') {
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const monthlyEarnings = months.map((month, index) => {
-        const total = activeOrders.filter(order => new Date(order.orderedAt).getMonth() === index).reduce((sum, order) => sum + (order.total || 0), 0);
-        
-        activeOrders.filter(order => new Date(order.orderedAt).getMonth() === index).forEach(order => {
-            const riderName = order.assignedRider.fullName;
-            riderTotals[riderName] = (riderTotals[riderName] || 0) + (order.total || 0);
-        });
-
-        return { name: month, earnings: total };
-      });
-      transformedData = monthlyEarnings;
+      periods = Array.from({ length: 12 }, (_, i) => {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        return { year: d.getFullYear(), month: d.getMonth() + 1 };
+      }).reverse();
     }
-    setRiderEarningsData(transformedData);
 
-    const sortedRiders = Object.entries(riderTotals)
-      .map(([name, earnings]) => ({ name, earnings }))
-      .sort((a, b) => b.earnings - a.earnings)
-      .slice(0, 10);
+    const riderTotals = {};
+    const periodTotals = periods.map(() => 0);
 
-    setTopRiders(sortedRiders);
-  }, [allDeliveryOrders, earningsFilter, riders]);
+    const promises = riders.map(rider => {
+      return Promise.all(periods.map(async (period, idx) => {
+        let url = '';
+        if (earningsFilter === 'Daily') {
+          url = `http://localhost:7004/delivery/rider/${rider.UserID}/earnings/daily?target_date=${period}`;
+        } else if (earningsFilter === 'Weekly') {
+          url = `http://localhost:7004/delivery/rider/${rider.UserID}/earnings/weekly?target_date=${period}`;
+        } else if (earningsFilter === 'Monthly') {
+          url = `http://localhost:7004/delivery/rider/${rider.UserID}/earnings/monthly?year=${period.year}&month=${period.month}`;
+        }
+
+        try {
+          const response = await fetch(url, { headers: { 'Authorization': `Bearer ${authToken}` } });
+          if (!response.ok) throw new Error();
+          const data = await response.json();
+          const earnings = data.totalEarnings || 0;
+          riderTotals[rider.FullName] = (riderTotals[rider.FullName] || 0) + earnings;
+          periodTotals[idx] += earnings;
+        } catch (e) {
+          // ignore errors, default to 0
+        }
+      }));
+    });
+
+    Promise.all(promises.flat()).then(() => {
+      const transformedData = periods.map((p, i) => {
+        let name = '';
+        if (earningsFilter === 'Daily') {
+          name = new Date(p).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        } else if (earningsFilter === 'Weekly') {
+          name = `Week of ${new Date(p).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+        } else if (earningsFilter === 'Monthly') {
+          name = new Date(p.year, p.month - 1).toLocaleDateString('en-US', { month: 'short' });
+        }
+        return { name, earnings: periodTotals[i] };
+      });
+      setRiderEarningsData(transformedData);
+
+      const sortedRiders = Object.entries(riderTotals)
+        .map(([name, earnings]) => ({ name, earnings }))
+        .sort((a, b) => b.earnings - a.earnings)
+        .slice(0, 10);
+      setTopRiders(sortedRiders);
+    });
+  }, [riders, earningsFilter, authToken]);
   // --- End of useEffects ---
 
   const toggleDropdown = () => {

@@ -151,6 +151,7 @@
     const [toggle, setToggle] = useState("active");
     const [earningsFilter, setEarningsFilter] = useState("Daily");
     const [orders, setOrders] = useState([]);
+    const [earnings, setEarnings] = useState(null);
 
     useEffect(() => {
       const fetchOrders = async () => {
@@ -254,6 +255,44 @@
       return () => clearInterval(timer);
     }, []);
 
+    useEffect(() => {
+      const fetchEarnings = async () => {
+        if (!riderId || !authToken) {
+          return;
+        }
+    
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1; // JS months are 0-indexed
+        const today = now.toISOString().split('T')[0]; // YYYY-MM-DD
+    
+        let url = '';
+        if (earningsFilter === 'Daily') {
+          url = `http://localhost:7004/delivery/rider/${riderId}/earnings/daily?target_date=${today}`;
+        } else if (earningsFilter === 'Weekly') {
+          url = `http://localhost:7004/delivery/rider/${riderId}/earnings/weekly?target_date=${today}`;
+        } else if (earningsFilter === 'Monthly') {
+          url = `http://localhost:7004/delivery/rider/${riderId}/earnings/monthly?year=${year}&month=${month}`;
+        }
+    
+        if (!url) return;
+    
+        try {
+          const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${authToken}` },
+          });
+          if (!response.ok) throw new Error(`Failed to fetch earnings: ${response.status}`);
+          const data = await response.json();
+          setEarnings(data);
+        } catch (e) {
+          console.error('Earnings fetch error:', e);
+          setEarnings({ totalEarnings: 0.0 }); // Set a default on error
+        }
+      };
+    
+      fetchEarnings();
+    }, [riderId, authToken, earningsFilter]);
+
     // Update rider location to backend every 5 seconds
     useEffect(() => {
       if (!riderId || !authToken) return;
@@ -343,30 +382,11 @@
       });
 
     const calculateEarnings = () => {
-      const now = new Date();
-      let startDate;
-
-      if (earningsFilter === "Daily") {
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        return orders
-          .filter(order => ["pending", "confirmed", "preparing", "waitingforpickup", "pickedup", "delivering"].includes(order.currentStatus.toLowerCase()) && new Date(order.orderedAt) >= startDate)
-          .reduce((sum, order) => sum + (order.total || 0), 0)
-          .toFixed(2);
-      } else if (earningsFilter === "Weekly") {
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      } else if (earningsFilter === "Monthly") {
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      } else {
-        return orders
-          .filter(order => ["pending", "confirmed", "preparing", "waitingforpickup", "pickedup", "delivering", "delivered"].includes(order.currentStatus.toLowerCase()))
-          .reduce((sum, order) => sum + (order.total || 0), 0)
-          .toFixed(2);
+      if (earnings && typeof earnings.totalEarnings === 'number') {
+        return earnings.totalEarnings.toFixed(2);
       }
-
-      return orders
-        .filter(order => ["pending", "confirmed", "preparing", "waitingforpickup", "pickedup", "delivering"].includes(order.currentStatus.toLowerCase()) && new Date(order.orderedAt) >= startDate)
-        .reduce((sum, order) => sum + (order.total || 0), 0)
-        .toFixed(2);
+      // Return a loading or default state
+      return '...';
     };
 
     const updateOrderStatus = async (orderId, newStatus) => {

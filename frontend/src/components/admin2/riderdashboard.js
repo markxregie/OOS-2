@@ -12,7 +12,7 @@ function RiderDashboard() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [toggle, setToggle] = useState("active");
-  const [earningsFilter, setEarningsFilter] = useState("All-Time");
+  const [earningsFilter, setEarningsFilter] = useState("Daily");
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const [riders, setRiders] = useState([]);
@@ -20,6 +20,7 @@ function RiderDashboard() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [earnings, setEarnings] = useState(null);
 
   const authToken = localStorage.getItem('authToken');
 
@@ -30,8 +31,15 @@ function RiderDashboard() {
   useEffect(() => {
     if (selectedRider) {
       fetchOrders(selectedRider);
+      fetchEarnings(selectedRider);
     }
   }, [selectedRider]);
+
+  useEffect(() => {
+    if (selectedRider) {
+      fetchEarnings(selectedRider);
+    }
+  }, [earningsFilter]);
 
   const fetchRiders = async () => {
     setLoading(true);
@@ -84,6 +92,36 @@ function RiderDashboard() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchEarnings = async (riderId) => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1; // JS months are 0-indexed
+    const today = now.toISOString().split('T')[0]; // YYYY-MM-DD
+
+    let url = '';
+    if (earningsFilter === 'Daily') {
+      url = `http://localhost:7004/delivery/rider/${riderId}/earnings/daily?target_date=${today}`;
+    } else if (earningsFilter === 'Weekly') {
+      url = `http://localhost:7004/delivery/rider/${riderId}/earnings/weekly?target_date=${today}`;
+    } else if (earningsFilter === 'Monthly') {
+      url = `http://localhost:7004/delivery/rider/${riderId}/earnings/monthly?year=${year}&month=${month}`;
+    }
+
+    if (!url) return;
+
+    try {
+      const response = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${authToken}` },
+      });
+      if (!response.ok) throw new Error(`Failed to fetch earnings: ${response.status}`);
+      const data = await response.json();
+      setEarnings(data);
+    } catch (e) {
+      console.error('Earnings fetch error:', e);
+      setEarnings({ totalEarnings: 0.0 }); // Set a default on error
     }
   };
 
@@ -152,42 +190,7 @@ function RiderDashboard() {
   const activeOrdersCount = orders.filter(order => !["delivered", "cancelled", "returned"].includes(order.currentStatus)).length;
   const completedOrdersCount = orders.filter(order => order.currentStatus === "delivered").length;
 
-  const calculateEarnings = () => {
-    const now = new Date();
-    let startDate;
 
-    if (earningsFilter === "Daily") {
-      // Filter orders from today
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
-      return orders
-        .filter(order => activeStatuses.includes(order.currentStatus) && new Date(order.orderedAt) >= startOfDay)
-        .reduce((sum, order) => sum + (order.total || 0), 0)
-        .toFixed(2);
-    } else if (earningsFilter === "Weekly") {
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    } else if (earningsFilter === "Monthly") {
-      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    }
-
-    // For All-Time, include both 'pending' and 'delivered' statuses
-    if (earningsFilter === "All-Time") {
-      const validStatuses = ["pending", "delivered"];
-      return orders
-        .filter(order => validStatuses.includes(order.currentStatus))
-        .reduce((sum, order) => sum + (order.total || 0), 0)
-        .toFixed(2);
-    }
-
-    // For Weekly and Monthly filters, include active statuses and filter by date
-    const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
-    return orders
-      .filter(order => activeStatuses.includes(order.currentStatus) && new Date(order.orderedAt) >= startDate)
-      .reduce((sum, order) => sum + (order.total || 0), 0)
-      .toFixed(2);
-  };
-
-  const earnings = calculateEarnings();
 
   const statusIcons = {
     pending: <FaClock />,
@@ -317,7 +320,7 @@ function RiderDashboard() {
               </Form.Select>
               <FaDollarSign size={32} color="#fd7e14" />
               <span className="card-title">Earnings</span>
-              <span className="card-value">₱{earnings}</span>
+              <span className="card-value">₱{earnings?.totalEarnings?.toFixed(2) || "0.00"}</span>
             </Card>
           </div>
         </Container>
