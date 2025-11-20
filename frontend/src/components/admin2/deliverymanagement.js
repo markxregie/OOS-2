@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Container } from "react-bootstrap";
 import { FaChevronDown, FaBell, FaSignOutAlt, FaBoxOpen, FaCheckCircle, FaSpinner, FaTruck, FaFilter, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTimesCircle, FaTruckPickup, FaTruckMoving, FaUndo, FaAngleDoubleLeft, FaAngleLeft, FaAngleRight, FaAngleDoubleRight } from "react-icons/fa";
 import { Card, Form } from "react-bootstrap";
@@ -35,11 +35,24 @@ function DeliveryManagement() {
     return stored ? JSON.parse(stored) : {};
   });
 
-  // Optimized data fetching with parallel requests
-  const fetchInitialData = useCallback(async () => {
+  // Reference for last fetch time to avoid dependency issues
+  const lastFetchTimeRef = useRef(0);
+  const CACHE_DURATION = 5000; // 5 seconds cache
+
+  // Optimized data fetching with parallel requests and caching
+  const fetchInitialData = useCallback(async (forceRefresh = false, showLoading = true) => {
     if (!authToken) return;
+    
+    // Prevent fetching if cache is still valid
+    const now = Date.now();
+    if (!forceRefresh && (now - lastFetchTimeRef.current) < CACHE_DURATION) {
+      return;
+    }
+    
     setError(null);
-    setIsLoading(true);
+    if (showLoading) {
+      setIsLoading(true);
+    }
 
     try {
       const [ordersResponse, ridersResponse, pendingResponse] = await Promise.all([
@@ -63,18 +76,24 @@ function DeliveryManagement() {
         ridersResponse.json(),
         pendingResponse.json()
       ]);
+      
+      // Map assignedRider to string format to match UI expectations
       const ordersWithAssignments = ordersData.map(order => ({
         ...order,
-        assignedRider: localAssignments[order.id] ?? order.assignedRider ?? null
+        assignedRider: order.assignedRider || null
       }));
+      
       setOrders(ordersWithAssignments);
       setRiders(Array.isArray(ridersData) ? ridersData : []);
       setPendingOrdersCount(Array.isArray(pendingData) ? pendingData.length : 0);
+      lastFetchTimeRef.current = now;
     } catch (err) {
       console.error('Error fetching data:', err);
       setError('Failed to load data. Please refresh the page.');
     } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        setIsLoading(false);
+      }
     }
   }, [authToken]);
 
@@ -83,9 +102,9 @@ function DeliveryManagement() {
 
     let interval;
     const initialize = async () => {
-      await fetchInitialData();
-      // Start refresh loop
-      interval = setInterval(fetchInitialData, 10000);
+      await fetchInitialData(true, true); // Force refresh on mount with loading spinner
+      // Background refresh every 30 seconds without loading spinner
+      interval = setInterval(() => fetchInitialData(true, false), 30000);
     };
 
     initialize();
@@ -93,7 +112,7 @@ function DeliveryManagement() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [authToken]);
+  }, [authToken, fetchInitialData]);
 
   useEffect(() => {
     const tokenFromUrl = searchParams.get('authorization');
@@ -122,62 +141,9 @@ function DeliveryManagement() {
     }
   }, [searchParams]);
 
-  useEffect(() => {
-    if (!authToken) return;
+  // Removed redundant rider fetching - now handled in fetchInitialData
 
-    const fetchRiders = async () => {
-      try {
-        const response = await fetch("http://localhost:7001/delivery/riders", {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        console.log("Fetched riders:", data);
-        setRiders(Array.isArray(data) ? data : []);
-      } catch (error) {
-        console.error("Failed to fetch riders:", error);
-        setRiders([]);
-      }
-    };
-
-    fetchRiders();
-  }, [authToken]);
-
-  useEffect(() => {
-    if (!authToken) return;
-
-    const fetchPendingOrdersCount = async () => {
-      try {
-        const response = await fetch("http://localhost:7004/cart/admin/orders/pending", {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-          },
-        });
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        // The backend endpoint returns list of pending orders, so count length
-        if (Array.isArray(data)) {
-          setPendingOrdersCount(data.length);
-        } else if (data.pending_orders_count !== undefined) {
-          setPendingOrdersCount(data.pending_orders_count);
-        } else {
-          setPendingOrdersCount(0);
-        }
-      } catch (error) {
-        console.error("Failed to fetch pending orders count:", error);
-      }
-    };
-
-    fetchPendingOrdersCount();
-  }, [authToken]);
+  // Removed redundant pending orders fetching - now handled in fetchInitialData
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -254,17 +220,11 @@ function DeliveryManagement() {
       const result = await response.json();
       console.log("Assign rider response:", result);
 
-      // ✅ Update frontend state with selected rider
+      // Update frontend state with selected rider
       handleRiderChange(orderId, riderId);
 
-      // 💡 NEW: Update local assignments and persist to localStorage
-      setLocalAssignments(prev => {
-        const updated = { ...prev, [orderId]: riderId };
-        localStorage.setItem("riderAssignments", JSON.stringify(updated));
-        return updated;
-      });
-
-
+      // Refresh data silently in background to sync with backend
+      fetchInitialData(true, false);
 
       Swal.fire({
         title: "Rider Assigned Successfully!",
@@ -395,9 +355,18 @@ function DeliveryManagement() {
       <div className="error-message">
         <FaTimesCircle size={40} color="#dc3545" />
         <p>{error}</p>
-        <button onClick={fetchInitialData} className="retry-button">
+        <button onClick={() => fetchInitialData(true, true)} className="retry-button">
           Retry
         </button>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="d-flex justify-content-center align-items-center" style={{ height: "100vh" }}>
+        <FaSpinner className="fa-spin" size={50} color="#4b929d" />
+        <p style={{ marginLeft: "15px", fontSize: "1.2rem" }}>Loading delivery data...</p>
       </div>
     );
   }
@@ -423,7 +392,9 @@ function DeliveryManagement() {
                 <div className="profile-dropdown" style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "white", border: "1px solid #ccc", borderRadius: "4px", boxShadow: "0 2px 8px rgba(0,0,0,0.15)", zIndex: 1000, width: "150px" }}>
                   <ul style={{ listStyle: "none", margin: 0, padding: "8px 0" }}>
                     <li
-                      onClick={() => window.location.reload()}
+                      onClick={() => { 
+                        fetchInitialData(true, true); // Force refresh with loading indicator
+                      }}
                       style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#4b929d" }}
                       onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f0f0f0"}
                       onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}

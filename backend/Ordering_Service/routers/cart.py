@@ -113,7 +113,7 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
     cursor = await conn.cursor()
 
     try:
-        # Update SQL query to include CashierName
+        # Step 1: Fetch all orders
         await cursor.execute("""
             SELECT
                 o.OrderID,
@@ -125,7 +125,7 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
                 o.DeliveryNotes,
                 o.Status,
                 o.ReferenceNumber,
-                o.CashierName,  -- CashierName included here
+                o.CashierName,
                 di.EmailAddress,
                 di.PhoneNumber,
                 di.Address,
@@ -142,48 +142,73 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
         """)
 
         orders_data = await cursor.fetchall()
+        
+        if not orders_data:
+            return []
 
+        order_ids = [row[0] for row in orders_data]
+
+        # Step 2: Fetch ALL items for ALL orders in ONE query
+        order_ids_str = ','.join(str(oid) for oid in order_ids)
+        await cursor.execute(f"""
+            SELECT OrderID, OrderItemID, ProductName, Quantity, Price, ProductCategory
+            FROM OrderItems
+            WHERE OrderID IN ({order_ids_str})
+        """)
+        all_items = await cursor.fetchall()
+
+        # Group items by order_id
+        items_by_order = {}
+        order_item_ids = []
+        for item in all_items:
+            order_id = item[0]
+            if order_id not in items_by_order:
+                items_by_order[order_id] = []
+            items_by_order[order_id].append(item)
+            order_item_ids.append(item[1])
+
+        # Step 3: Fetch ALL addons for ALL items in ONE query
+        addons_by_item = {}
+        if order_item_ids:
+            order_item_ids_str = ','.join(str(oiid) for oiid in order_item_ids)
+            await cursor.execute(f"""
+                SELECT OrderItemID, AddOnName, Price, AddOnID
+                FROM OrderItemAddOns
+                WHERE OrderItemID IN ({order_item_ids_str})
+            """)
+            all_addons = await cursor.fetchall()
+
+            for addon in all_addons:
+                item_id = addon[0]
+                if item_id not in addons_by_item:
+                    addons_by_item[item_id] = []
+                addons_by_item[item_id].append({
+                    "addon_name": addon[1],
+                    "price": float(addon[2]),
+                    "addon_id": addon[3]
+                })
+
+        # Step 4: Build response
         orders = []
         for row in orders_data:
             order_id = row[0]
 
-            # Get item details with price
-            await cursor.execute("""
-                SELECT OrderItemID, ProductName, Quantity, Price, ProductCategory
-                FROM OrderItems
-                WHERE OrderID = ?
-            """, (order_id,))
-            item_rows = await cursor.fetchall()
-
+            # Get items for this order
+            items = items_by_order.get(order_id, [])
             item_list = []
-            for item in item_rows:
-                order_item_id = item[0]
-                # Get add-ons for this item
-                await cursor.execute("""
-                    SELECT AddOnName, Price, AddOnID
-                    FROM OrderItemAddOns
-                    WHERE OrderItemID = ?
-                """, (order_item_id,))
-                addon_rows = await cursor.fetchall()
-                addons_list = [
-                    {
-                        "addon_name": addon[0],
-                        "price": float(addon[1]),
-                        "addon_id": addon[2]
-                    }
-                    for addon in addon_rows
-                ]
+            for item in items:
+                order_item_id = item[1]
+                addons_list = addons_by_item.get(order_item_id, [])
                 item_list.append({
-                    "name": item[1],
-                    "quantity": item[2],
-                    "price": float(item[3]),
-                    "category": item[4],
+                    "name": item[2],
+                    "quantity": item[3],
+                    "price": float(item[4]),
+                    "category": item[5],
                     "addons": addons_list
                 })
 
-            delivery_address = ", ".join(filter(None, [row[11], row[12], row[13], row[14]]))
+            delivery_address = ", ".join(filter(None, [row[12], row[13], row[14], row[15]]))
 
-            # Include the CashierName in the response
             orders.append({
                 "order_id": row[0],
                 "customer_name": row[1],
@@ -194,7 +219,7 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
                 "deliveryNotes": row[6],
                 "order_status": row[7],
                 "reference_number": row[8],
-                "cashier_name": row[9],  # Add the CashierName here
+                "cashier_name": row[9],
                 "emailAddress": row[10],
                 "phoneNumber": row[11],
                 "deliveryAddress": delivery_address,
@@ -299,6 +324,7 @@ async def get_user_orders(token: str = Depends(oauth2_scheme)):
     conn = await get_db_connection()
     cursor = await conn.cursor()
 
+    # Step 1: Fetch all orders for user
     await cursor.execute("""
         SELECT o.OrderID, o.OrderDate, o.OrderType, o.Status
         FROM Orders o
@@ -307,41 +333,69 @@ async def get_user_orders(token: str = Depends(oauth2_scheme)):
     """, (username,))
 
     order_rows = await cursor.fetchall()
+    
+    if not order_rows:
+        await cursor.close()
+        await conn.close()
+        return []
 
+    order_ids = [row[0] for row in order_rows]
+
+    # Step 2: Fetch ALL items for ALL orders in ONE query
+    order_ids_str = ','.join(str(oid) for oid in order_ids)
+    await cursor.execute(f"""
+        SELECT OrderID, OrderItemID, ProductName, Quantity, Price
+        FROM OrderItems
+        WHERE OrderID IN ({order_ids_str})
+    """)
+    all_items = await cursor.fetchall()
+
+    # Group items by order_id
+    items_by_order = {}
+    order_item_ids = []
+    for item in all_items:
+        order_id = item[0]
+        if order_id not in items_by_order:
+            items_by_order[order_id] = []
+        items_by_order[order_id].append(item)
+        order_item_ids.append(item[1])
+
+    # Step 3: Fetch ALL addons for ALL items in ONE query
+    addons_by_item = {}
+    if order_item_ids:
+        order_item_ids_str = ','.join(str(oiid) for oiid in order_item_ids)
+        await cursor.execute(f"""
+            SELECT OrderItemID, AddOnName, Price, AddOnID
+            FROM OrderItemAddOns
+            WHERE OrderItemID IN ({order_item_ids_str})
+        """)
+        all_addons = await cursor.fetchall()
+
+        for addon in all_addons:
+            item_id = addon[0]
+            if item_id not in addons_by_item:
+                addons_by_item[item_id] = []
+            addons_by_item[item_id].append({
+                "addon_name": addon[1],
+                "price": float(addon[2]),
+                "addon_id": addon[3]
+            })
+
+    # Step 4: Build response
     orders = []
     for order_row in order_rows:
         order_id = order_row[0]
 
         # Get items for this order
-        await cursor.execute("""
-            SELECT OrderItemID, ProductName, Quantity, Price
-            FROM OrderItems
-            WHERE OrderID = ?
-        """, (order_id,))
-        item_rows = await cursor.fetchall()
-
+        items = items_by_order.get(order_id, [])
         products = []
-        for item in item_rows:
-            order_item_id = item[0]
-            # Get add-ons for this item
-            await cursor.execute("""
-                SELECT AddOnName, Price, AddOnID
-                FROM OrderItemAddOns
-                WHERE OrderItemID = ?
-            """, (order_item_id,))
-            addon_rows = await cursor.fetchall()
-            addons_list = [
-                {
-                    "addon_name": addon[0],
-                    "price": float(addon[1]),
-                    "addon_id": addon[2]
-                }
-                for addon in addon_rows
-            ]
+        for item in items:
+            order_item_id = item[1]
+            addons_list = addons_by_item.get(order_item_id, [])
             products.append({
-                "name": item[1],
-                "quantity": item[2],
-                "price": float(item[3]),
+                "name": item[2],
+                "quantity": item[3],
+                "price": float(item[4]),
                 "addons": addons_list
             })
 
