@@ -23,21 +23,21 @@ async def lifespan(app: FastAPI):
     global _auto_cancel_task
     
     # Startup: Start the auto-cancel background task
-    print("🚀 Starting OOS auto-cancel background task...")
+    print("Starting OOS auto-cancel background task...")
     _auto_cancel_task = asyncio.create_task(auto_cancel_expired_oos_orders())
-    print("✅ OOS auto-cancel task started")
+    print(" OOS auto-cancel task started")
     
     yield  # Application runs here
     
     # Shutdown: Stop the background task
-    print("🛑 Stopping OOS auto-cancel background task...")
+    print("Stopping OOS auto-cancel background task...")
     if _auto_cancel_task:
         _auto_cancel_task.cancel()
         try:
             await _auto_cancel_task
         except asyncio.CancelledError:
             pass
-    print("✅ OOS auto-cancel task stopped")
+    print(" OOS auto-cancel task stopped")
 
 app = FastAPI(
     title="Ordering Service",
