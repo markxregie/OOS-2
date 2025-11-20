@@ -260,12 +260,12 @@
         if (!riderId || !authToken) {
           return;
         }
-    
+
         const now = new Date();
         const year = now.getFullYear();
         const month = now.getMonth() + 1; // JS months are 0-indexed
-        const today = now.toISOString().split('T')[0]; // YYYY-MM-DD
-    
+        const today = now.toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+
         let url = '';
         if (earningsFilter === 'Daily') {
           url = `http://localhost:7004/delivery/rider/${riderId}/earnings/daily?target_date=${today}`;
@@ -274,9 +274,9 @@
         } else if (earningsFilter === 'Monthly') {
           url = `http://localhost:7004/delivery/rider/${riderId}/earnings/monthly?year=${year}&month=${month}`;
         }
-    
+
         if (!url) return;
-    
+
         try {
           const response = await fetch(url, {
             headers: { 'Authorization': `Bearer ${authToken}` },
@@ -289,7 +289,7 @@
           setEarnings({ totalEarnings: 0.0 }); // Set a default on error
         }
       };
-    
+
       fetchEarnings();
     }, [riderId, authToken, earningsFilter]);
 

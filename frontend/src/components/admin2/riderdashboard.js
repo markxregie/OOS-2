@@ -20,7 +20,8 @@ function RiderDashboard() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [earnings, setEarnings] = useState(null);
+  const [earnings, setEarnings] = useState({ totalEarnings: 0.0 });
+  const [dailyResetTimer, setDailyResetTimer] = useState(null);
 
   const authToken = localStorage.getItem('authToken');
 
@@ -40,6 +41,19 @@ function RiderDashboard() {
       fetchEarnings(selectedRider);
     }
   }, [earningsFilter]);
+
+  // Poll earnings every 30 seconds to update in real-time
+  useEffect(() => {
+    if (selectedRider) {
+      const interval = setInterval(() => {
+        fetchEarnings(selectedRider);
+      }, 30000); // 30 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [selectedRider, earningsFilter]);
+
+
 
   const fetchRiders = async () => {
     setLoading(true);
@@ -99,7 +113,7 @@ function RiderDashboard() {
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth() + 1; // JS months are 0-indexed
-    const today = now.toISOString().split('T')[0]; // YYYY-MM-DD
+    const today = now.toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
 
     let url = '';
     if (earningsFilter === 'Daily') {
