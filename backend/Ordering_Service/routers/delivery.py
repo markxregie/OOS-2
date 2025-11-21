@@ -700,6 +700,139 @@ async def get_delivery_orders(token: str = Depends(oauth2_scheme)):
         await cursor.close()
         await conn.close()
 
+@router.get("/admin/rider-earnings/aggregated/{filter}")
+async def get_aggregated_rider_earnings(filter: str, token: str = Depends(oauth2_scheme)):
+    await validate_token_and_roles(token, ["admin"])
+
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+
+    try:
+        now = date.today()
+        periods = []
+
+        if filter.lower() == 'daily':
+            periods = [now - timedelta(days=i) for i in range(7)][::-1]
+        elif filter.lower() == 'weekly':
+            periods = [now - timedelta(weeks=i) for i in range(4)][::-1]
+        elif filter.lower() == 'monthly':
+            periods = [(now.year, now.month - i) for i in range(12)]
+            periods = [(y if m > 0 else y-1, m if m > 0 else m+12) for y, m in periods]
+            periods.reverse()
+        else:
+            raise HTTPException(status_code=400, detail="Invalid filter")
+
+        # Aggregate earnings per period
+        period_earnings = []
+        for period in periods:
+            if filter.lower() == 'daily':
+                query = """
+                SELECT ISNULL(SUM(o.DeliveryFee), 0) AS TotalEarnings
+                FROM Orders o
+                WHERE LOWER(o.Status) = 'delivered' AND CAST(o.OrderDate AS DATE) = ?
+                """
+                params = (period,)
+            elif filter.lower() == 'weekly':
+                start = period - timedelta(days=period.weekday())
+                end = start + timedelta(days=6)
+                query = """
+                SELECT ISNULL(SUM(o.DeliveryFee), 0) AS TotalEarnings
+                FROM Orders o
+                WHERE LOWER(o.Status) = 'delivered' AND o.OrderDate >= ? AND o.OrderDate < ?
+                """
+                params = (start, end + timedelta(days=1))
+            elif filter.lower() == 'monthly':
+                year, month = period
+                query = """
+                SELECT ISNULL(SUM(o.DeliveryFee), 0) AS TotalEarnings
+                FROM Orders o
+                WHERE LOWER(o.Status) = 'delivered' AND YEAR(o.OrderDate) = ? AND MONTH(o.OrderDate) = ?
+                """
+                params = (year, month)
+
+            await cursor.execute(query, params)
+            row = await cursor.fetchone()
+            earnings = float(row[0]) if row else 0.0
+            period_earnings.append(earnings)
+
+        # For top riders, sum earnings over the periods
+        rider_totals = {}
+        if filter.lower() == 'daily':
+            start_date = periods[0]
+            end_date = periods[-1]
+            rider_query = """
+            SELECT o.AssignedRiderID, ISNULL(SUM(o.DeliveryFee), 0) AS TotalEarnings
+            FROM Orders o
+            WHERE LOWER(o.Status) = 'delivered' AND CAST(o.OrderDate AS DATE) >= ? AND CAST(o.OrderDate AS DATE) <= ?
+            GROUP BY o.AssignedRiderID
+            """
+            params_rider = (start_date, end_date)
+        elif filter.lower() == 'weekly':
+            start_date = periods[0] - timedelta(days=periods[0].weekday())
+            end_date = periods[-1] + timedelta(days=6 - periods[-1].weekday())
+            rider_query = """
+            SELECT o.AssignedRiderID, ISNULL(SUM(o.DeliveryFee), 0) AS TotalEarnings
+            FROM Orders o
+            WHERE LOWER(o.Status) = 'delivered' AND o.OrderDate >= ? AND o.OrderDate <= ?
+            GROUP BY o.AssignedRiderID
+            """
+            params_rider = (start_date, end_date)
+        elif filter.lower() == 'monthly':
+            min_year = min(p[0] for p in periods)
+            max_year = max(p[0] for p in periods)
+            min_month = min(p[1] for p in periods if p[0] == min_year)
+            max_month = max(p[1] for p in periods if p[0] == max_year)
+            rider_query = """
+            SELECT o.AssignedRiderID, ISNULL(SUM(o.DeliveryFee), 0) AS TotalEarnings
+            FROM Orders o
+            WHERE LOWER(o.Status) = 'delivered' AND YEAR(o.OrderDate) >= ? AND YEAR(o.OrderDate) <= ? AND MONTH(o.OrderDate) >= ? AND MONTH(o.OrderDate) <= ?
+            GROUP BY o.AssignedRiderID
+            """
+            params_rider = (min_year, max_year, min_month, max_month)
+
+        await cursor.execute(rider_query, params_rider)
+        rider_rows = await cursor.fetchall()
+        rider_totals = {row[0]: float(row[1]) for row in rider_rows if row[0]}
+
+        # Get rider names
+        top_riders = []
+        for rider_id, earnings in rider_totals.items():
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(f"http://localhost:4000/users/riders/{rider_id}")
+                    if response.status_code == 200:
+                        rider_data = response.json()
+                        name = rider_data.get("FullName", f"Rider {rider_id}")
+                        top_riders.append({"name": name, "earnings": earnings})
+            except Exception as e:
+                logger.warning(f"Failed to fetch rider info for {rider_id}: {e}")
+                top_riders.append({"name": f"Rider {rider_id}", "earnings": earnings})
+
+        top_riders.sort(key=lambda x: x['earnings'], reverse=True)
+        top_riders = top_riders[:10]
+
+        # Format periods
+        formatted_periods = []
+        for i, p in enumerate(periods):
+            if filter.lower() == 'daily':
+                name = p.strftime('%b %d')
+            elif filter.lower() == 'weekly':
+                name = f"Week of {p.strftime('%b %d')}"
+            elif filter.lower() == 'monthly':
+                name = date(p[0], p[1], 1).strftime('%b')
+            formatted_periods.append({"name": name, "earnings": period_earnings[i]})
+
+        return {"periods": formatted_periods, "topRiders": top_riders}
+
+    except Exception as e:
+        logger.error(f"Error fetching aggregated rider earnings: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch rider earnings")
+
+    finally:
+        await cursor.close()
+        await conn.close()
+
+
 @router.get("/orders/{order_id}/reference-number")
 async def get_reference_number(order_id: int, token: str = Depends(oauth2_scheme)):
     await validate_token_and_roles(token, ["user", "admin", "rider"])
