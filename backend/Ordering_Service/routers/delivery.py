@@ -6,6 +6,7 @@ from database import get_db_connection
 from datetime import date, timedelta
 import httpx
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -556,7 +557,7 @@ async def get_rider_orders(rider_id: int, token: str = Depends(oauth2_scheme)):
         await cursor.close()
         await conn.close()
 
-# --- GET Delivery Orders with Items + Delivery Info ---
+# --- GET Delivery Orders with Items + Delivery Info (OPTIMIZED) ---
 @router.get("/admin/delivery/orders")
 async def get_delivery_orders(token: str = Depends(oauth2_scheme)):
     await validate_token_and_roles(token, ["admin", "staff"])
@@ -565,82 +566,115 @@ async def get_delivery_orders(token: str = Depends(oauth2_scheme)):
     cursor = await conn.cursor()
 
     try:
+        # Step 1: Fetch all orders
         await cursor.execute("""
             SELECT
                 o.OrderID, o.UserName, o.OrderDate, o.Status, o.PaymentMethod,
                 o.TotalAmount, di.FirstName, di.MiddleName, di.LastName,
                 di.PhoneNumber, di.Address, di.City, di.Province, di.Notes, di.Landmark,
-                             o.AssignedRiderID
+                o.AssignedRiderID
             FROM Orders o
             LEFT JOIN DeliveryInfo di ON o.OrderID = di.OrderID
             WHERE o.OrderType = 'Delivery'
             ORDER BY o.OrderDate DESC
         """)
         rows = await cursor.fetchall()
+        
+        if not rows:
+            return []
+        
+        order_ids = [row[0] for row in rows]
+        order_dict = {row[0]: row for row in rows}
 
+        # Step 2: Fetch ALL items for ALL orders in ONE query
+        order_ids_str = ','.join(str(oid) for oid in order_ids)
+        await cursor.execute(f"""
+            SELECT OrderID, OrderItemID, ProductName, Quantity, Price
+            FROM OrderItems
+            WHERE OrderID IN ({order_ids_str})
+        """)
+        all_items = await cursor.fetchall()
+        
+        # Group items by order_id
+        items_by_order = {}
+        order_item_ids = []
+        for item in all_items:
+            order_id = item[0]
+            if order_id not in items_by_order:
+                items_by_order[order_id] = []
+            items_by_order[order_id].append(item)
+            order_item_ids.append(item[1])
+
+        # Step 3: Fetch ALL addons for ALL items in ONE query
+        addons_by_item = {}
+        if order_item_ids:
+            order_item_ids_str = ','.join(str(oiid) for oiid in order_item_ids)
+            await cursor.execute(f"""
+                SELECT OrderItemID, AddOnName, Price, AddOnID
+                FROM OrderItemAddOns
+                WHERE OrderItemID IN ({order_item_ids_str})
+            """)
+            all_addons = await cursor.fetchall()
+            
+            for addon in all_addons:
+                item_id = addon[0]
+                if item_id not in addons_by_item:
+                    addons_by_item[item_id] = []
+                addons_by_item[item_id].append({
+                    "addon_name": addon[1],
+                    "price": float(addon[2]),
+                    "addon_id": addon[3]
+                })
+
+        # Step 4: Fetch ALL unique rider info in BATCH
+        unique_rider_ids = list(set(row[15] for row in rows if row[15]))
+        riders_cache = {}
+        if unique_rider_ids:
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    # Batch fetch all riders
+                    tasks = [client.get(f"http://localhost:4000/users/riders/{rid}") for rid in unique_rider_ids]
+                    responses = await asyncio.gather(*tasks, return_exceptions=True)
+                    
+                    for rid, response in zip(unique_rider_ids, responses):
+                        if isinstance(response, Exception):
+                            logger.warning(f"Failed to fetch rider {rid}: {response}")
+                            continue
+                        if response.status_code == 200:
+                            riders_cache[rid] = response.json()
+            except Exception as e:
+                logger.warning(f"Batch rider fetch failed: {e}")
+
+        # Step 5: Build response
         orders = []
         for row in rows:
             order_id = row[0]
-            assigned_rider_id = row[15]   # ✅ make sure to define it here
+            assigned_rider_id = row[15]
 
-            # Fetch items
-            await cursor.execute("""
-                SELECT OrderItemID, ProductName, Quantity, Price
-                FROM OrderItems
-                WHERE OrderID = ?
-            """, (order_id,))
-            items = await cursor.fetchall()
-
+            # Get items for this order
+            items = items_by_order.get(order_id, [])
             item_list = []
             for item in items:
-                order_item_id = item[0]
-                # Get add-ons for this item
-                await cursor.execute("""
-                    SELECT AddOnName, Price, AddOnID
-                    FROM OrderItemAddOns
-                    WHERE OrderItemID = ?
-                """, (order_item_id,))
-                addon_rows = await cursor.fetchall()
-                addons_list = [
-                    {
-                        "addon_name": addon[0],
-                        "price": float(addon[1]),
-                        "addon_id": addon[2]
-                    }
-                    for addon in addon_rows
-                ]
+                order_item_id = item[1]
+                addons_list = addons_by_item.get(order_item_id, [])
                 item_list.append({
-                    "name": item[1],
-                    "quantity": item[2],
-                    "price": float(item[3]),
+                    "name": item[2],
+                    "quantity": item[3],
+                    "price": float(item[4]),
                     "addons": addons_list
                 })
 
-            rider_info = None
-            if assigned_rider_id:
-                # call Auth service para kunin rider details
-                try:
-                    async with httpx.AsyncClient() as client:
-                        r = await client.get(f"http://localhost:4000/users/riders/{assigned_rider_id}")
-                        if r.status_code == 200:
-                            rider_info = r.json()
-                except Exception as e:
-                    logger.warning(f"Failed to fetch rider info for {assigned_rider_id}: {e}")
+            # Get cached rider info
+            rider_info = riders_cache.get(assigned_rider_id)
 
-            # Handle None values for customer name
+            # Handle customer info
             first_name = row[6] or ""
             middle_name = row[7] or ""
             last_name = row[8] or ""
             customer_name = f"{first_name} {middle_name} {last_name}".strip()
-
-            # Handle phone number
             phone_number = row[9] if row[9] else None
-
-            # Handle address with fallback
             address_parts = [row[10], row[11], row[12]]
-            address = ", ".join(filter(None, address_parts))
-            if not address:
-                address = "Address not available"
+            address = ", ".join(filter(None, address_parts)) or "Address not available"
 
             orders.append({
                 "id": order_id,
@@ -648,16 +682,12 @@ async def get_delivery_orders(token: str = Depends(oauth2_scheme)):
                 "phone": phone_number,
                 "address": address,
                 "orderedAt": row[2].strftime("%Y-%m-%d %H:%M:%S"),
-                "currentStatus": row[3].lower().replace(" ", ""),  # e.g. Pending -> pending
+                "currentStatus": row[3].lower().replace(" ", ""),
                 "paymentMethod": row[4],
                 "total": float(row[5]) if row[5] else 0,
                 "notes": row[13],
                 "items": item_list,
-                "assignedRider": {
-                    "id": assigned_rider_id,
-                    "fullName": rider_info["FullName"] if rider_info else None,
-                    "phone": rider_info["Phone"] if rider_info else None
-                } if assigned_rider_id else None
+                "assignedRider": str(assigned_rider_id) if assigned_rider_id else None
             })
 
         return orders

@@ -269,7 +269,7 @@ async def confirm_payment(payload: ConfirmPaymentRequest, token: str = Depends(o
             # Step 3: Save delivery info
             if payload.delivery_info:
                 delivery_info_payload = {
-                    "FirstName": payload.username,
+                    "FirstName": payload.delivery_info.FirstName,
                     "MiddleName": payload.delivery_info.MiddleName,
                     "LastName": payload.delivery_info.LastName,
                     "Address": payload.delivery_info.Address,
@@ -406,7 +406,7 @@ async def confirm_payment_and_save_pos(payload: ConfirmPaymentRequest, token: st
             # Step 3: Save delivery info if provided
             if payload.delivery_info:
                 delivery_info_payload = {
-                    "FirstName": payload.username,
+                    "FirstName": payload.delivery_info.FirstName,
                     "MiddleName": payload.delivery_info.MiddleName,
                     "LastName": payload.delivery_info.LastName,
                     "Address": payload.delivery_info.Address,
