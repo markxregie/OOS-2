@@ -201,85 +201,31 @@ const Dashboard = () => {
       .catch((err) => console.error("Failed to fetch delivery orders:", err));
   }, [authToken]);
 
-  // New useEffect for time-based rider earnings
+  // New useEffect for time-based rider earnings (optimized)
   useEffect(() => {
-    if (!riders.length || !authToken) {
+    if (!authToken) {
       return;
     }
 
-    const now = new Date();
-    let periods = [];
+    const fetchEarnings = async () => {
+      try {
+        const response = await fetch(`http://localhost:7004/delivery/admin/rider-earnings/aggregated/${earningsFilter}`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!response.ok) throw new Error();
+        const data = await response.json();
+        setRiderEarningsData(data.periods);
+        setTopRiders(data.topRiders);
+      } catch (e) {
+        console.error('Failed to fetch aggregated rider earnings:', e);
+        // Fallback to empty data
+        setRiderEarningsData([]);
+        setTopRiders([]);
+      }
+    };
 
-    if (earningsFilter === 'Daily') {
-      periods = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(now);
-        d.setDate(now.getDate() - i);
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      }).reverse();
-    } else if (earningsFilter === 'Weekly') {
-      periods = Array.from({ length: 4 }, (_, i) => {
-        const end = new Date();
-        end.setDate(now.getDate() - (i * 7));
-        return end.toISOString().split('T')[0];
-      }).reverse();
-    } else if (earningsFilter === 'Monthly') {
-      periods = Array.from({ length: 12 }, (_, i) => {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        return { year: d.getFullYear(), month: d.getMonth() + 1 };
-      }).reverse();
-    }
-
-    const riderTotals = {};
-    const periodTotals = periods.map(() => 0);
-
-    const promises = riders.map(rider => {
-      return Promise.all(periods.map(async (period, idx) => {
-        let url = '';
-        if (earningsFilter === 'Daily') {
-          url = `http://localhost:7004/delivery/rider/${rider.UserID}/earnings/daily?target_date=${period}`;
-        } else if (earningsFilter === 'Weekly') {
-          url = `http://localhost:7004/delivery/rider/${rider.UserID}/earnings/weekly?target_date=${period}`;
-        } else if (earningsFilter === 'Monthly') {
-          url = `http://localhost:7004/delivery/rider/${rider.UserID}/earnings/monthly?year=${period.year}&month=${period.month}`;
-        }
-
-        try {
-          const response = await fetch(url, { headers: { 'Authorization': `Bearer ${authToken}` } });
-          if (!response.ok) throw new Error();
-          const data = await response.json();
-          const earnings = data.totalEarnings || 0;
-          riderTotals[rider.FullName] = (riderTotals[rider.FullName] || 0) + earnings;
-          periodTotals[idx] += earnings;
-        } catch (e) {
-          // ignore errors, default to 0
-        }
-      }));
-    });
-
-    Promise.all(promises.flat()).then(() => {
-      const transformedData = periods.map((p, i) => {
-        let name = '';
-        if (earningsFilter === 'Daily') {
-          name = new Date(p).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        } else if (earningsFilter === 'Weekly') {
-          name = `Week of ${new Date(p).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
-        } else if (earningsFilter === 'Monthly') {
-          name = new Date(p.year, p.month - 1).toLocaleDateString('en-US', { month: 'short' });
-        }
-        return { name, earnings: periodTotals[i] };
-      });
-      setRiderEarningsData(transformedData);
-
-      const sortedRiders = Object.entries(riderTotals)
-        .map(([name, earnings]) => ({ name, earnings }))
-        .sort((a, b) => b.earnings - a.earnings)
-        .slice(0, 10);
-      setTopRiders(sortedRiders);
-    });
-  }, [riders, earningsFilter, authToken]);
+    fetchEarnings();
+  }, [earningsFilter, authToken]);
   // --- End of useEffects ---
 
   const toggleDropdown = () => {
