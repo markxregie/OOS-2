@@ -112,7 +112,7 @@ async def get_rider_yearly_earnings(
                 COUNT(o.OrderID) AS TotalDeliveries
             FROM Orders o
             WHERE o.AssignedRiderID = ?
-              AND o.Status = 'Delivered'
+              AND LOWER(o.Status) = 'delivered'
               AND YEAR(o.OrderDate) = ?
         """, (rider_id, year))
         row = await cursor.fetchone()
@@ -153,7 +153,7 @@ async def get_rider_monthly_earnings(
                 COUNT(o.OrderID) AS TotalDeliveries
             FROM Orders o
             WHERE o.AssignedRiderID = ?
-              AND o.Status = 'Delivered'
+              AND LOWER(o.Status) = 'delivered'
               AND YEAR(o.OrderDate) = ?
               AND MONTH(o.OrderDate) = ?
         """, (rider_id, year, month))
@@ -200,7 +200,7 @@ async def get_rider_weekly_earnings(
                 COUNT(o.OrderID) AS TotalDeliveries
             FROM Orders o
             WHERE o.AssignedRiderID = ?
-              AND o.Status = 'Delivered'
+              AND LOWER(o.Status) = 'delivered'
               AND o.OrderDate >= ?
               AND o.OrderDate < ?
         """, (rider_id, start_of_week, end_of_week + timedelta(days=1))) # Use < next day for DATETIME compatibility
@@ -245,7 +245,7 @@ async def get_rider_daily_earnings(
                 COUNT(o.OrderID) AS TotalDeliveries
             FROM Orders o
             WHERE o.AssignedRiderID = ?
-              AND o.Status = 'Delivered'
+              AND LOWER(o.Status) = 'delivered'
               AND CAST(o.OrderDate AS DATE) = ?
         """, (rider_id, target_date))
         row = await cursor.fetchone()
@@ -389,16 +389,16 @@ async def update_delivery_order_status(
         # --- Update Rider Earnings if order is delivered ---
         if request.status.lower() == 'delivered':
             try:
-                # Get rider ID and total amount
+                # Get rider ID and delivery fee
                 await cursor.execute("""
-                    SELECT AssignedRiderID, TotalAmount
+                    SELECT AssignedRiderID, DeliveryFee
                     FROM Orders
                     WHERE OrderID = ?
                 """, (order_id,))
                 order_info = await cursor.fetchone()
                 if order_info and order_info[0]:  # rider_id exists
                     rider_id = order_info[0]
-                    total_amount = float(order_info[1]) if order_info[1] else 0.0
+                    delivery_fee = float(order_info[1]) if order_info[1] else 0.0
 
                     # Update RiderOrders: increment CompletedOrders and add to Earnings
                     await cursor.execute("""
@@ -406,10 +406,10 @@ async def update_delivery_order_status(
                         SET CompletedOrders = CompletedOrders + 1,
                             Earnings = Earnings + ?
                         WHERE RiderID = ? AND OrderID = ?
-                    """, (total_amount, rider_id, order_id))
+                    """, (delivery_fee, rider_id, order_id))
 
                     await conn.commit()
-                    logger.info(f"Updated earnings for rider {rider_id}, order {order_id}: +{total_amount}")
+                    logger.info(f"Updated earnings for rider {rider_id}, order {order_id}: +{delivery_fee}")
             except Exception as earn_err:
                 logger.warning(f"Failed to update rider earnings: {earn_err}")
 
