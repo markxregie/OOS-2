@@ -133,11 +133,7 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
                 di.Province,
                 di.Landmark
             FROM Orders o
-                LEFT JOIN (
-                    SELECT FirstName, EmailAddress, PhoneNumber, Address, City, Province, Landmark,
-                           ROW_NUMBER() OVER (PARTITION BY FirstName ORDER BY (SELECT NULL)) as rn
-                    FROM DeliveryInfo
-                ) di ON di.FirstName = o.UserName AND di.rn = 1
+                LEFT JOIN DeliveryInfo di ON di.OrderID = o.OrderID
             ORDER BY o.OrderDate DESC
         """)
 
