@@ -169,7 +169,14 @@ const Report = () => {
 
         const transformedOrders = data.map(order => ({
           id: order.order_id,
-          customer: order.customer_name,
+          // Prefer explicit first/last name fields; fallback to customer_name/username
+          firstName: order.first_name || order.firstName || "",
+            lastName: order.last_name || order.lastName || "",
+          customer: (order.first_name && order.last_name)
+            ? `${order.first_name} ${order.last_name}`
+            : (order.firstName && order.lastName)
+              ? `${order.firstName} ${order.lastName}`
+              : order.customer_name,
           date: order.order_date,
           orderType: order.order_type,
           paymentMethod: order.payment_method,

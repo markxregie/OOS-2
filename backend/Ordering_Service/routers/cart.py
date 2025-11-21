@@ -131,7 +131,9 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
                 di.Address,
                 di.City,
                 di.Province,
-                di.Landmark
+                di.Landmark,
+                di.FirstName,
+                di.LastName
             FROM Orders o
                 LEFT JOIN DeliveryInfo di ON di.OrderID = o.OrderID
             ORDER BY o.OrderDate DESC
@@ -185,6 +187,23 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
                 })
 
         # Step 4: Build response
+        # Fallback: fetch user profile names for orders without DeliveryInfo names (e.g., Pickup orders)
+        name_lookup_usernames = [row[1] for row in orders_data if not row[16] and not row[17]]
+        user_name_map = {}
+        if name_lookup_usernames:
+            async with httpx.AsyncClient() as client:
+                for uname in set(name_lookup_usernames):
+                    try:
+                        resp = await client.get(f"http://localhost:4000/users/{uname}")
+                        if resp.status_code == 200:
+                            udata = resp.json()
+                            fn = udata.get("firstName") or ""
+                            ln = udata.get("lastName") or ""
+                            if fn or ln:
+                                user_name_map[uname] = (fn, ln)
+                    except Exception as e:
+                        logger.warning(f"Name fallback fetch failed for {uname}: {e}")
+
         orders = []
         for row in orders_data:
             order_id = row[0]
@@ -205,9 +224,18 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
 
             delivery_address = ", ".join(filter(None, [row[12], row[13], row[14], row[15]]))
 
+            first_name = row[16]
+            last_name = row[17]
+            if (not first_name and not last_name) and row[1] in user_name_map:
+                fetched_fn, fetched_ln = user_name_map[row[1]]
+                first_name = first_name or fetched_fn
+                last_name = last_name or fetched_ln
+            combined_name = (f"{first_name} {last_name}".strip() if first_name and last_name else None)
             orders.append({
                 "order_id": row[0],
-                "customer_name": row[1],
+                "customer_name": combined_name or row[1],
+                "first_name": first_name,
+                "last_name": last_name,
                 "order_date": row[2].strftime("%Y-%m-%d %H:%M:%S"),
                 "order_type": row[3],
                 "payment_method": row[4],
