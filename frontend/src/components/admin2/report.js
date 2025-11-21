@@ -258,15 +258,23 @@ const Report = () => {
     setDropdownOpen(!isDropdownOpen);
   };
 
-  // Filter data based on search term and status
-  const filteredData = dateFilteredOrders.filter(order =>
-    (order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.id.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.status.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.paymentMethod.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.orderType.toLowerCase().includes(searchTerm.toLowerCase())) &&
-    (statusFilter === "" || order.status.toLowerCase() === statusFilter.toLowerCase())
-  );
+  // Filter data based on search term and status, restricting to Delivered and Completed only
+  const filteredData = dateFilteredOrders.filter(order => {
+    const statusLower = order.status.toLowerCase();
+    // Only keep orders with status Delivered or Completed
+    if (!['delivered', 'completed'].includes(statusLower)) return false;
+
+    const matchesSearch = (
+      order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.id.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+      statusLower.includes(searchTerm.toLowerCase()) ||
+      order.paymentMethod.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.orderType.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const matchesStatusFilter = (statusFilter === "" || statusLower === statusFilter.toLowerCase());
+    return matchesSearch && matchesStatusFilter;
+  });
 
   // Pagination calculations
   const indexOfLastRow = currentPage * rowsPerPage;
@@ -607,8 +615,7 @@ const Report = () => {
                   <Form.Select id="filterStatus" name="filterStatus" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ padding: '6px 12px', borderRadius: '5px', border: '1px solid #ccc', backgroundColor: '#f9f9f9', cursor: 'pointer', width: '150px' }}>
                     <option value="">All Status</option>
                     <option value="Completed">Completed</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Cancelled">Cancelled</option>
+                    <option value="Delivered">Delivered</option>
                   </Form.Select>
                 </div>
                 <div className="export-dropdown" style={{ display: 'flex', alignItems: 'center' }}>
