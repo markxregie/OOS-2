@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { jwtDecode } from 'jwt-decode';
-import Swal from 'sweetalert2';
 import './ProfilePage.css';
 
 const ProfilePage = () => {
@@ -83,50 +82,33 @@ const ProfilePage = () => {
     }));
   };
 
-  const requestLocation = () => {
-    return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) {
-        toast.error('Geolocation is not supported by this browser.');
-        reject(new Error('Geolocation not supported.'));
-        return;
-      }
-
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords;
-          const latLng = new window.google.maps.LatLng(latitude, longitude);
-
-          if (map && marker) {
-            map.setCenter(latLng);
-            marker.setPosition(latLng);
-            reverseGeocode(latLng);
-          }
-          resolve(position);
-        },
-        (error) => {
-          console.error('Error getting location:', error);
-          toast.error('Unable to retrieve your location. Please check your browser settings.');
-          reject(error);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 300000, // 5 minutes
-        }
-      );
-    });
-  };
-
-  const handleGetCurrentLocation = async () => {
-    try {
-      await requestLocation();
-      // Location was successfully obtained
-    } catch (error) {
-      // Handle cases where permission was denied or an error occurred
-      if (error.code === 1) { // User denied permission
-        Swal.fire('Location access denied', 'You denied the request for location access.', 'info');
-      }
+  const handleGetCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation is not supported by this browser.');
+      return;
     }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        const latLng = new window.google.maps.LatLng(latitude, longitude);
+
+        if (map && marker) {
+          map.setCenter(latLng);
+          marker.setPosition(latLng);
+          reverseGeocode(latLng);
+        }
+      },
+      (error) => {
+        console.error('Error getting location:', error);
+        toast.error('Unable to retrieve your location. Please check your browser settings.');
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000, // 5 minutes
+      }
+    );
   };
 
   const handleFileChange = async (e) => {
