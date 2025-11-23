@@ -187,22 +187,33 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
                 })
 
         # Step 4: Build response
-        # Fallback: fetch user profile names for orders without DeliveryInfo names (e.g., Pickup orders)
+        # Fallback: fetch user profile names via auth service endpoint when DeliveryInfo names are absent
         name_lookup_usernames = [row[1] for row in orders_data if not row[16] and not row[17]]
         user_name_map = {}
         if name_lookup_usernames:
             async with httpx.AsyncClient() as client:
                 for uname in set(name_lookup_usernames):
                     try:
-                        resp = await client.get(f"http://localhost:4000/users/{uname}")
+                        # Auth/User service likely mounts user routes under /users
+                        resp = await client.get(
+                            "http://localhost:4000/users/employee_name",
+                            params={"username": uname},
+                            headers={"Authorization": f"Bearer {token}"}
+                        )
                         if resp.status_code == 200:
-                            udata = resp.json()
-                            fn = udata.get("firstName") or ""
-                            ln = udata.get("lastName") or ""
-                            if fn or ln:
-                                user_name_map[uname] = (fn, ln)
+                            payload = resp.json()
+                            full = payload.get("employee_name", "").strip()
+                            logger.info(f"[NameFallback] Got full name '{full}' for username '{uname}'")
+                            if full:
+                                parts = full.split()
+                                fn = parts[0] if parts else ""
+                                ln = parts[-1] if len(parts) > 1 else ""
+                                if fn or ln:
+                                    user_name_map[uname] = (fn, ln)
+                        else:
+                            logger.warning(f"[NameFallback] Non-200 {resp.status_code} for username '{uname}' body={resp.text}")
                     except Exception as e:
-                        logger.warning(f"Name fallback fetch failed for {uname}: {e}")
+                        logger.warning(f"[NameFallback] fetch failed for {uname}: {e}")
 
         orders = []
         for row in orders_data:
@@ -231,13 +242,14 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
                 first_name = first_name or fetched_fn
                 last_name = last_name or fetched_ln
             combined_name = (f"{first_name} {last_name}".strip() if first_name and last_name else None)
+            normalized_order_type = 'Pickup' if str(row[3]).lower().startswith('pick') else row[3]
             orders.append({
                 "order_id": row[0],
                 "customer_name": combined_name or row[1],
                 "first_name": first_name,
                 "last_name": last_name,
                 "order_date": row[2].strftime("%Y-%m-%d %H:%M:%S"),
-                "order_type": row[3],
+                "order_type": normalized_order_type,
                 "payment_method": row[4],
                 "total_amount": float(row[5]),
                 "deliveryNotes": row[6],
@@ -327,7 +339,7 @@ async def get_all_pending_orders(token: str = Depends(oauth2_scheme)):
 
     return orders
 
-@router.get("cart/admin/orders/pending")
+@router.get("/cart/admin/orders/pending")
 async def get_pending_orders_count(token: str = Depends(oauth2_scheme)):
     await validate_token_and_roles(token, ["admin", "staff"])
     conn = await get_db_connection()

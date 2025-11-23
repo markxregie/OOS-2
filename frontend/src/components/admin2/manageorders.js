@@ -172,22 +172,33 @@ const ManageOrders = () => {
         const data = await response.json();
         console.log("Backend raw data:", data);
 
-        const transformedOrders = data.map(order => ({
-          id: order.order_id,
-          customer: order.customer_name,
-          date: order.order_date,
-          orderType: order.order_type,
-          paymentMethod: order.payment_method,
-          total: order.total_amount,
-          status: order.order_status,
-          emailAddress: order.emailAddress,
-          phoneNumber: order.phoneNumber,
-          deliveryAddress: order.deliveryAddress,
-          deliveryNotes: order.deliveryNotes,
-          adminNotes: order.adminNotes || "",
-          statusHistory: order.statusHistory || [],
-          items: order.items || []  // ← DIRECTLY use the array
-        }));
+        const transformedOrders = data.map(order => {
+          const firstName = order.first_name || order.firstName || "";
+          const lastName = order.last_name || order.lastName || "";
+          const orderType = order.order_type;
+          const nameFromFields = (firstName && lastName) ? `${firstName} ${lastName}` : "";
+          // Display rules: Delivery prefers DeliveryInfo names; Pickup prefers profile names; fallback to username/customer_name
+          const displayCustomer = nameFromFields || order.customer_name;
+
+          return {
+            id: order.order_id,
+            customer: displayCustomer,
+            firstName,
+            lastName,
+            date: order.order_date,
+            orderType: orderType,
+            paymentMethod: order.payment_method,
+            total: order.total_amount,
+            status: order.order_status,
+            emailAddress: order.emailAddress,
+            phoneNumber: order.phoneNumber,
+            deliveryAddress: order.deliveryAddress,
+            deliveryNotes: order.deliveryNotes,
+            adminNotes: order.adminNotes || "",
+            statusHistory: order.statusHistory || [],
+            items: order.items || []
+          };
+        });
 
         // Filter orders to only include those from today
         const today = new Date();
@@ -209,7 +220,7 @@ const ManageOrders = () => {
 
   const filteredOrders = orders.filter(order => {
     const matchesSearch =
-      order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (order.customer || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.id.toString().includes(searchTerm) ||
       order.status.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.paymentMethod.toLowerCase().includes(searchTerm.toLowerCase()) ||

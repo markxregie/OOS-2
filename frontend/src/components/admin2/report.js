@@ -154,30 +154,34 @@ const Report = () => {
         const data = await response.json();
         console.log("Backend raw data:", data);
 
-        const transformedOrders = data.map(order => ({
-          id: order.order_id,
-          // Prefer explicit first/last name fields; fallback to customer_name/username
-          firstName: order.first_name || order.firstName || "",
-            lastName: order.last_name || order.lastName || "",
-          customer: (order.first_name && order.last_name)
-            ? `${order.first_name} ${order.last_name}`
-            : (order.firstName && order.lastName)
-              ? `${order.firstName} ${order.lastName}`
-              : order.customer_name,
-          date: order.order_date,
-          orderType: order.order_type,
-          paymentMethod: order.payment_method,
-          total: order.total_amount,
-          status: order.order_status,
-          emailAddress: order.emailAddress,
-          phoneNumber: order.phoneNumber,
-          deliveryAddress: order.deliveryAddress,
-          deliveryNotes: order.deliveryNotes,
-          adminNotes: order.adminNotes || "",
-          statusHistory: order.statusHistory || [],
-          items: order.items || [],
-          referenceNo: order.reference_number
-        }));
+        const transformedOrders = data.map(order => {
+          const firstName = order.first_name || order.firstName || "";
+          const lastName = order.last_name || order.lastName || "";
+          const orderType = order.order_type;
+          const nameFromFields = (firstName && lastName) ? `${firstName} ${lastName}` : "";
+          // Expected: Pickup -> profile names; Delivery -> delivery info names; else fallback to username/customer_name
+          const displayCustomer = nameFromFields || order.customer_name;
+
+          return {
+            id: order.order_id,
+            firstName,
+            lastName,
+            customer: displayCustomer,
+            date: order.order_date,
+            orderType: orderType,
+            paymentMethod: order.payment_method,
+            total: order.total_amount,
+            status: order.order_status,
+            emailAddress: order.emailAddress,
+            phoneNumber: order.phoneNumber,
+            deliveryAddress: order.deliveryAddress,
+            deliveryNotes: order.deliveryNotes,
+            adminNotes: order.adminNotes || "",
+            statusHistory: order.statusHistory || [],
+            items: order.items || [],
+            referenceNo: order.reference_number
+          };
+        });
 
         setOrders(transformedOrders);
       } catch (error) {
