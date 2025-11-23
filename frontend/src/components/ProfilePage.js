@@ -91,7 +91,7 @@ const ProfilePage = () => {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
-        const latLng = { lat: latitude, lng: longitude };
+        const latLng = new window.google.maps.LatLng(latitude, longitude);
 
         if (map && marker) {
           map.setCenter(latLng);
