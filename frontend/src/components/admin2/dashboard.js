@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from "react";
-// 1. Import useSearchParams to read URL query parameters
-import { useSearchParams } from "react-router-dom";
 import coffeeImage from "../../assets/coffee.jpg";
 import "../admin2/dashboard.css";
 import adminImage from "../../assets/administrator.png";
@@ -69,7 +67,6 @@ const CustomTooltip = ({ active, payload, label, popularItems }) => {
 
 
 const Dashboard = () => {
-  const [searchParams] = useSearchParams();
   const [authToken, setAuthToken] = useState(null);
   const [userName, setUserName] = useState("Loading...");
 
@@ -93,31 +90,26 @@ const Dashboard = () => {
   const [topRiders, setTopRiders] = useState([]);
   // --- useEffects for Auth and Data Fetching ---
   useEffect(() => {
-  const tokenFromUrl = searchParams.get('authorization');
-  const usernameFromUrl = searchParams.get('username');
-
-  if (tokenFromUrl) {
-    setAuthToken(tokenFromUrl);
-    localStorage.setItem("authToken", tokenFromUrl); 
-  } else {
     const storedToken = localStorage.getItem("authToken");
-    if (storedToken) {
-      setAuthToken(storedToken);
+    const userData = localStorage.getItem("userData");
+    if (storedToken) setAuthToken(storedToken);
+    if (userData) {
+      try {
+        const parsed = JSON.parse(userData);
+        if (parsed?.username) setUserName(parsed.username);
+      } catch {}
     } else {
-      console.error("Authorization token not found in URL or localStorage.");
+      const storedUsername = localStorage.getItem("userName");
+      if (storedUsername) setUserName(storedUsername);
     }
-  }
 
-  if (usernameFromUrl) {
-    setUserName(usernameFromUrl);
-    localStorage.setItem("userName", usernameFromUrl);
-  } else {
-    const storedUsername = localStorage.getItem("userName");
-    if (storedUsername) {
-      setUserName(storedUsername);
-    }
-  }
-}, [searchParams]);
+    const onStorage = () => {
+      const t = localStorage.getItem("authToken");
+      setAuthToken(t);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   useEffect(() => {
     if (!authToken) { return; }
@@ -361,7 +353,8 @@ const Dashboard = () => {
                     </li>
                     <li
                       onClick={() => {
-                        window.location.href = "http://localhost:4002/";
+                        try { localStorage.removeItem("access_token"); localStorage.removeItem("authToken"); localStorage.removeItem("expires_at"); localStorage.removeItem("userData"); } catch {}
+                        window.location.replace("http://localhost:4002/");
                       }}
                       style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#dc3545" }}
                       onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8d7da"}

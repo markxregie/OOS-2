@@ -9,7 +9,6 @@ import adminImage from "../../assets/administrator.png";
 
 function DeliveryManagement() {
   const userRole = "Admin";
-  const [searchParams] = useState(() => new URLSearchParams(window.location.search));
   const [authToken, setAuthToken] = useState(null);
   const [userName, setUserName] = useState("Loading...");
   const [error, setError] = useState(null);
@@ -115,31 +114,19 @@ function DeliveryManagement() {
   }, [authToken, fetchInitialData]);
 
   useEffect(() => {
-    const tokenFromUrl = searchParams.get('authorization');
-    const usernameFromUrl = searchParams.get('username');
-
-    if (tokenFromUrl) {
-      setAuthToken(tokenFromUrl);
-      localStorage.setItem("authToken", tokenFromUrl); // Save to localStorage
-    } else {
-      const storedToken = localStorage.getItem("authToken");
-      if (storedToken) {
-        setAuthToken(storedToken);
-      } else {
-        console.error("Authorization token not found in URL or localStorage.");
-      }
-    }
-
-    if (usernameFromUrl) {
-      setUserName(usernameFromUrl);
-      localStorage.setItem("userName", usernameFromUrl); // Save to localStorage
+    const storedToken = localStorage.getItem("authToken");
+    if (storedToken) setAuthToken(storedToken);
+    const userData = localStorage.getItem("userData");
+    if (userData) {
+      try { const parsed = JSON.parse(userData); if (parsed?.username) setUserName(parsed.username); } catch {}
     } else {
       const storedUsername = localStorage.getItem("userName");
-      if (storedUsername) {
-        setUserName(storedUsername);
-      }
+      if (storedUsername) setUserName(storedUsername);
     }
-  }, [searchParams]);
+    const onStorage = () => { setAuthToken(localStorage.getItem("authToken")); };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   // Removed redundant rider fetching - now handled in fetchInitialData
 
@@ -402,7 +389,7 @@ function DeliveryManagement() {
                       <FaUndo /> Refresh
                     </li>
                     <li
-                      onClick={() => { localStorage.removeItem("access_token"); window.location.href = "http://localhost:4002/"; }}
+                      onClick={() => { localStorage.removeItem("access_token"); localStorage.removeItem("authToken"); localStorage.removeItem("expires_at"); localStorage.removeItem("userData"); window.location.replace("http://localhost:4002/"); }}
                       style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#dc3545" }}
                       onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8d7da"}
                       onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}

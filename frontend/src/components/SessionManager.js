@@ -42,12 +42,12 @@ const SessionManager = () => {
           // Set auto-logout at expiration
           logoutTimeoutRef.current = setTimeout(() => {
             logout();
-            window.location.href = 'http://localhost:4002/';
+            window.location.replace('http://localhost:4002/');
           }, timeToExpire);
         } else {
           // Already expired, logout immediately
           logout();
-          window.location.href = 'http://localhost:4002/';
+          window.location.replace('http://localhost:4002/');
         }
       }
     }

@@ -1,10 +1,16 @@
-import React, { useState } from "react";
+import React, { useState, useContext } from "react";
 import "../admin2/Staff.css";
+import { AuthContext } from "../AuthContext";
 
 import { FaChevronDown, FaBell, FaEdit, FaArchive, FaPlus, FaFolderOpen } from "react-icons/fa";
 import DataTable from "react-data-table-component";
 
 function Staff() {
+    const { logout } = useContext(AuthContext);
+        const handleLogout = () => {
+            try { logout(); } catch {}
+            window.location.replace("http://localhost:4002/");
+        };
     const [isDropdownOpen, setDropdownOpen] = useState(false);
     const [showAddRoleModal, setShowAddRoleModal] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -194,7 +200,7 @@ function Staff() {
                                 <div className="profile-dropdown">
                                     <ul>
                                         <li>Edit Profile</li>
-                                        <li onClick={() => { localStorage.removeItem("access_token"); window.location.href = "/login"; }} style={{ cursor: "pointer" }}>Logout</li>
+                                        <li onClick={handleLogout} style={{ cursor: "pointer" }}>Logout</li>
                                     </ul>
                                 </div>
                             )}

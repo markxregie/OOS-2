@@ -338,7 +338,7 @@ function RiderHistory() {
         localStorage.removeItem("riderName");
         localStorage.removeItem("riderPhone");
         localStorage.removeItem("riderUsername");
-        window.location.href = "http://localhost:4002/";
+        window.location.replace("http://localhost:4002/");
       }
     });
   };

@@ -468,45 +468,45 @@ const confirmPayment = async (saved) => {
           <div className="checkout-form-row">
             <div className="form-group">
               <label>Region <span className="text-danger">*</span></label>
-              <input type="text" placeholder="Region" className="form-control" value={userData.region} onChange={e => handleInputChange('region', e.target.value)} />
+              <input type="text" placeholder="Region" className="form-control" value={userData.region} readOnly />
             </div>
             <div className="form-group">
               <label>Province <span className="text-danger">*</span></label>
-              <input type="text" placeholder="Province" className="form-control" value={userData.province} onChange={e => handleInputChange('province', e.target.value)} />
+              <input type="text" placeholder="Province" className="form-control" value={userData.province} readOnly />
             </div>
             <div className="form-group">
               <label>Street Name <span className="text-danger">*</span></label>
-              <input type="text" placeholder="Street Name" className="form-control" value={userData.streetName} onChange={e => handleInputChange('streetName', e.target.value)} />
+              <input type="text" placeholder="Street Name" className="form-control" value={userData.streetName} readOnly />
             </div>
           </div>
 
           <div className="checkout-form-row">
             <div className="form-group">
               <label>Barangay <span className="text-danger">*</span></label>
-              <input type="text" placeholder="Barangay" className="form-control" value={userData.barangay} onChange={e => handleInputChange('barangay', e.target.value)} />
+              <input type="text" placeholder="Barangay" className="form-control" value={userData.barangay} readOnly />
             </div>
             <div className="form-group">
               <label>City <span className="text-danger">*</span></label>
-              <input type="text" placeholder="City" className="form-control" value={userData.city} onChange={e => handleInputChange('city', e.target.value)} />
+              <input type="text" placeholder="City" className="form-control" value={userData.city} readOnly />
             </div>
             <div className="form-group">
               <label>Postal Code <span className="text-danger">*</span></label>
-              <input type="text" placeholder="Postal Code" className="form-control" value={userData.postalCode} onChange={e => handleInputChange('postalCode', e.target.value)} />
+              <input type="text" placeholder="Postal Code" className="form-control" value={userData.postalCode} readOnly />
             </div>
           </div>
 
           <div className="checkout-form-row">
             <div className="form-group">
               <label>Landmark <span className="text-danger">*</span></label>
-              <input type="text" placeholder="Landmark" className="form-control" value={userData.landmark} onChange={e => handleInputChange('landmark', e.target.value)} />
+              <input type="text" placeholder="Landmark" className="form-control" value={userData.landmark} readOnly />
             </div>
             <div className="form-group">
               <label>Email Address <span className="text-danger">*</span></label>
-              <input type="email" placeholder="Email Address" className="form-control" value={userData.email} onChange={e => handleInputChange('email', e.target.value)} />
+              <input type="email" placeholder="Email Address" className="form-control" value={userData.email} readOnly />
             </div>
             <div className="form-group">
               <label>Phone Number <span className="text-danger">*</span></label>
-              <input type="text" placeholder="Phone Number" className="form-control" value={userData.phone} onChange={e => handleInputChange('phone', e.target.value)} />
+              <input type="text" placeholder="Phone Number" className="form-control" value={userData.phone} readOnly />
             </div>
           </div>
 

@@ -23,20 +23,20 @@ export default function AppHeader() {
   const { isLoggedIn, login, logout } = useContext(AuthContext);
   const [profileImage, setProfileImage] = useState("https://cdn-icons-png.flaticon.com/512/149/149071.png");
 
-  // Check URL query params for authorization token and login
+  // Clean stray username param if not logged in & handle token from URL once
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tokenFromUrl = params.get('authorization');
-    console.log('Token from URL:', tokenFromUrl);
     if (tokenFromUrl) {
       login({ authToken: tokenFromUrl });
-      console.log('Logged in with token from URL');
-      // Remove token from URL to clean up
       params.delete('authorization');
-      const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
-      window.history.replaceState({}, document.title, newUrl);
     }
-  }, [login]);
+    if (!isLoggedIn && params.has('username')) {
+      params.delete('username');
+    }
+    const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+    window.history.replaceState({}, document.title, newUrl);
+  }, [login, isLoggedIn]);
 
   // New state for header visibility
   const [isVisible, setIsVisible] = useState(true);
@@ -230,8 +230,8 @@ export default function AppHeader() {
     }).then((result) => {
       if (result.isConfirmed) {
         logout();
-        // Redirect to login page on frontend-auth at localhost:4002
-        window.location.href = 'http://localhost:4002/';
+        // Redirect to login page on frontend-auth at localhost:4002 and replace history
+        window.location.replace('http://localhost:4002/');
       }
     });
   };

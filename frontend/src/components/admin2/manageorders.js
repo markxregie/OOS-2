@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { Container, Table, Form } from "react-bootstrap";
 import { CartFill, BellFill, PersonFill, Search, EyeFill, PencilFill, TrashFill, PrinterFill } from "react-bootstrap-icons";
 import { FaChevronDown, FaBell, FaAngleLeft, FaAngleRight, FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa";
-import { useSearchParams } from "react-router-dom";
 import Swal from 'sweetalert2';
 import withReactContent from 'sweetalert2-react-content';
 import "../admin2/manageorder.css";
@@ -112,7 +111,6 @@ const sampleOrders = [
 
 const ManageOrders = () => {
   const userRole = "Admin";
-  const [searchParams] = useSearchParams();
   const [authToken, setAuthToken] = useState(null);
   const [userName, setUserName] = useState("Loading...");
 
@@ -126,32 +124,19 @@ const ManageOrders = () => {
   const itemsPerPage = 10;
 
   useEffect(() => {
-    const tokenFromUrl = searchParams.get('authorization');
-    const usernameFromUrl = searchParams.get('username');
-
-    if (tokenFromUrl) {
-      setAuthToken(tokenFromUrl);
-      localStorage.setItem("authToken", tokenFromUrl); // Save to localStorage
-    } else {
-      // If not in URL, try getting from localStorage
-      const storedToken = localStorage.getItem("authToken");
-      if (storedToken) {
-        setAuthToken(storedToken);
-      } else {
-        console.error("Authorization token not found in URL or localStorage.");
-      }
-    }
-
-    if (usernameFromUrl) {
-      setUserName(usernameFromUrl);
-      localStorage.setItem("userName", usernameFromUrl); // Save to localStorage
+    const storedToken = localStorage.getItem("authToken");
+    if (storedToken) setAuthToken(storedToken);
+    const userData = localStorage.getItem("userData");
+    if (userData) {
+      try { const parsed = JSON.parse(userData); if (parsed?.username) setUserName(parsed.username); } catch {}
     } else {
       const storedUsername = localStorage.getItem("userName");
-      if (storedUsername) {
-        setUserName(storedUsername);
-      }
+      if (storedUsername) setUserName(storedUsername);
     }
-  }, [searchParams]);
+    const onStorage = () => { setAuthToken(localStorage.getItem("authToken")); };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -448,7 +433,7 @@ const ManageOrders = () => {
                       <FaUndo /> Refresh
                     </li>
                     <li
-                      onClick={() => { localStorage.removeItem("access_token"); window.location.href = "http://localhost:4002/"; }}
+                      onClick={() => { try { require('../AuthContext'); } catch {} ; try { /* dynamic import context not ideal */ } catch {} ; localStorage.removeItem("access_token"); localStorage.removeItem("authToken"); localStorage.removeItem("expires_at"); localStorage.removeItem("userData"); window.location.replace("http://localhost:4002/"); }}
                       style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#dc3545" }}
                       onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8d7da"}
                       onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
