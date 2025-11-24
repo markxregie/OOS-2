@@ -32,6 +32,7 @@ import Resetpassword from './components/Resetpassword';
 import Concerns from './components/concerns';
 import AdminConcerns from './components/admin2/concerns';
 import SessionManager from './components/SessionManager';  // <-- Import SessionManager
+import ProtectedRoute from './components/ProtectedRoute';
 
 import { BrowserRouter as Router, Routes, Route, useLocation, Outlet } from 'react-router-dom';
 import { AuthProvider } from './components/AuthContext';  // <-- Import AuthProvider
@@ -109,8 +110,8 @@ function MainApp() {
             <Route path="/profile/orderhistory/:orderId" element={<TrackOrder />} />
             <Route path="/profile/notification" element={<Notification />} />
           </Route>
-          {/* Admin Routes */}
-          <Route element={<AdminLayout />}>
+          {/* Admin Routes (Protected) */}
+          <Route element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
             <Route path="/admin/dashboard" element={<Dashboard />} />
             <Route path="/admin/products" element={<Products />} />
             <Route path="/admin/manageorders" element={<ManageOrders />} />

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Form, Button } from 'react-bootstrap';
 import Swal from 'sweetalert2';
 import './concerns.css';
@@ -10,6 +10,28 @@ const Concerns = () => {
   const [message, setMessage] = useState('');
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        const token = localStorage.getItem('authToken');
+        if (!token) return;
+        const response = await fetch('http://localhost:4000/users/profile', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setName(`${data.firstName} ${data.lastName}`);
+          setEmail(data.email);
+        }
+      } catch (error) {
+        console.error('Error fetching user profile:', error);
+      }
+    };
+    fetchUserProfile();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -35,8 +57,6 @@ const Concerns = () => {
           confirmButtonColor: '#4a9ba5'
         });
         // Clear the form
-        setName('');
-        setEmail('');
         setSubject('');
         setMessage('');
         setFile(null);
@@ -80,6 +100,7 @@ const Concerns = () => {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
+                  disabled
                   style={{ borderColor: "#4a9ba5" }}
                 />
               </Form.Group>
@@ -92,6 +113,7 @@ const Concerns = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  disabled
                   style={{ borderColor: "#4a9ba5" }}
                 />
               </Form.Group>

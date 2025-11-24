@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { FaChevronDown, FaBell, FaAngleLeft, FaAngleRight, FaAngleDoubleLeft, FaAngleDoubleRight } from 'react-icons/fa';
 import { Form, Table } from 'react-bootstrap';
 import { FaSignOutAlt, FaUndo } from "react-icons/fa";
-import { useSearchParams } from "react-router-dom";
+// removed URL token ingestion
 import './report.css';
 
 import coffeeImage from "../../assets/coffee.jpg";
@@ -104,7 +104,6 @@ const formatValue = (value, format) => {
 };
 
 const Report = () => {
-  const [searchParams] = useSearchParams();
   const [authToken, setAuthToken] = useState(null);
   const [userName, setUserName] = useState("Loading...");
   const [orders, setOrders] = useState([]);
@@ -123,31 +122,19 @@ const Report = () => {
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
-    const tokenFromUrl = searchParams.get('authorization');
-    const usernameFromUrl = searchParams.get('username');
-
-    if (tokenFromUrl) {
-      setAuthToken(tokenFromUrl);
-      localStorage.setItem("authToken", tokenFromUrl);
-    } else {
-      const storedToken = localStorage.getItem("authToken");
-      if (storedToken) {
-        setAuthToken(storedToken);
-      } else {
-        console.error("Authorization token not found in URL or localStorage.");
-      }
-    }
-
-    if (usernameFromUrl) {
-      setUserName(usernameFromUrl);
-      localStorage.setItem("userName", usernameFromUrl);
+    const storedToken = localStorage.getItem("authToken");
+    if (storedToken) setAuthToken(storedToken);
+    const userData = localStorage.getItem("userData");
+    if (userData) {
+      try { const parsed = JSON.parse(userData); if (parsed?.username) setUserName(parsed.username); } catch {}
     } else {
       const storedUsername = localStorage.getItem("userName");
-      if (storedUsername) {
-        setUserName(storedUsername);
-      }
+      if (storedUsername) setUserName(storedUsername);
     }
-  }, [searchParams]);
+    const onStorage = () => { setAuthToken(localStorage.getItem("authToken")); };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   useEffect(() => {
     if (!authToken) return;
@@ -167,23 +154,34 @@ const Report = () => {
         const data = await response.json();
         console.log("Backend raw data:", data);
 
-        const transformedOrders = data.map(order => ({
-          id: order.order_id,
-          customer: order.customer_name,
-          date: order.order_date,
-          orderType: order.order_type,
-          paymentMethod: order.payment_method,
-          total: order.total_amount,
-          status: order.order_status,
-          emailAddress: order.emailAddress,
-          phoneNumber: order.phoneNumber,
-          deliveryAddress: order.deliveryAddress,
-          deliveryNotes: order.deliveryNotes,
-          adminNotes: order.adminNotes || "",
-          statusHistory: order.statusHistory || [],
-          items: order.items || [],
-          referenceNo: order.reference_number
-        }));
+        const transformedOrders = data.map(order => {
+          const firstName = order.first_name || order.firstName || "";
+          const lastName = order.last_name || order.lastName || "";
+          const orderType = order.order_type;
+          const nameFromFields = (firstName && lastName) ? `${firstName} ${lastName}` : "";
+          // Expected: Pickup -> profile names; Delivery -> delivery info names; else fallback to username/customer_name
+          const displayCustomer = nameFromFields || order.customer_name;
+
+          return {
+            id: order.order_id,
+            firstName,
+            lastName,
+            customer: displayCustomer,
+            date: order.order_date,
+            orderType: orderType,
+            paymentMethod: order.payment_method,
+            total: order.total_amount,
+            status: order.order_status,
+            emailAddress: order.emailAddress,
+            phoneNumber: order.phoneNumber,
+            deliveryAddress: order.deliveryAddress,
+            deliveryNotes: order.deliveryNotes,
+            adminNotes: order.adminNotes || "",
+            statusHistory: order.statusHistory || [],
+            items: order.items || [],
+            referenceNo: order.reference_number
+          };
+        });
 
         setOrders(transformedOrders);
       } catch (error) {
@@ -258,15 +256,23 @@ const Report = () => {
     setDropdownOpen(!isDropdownOpen);
   };
 
-  // Filter data based on search term and status
-  const filteredData = dateFilteredOrders.filter(order =>
-    (order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.id.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.status.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.paymentMethod.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.orderType.toLowerCase().includes(searchTerm.toLowerCase())) &&
-    (statusFilter === "" || order.status.toLowerCase() === statusFilter.toLowerCase())
-  );
+  // Filter data based on search term and status, restricting to Delivered and Completed only
+  const filteredData = dateFilteredOrders.filter(order => {
+    const statusLower = order.status.toLowerCase();
+    // Only keep orders with status Delivered or Completed
+    if (!['delivered', 'completed'].includes(statusLower)) return false;
+
+    const matchesSearch = (
+      order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.id.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+      statusLower.includes(searchTerm.toLowerCase()) ||
+      order.paymentMethod.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.orderType.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const matchesStatusFilter = (statusFilter === "" || statusLower === statusFilter.toLowerCase());
+    return matchesSearch && matchesStatusFilter;
+  });
 
   // Pagination calculations
   const indexOfLastRow = currentPage * rowsPerPage;
@@ -533,7 +539,7 @@ const Report = () => {
                         <FaUndo /> Refresh
                       </li>
                       <li
-                        onClick={() => { localStorage.removeItem("access_token"); window.location.href = "http://localhost:4002/"; }}
+                        onClick={() => { localStorage.removeItem("access_token"); localStorage.removeItem("authToken"); localStorage.removeItem("expires_at"); localStorage.removeItem("userData"); window.location.replace("http://localhost:4002/"); }}
                         style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#dc3545" }}
                         onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8d7da"}
                         onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
@@ -607,8 +613,7 @@ const Report = () => {
                   <Form.Select id="filterStatus" name="filterStatus" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ padding: '6px 12px', borderRadius: '5px', border: '1px solid #ccc', backgroundColor: '#f9f9f9', cursor: 'pointer', width: '150px' }}>
                     <option value="">All Status</option>
                     <option value="Completed">Completed</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Cancelled">Cancelled</option>
+                    <option value="Delivered">Delivered</option>
                   </Form.Select>
                 </div>
                 <div className="export-dropdown" style={{ display: 'flex', alignItems: 'center' }}>

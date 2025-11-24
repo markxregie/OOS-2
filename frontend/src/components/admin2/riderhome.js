@@ -2,27 +2,15 @@
   import { useLocation } from "react-router-dom";
   import { FaChevronDown, FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaUndo, FaSignOutAlt, FaTimesCircle, FaExchangeAlt, FaBars, FaHome, FaHistory, FaCog, FaCreditCard, FaUserTie } from "react-icons/fa";
   import { Container, Card, Form, Button, Modal } from "react-bootstrap";
-  import mapboxgl from 'mapbox-gl';
-  import 'mapbox-gl/dist/mapbox-gl.css';
   import riderImage from "../../assets/rider.jpg";
   import logoImage from "../../assets/logo.png";
   import "./riderhome.css";
 
   import Swal from 'sweetalert2';
-  // Mapbox access token
-  const MAPBOX_ACCESS_TOKEN = process.env.REACT_APP_MAPBOX_ACCESS_TOKEN;
-  mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
-  try { if (typeof mapboxgl.setTelemetryEnabled === 'function') mapboxgl.setTelemetryEnabled(false); } catch (e) { /* ignore */ }
-
-  // We'll initialize a Mapbox map when the modal opens to show route from rider to customer.
-  const riderMapRef = { map: null, containerId: 'rider-map' };
 
   // Simple in-memory caches to avoid repeating expensive external requests
   const geocodeCache = new Map(); // address -> { lat, lng }
   const pendingGeocode = new Map(); // address -> Promise
-
-  const directionsCache = new Map(); // key `fromLng,fromLat:toLng,toLat` -> route object
-  const pendingDirections = new Map(); // same key -> Promise
 
   async function geocodeAddress(address) {
     if (!address) return null;
@@ -30,64 +18,76 @@
     if (geocodeCache.has(key)) return geocodeCache.get(key);
     if (pendingGeocode.has(key)) return pendingGeocode.get(key);
 
-    const p = (async () => {
-      try {
-        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
-        const res = await fetch(url);
-        if (!res.ok) return null;
-        const data = await res.json();
-        if (data && data.length > 0) {
-          const lat = parseFloat(data[0].lat);
-          const lng = parseFloat(data[0].lon);
-          if (Number.isFinite(lat) && Number.isFinite(lng)) {
-            const val = { lat, lng };
+    const p = new Promise((resolve) => {
+      if (window.google && window.google.maps) {
+        const geocoder = new window.google.maps.Geocoder();
+        geocoder.geocode({ address }, (results, status) => {
+          if (status === 'OK' && results[0]) {
+            const location = results[0].geometry.location;
+            const val = { lat: location.lat(), lng: location.lng() };
             geocodeCache.set(key, val);
-            return val;
+            resolve(val);
+          } else {
+            resolve(null);
           }
-        }
-        return null;
-      } catch (err) {
-        console.error('geocodeAddress error', err);
-        return null;
-      } finally {
-        pendingGeocode.delete(key);
+        });
+      } else {
+        resolve(null);
       }
-    })();
+    });
 
     pendingGeocode.set(key, p);
     return p;
   }
 
-  async function fetchDirections(fromLng, fromLat, toLng, toLat) {
-    const key = `${fromLng},${fromLat}:${toLng},${toLat}`;
-    if (directionsCache.has(key)) return directionsCache.get(key);
-    if (pendingDirections.has(key)) return pendingDirections.get(key);
+  async function fetchCustomerLocationFromBackend(orderId) {
+    if (!orderId) return null;
+    const tries = [
+        `http://localhost:7004/delivery/order/${orderId}/customer/location`,
+        `http://localhost:7004/delivery/order/${orderId}/customer`,
+        `http://localhost:4000/users/orders/${orderId}/customer/location`
+    ];
 
-    const p = (async () => {
-      try {
-        const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${fromLng},${fromLat};${toLng},${toLat}?geometries=geojson&overview=full&access_token=${MAPBOX_ACCESS_TOKEN}`;
-        const res = await fetch(url);
-        if (!res.ok) return null;
-        const data = await res.json();
-        if (data && data.routes && data.routes[0]) {
-          const route = data.routes[0];
-          directionsCache.set(key, route);
-          return route;
+    for (const url of tries) {
+        try {
+            const res = await fetch(url);
+            if (!res.ok) continue;
+            const data = await res.json();
+            if (!data) continue;
+            const lat = data.lat || data.latitude || data.Lat;
+            const lng = data.lng || data.longitude || data.Lng;
+            if (lat && lng && Number.isFinite(parseFloat(lat)) && Number.isFinite(parseFloat(lng))) {
+                return [parseFloat(lat), parseFloat(lng)];
+            }
+        } catch (e) {
+            // ignore
         }
-        return null;
-      } catch (err) {
-        console.error('fetchDirections error', err);
-        return null;
-      } finally {
-        pendingDirections.delete(key);
-      }
-    })();
-
-    pendingDirections.set(key, p);
-    return p;
+    }
+    return null;
   }
 
   function RiderDashboard() {
+    // We'll initialize a Google Maps map when the modal opens to show route from rider to customer.
+    const riderMapRef = useRef(null);
+    const [riderMap, setRiderMap] = useState(null);
+    const [riderMarker, setRiderMarker] = useState(null);
+    const [customerMarker, setCustomerMarker] = useState(null);
+    const [routePolyline, setRoutePolyline] = useState(null);
+    const [scriptLoaded, setScriptLoaded] = useState(!!(window.google && window.google.maps));
+
+    // Load Google Maps API script if not already loaded
+    useEffect(() => {
+      if (!scriptLoaded) {
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}`;
+        script.async = true;
+        script.defer = true;
+        script.onload = () => setScriptLoaded(true);
+        script.onerror = () => console.error('Failed to load Google Maps API');
+        document.head.appendChild(script);
+      }
+    }, [scriptLoaded]);
+
     const [userRole, setUserRole] = useState("");
     const [userName, setUserName] = useState("");
 
@@ -151,6 +151,7 @@
     const [toggle, setToggle] = useState("active");
     const [earningsFilter, setEarningsFilter] = useState("Daily");
     const [orders, setOrders] = useState([]);
+    const [earnings, setEarnings] = useState(null);
 
     useEffect(() => {
       const fetchOrders = async () => {
@@ -254,6 +255,44 @@
       return () => clearInterval(timer);
     }, []);
 
+    useEffect(() => {
+      const fetchEarnings = async () => {
+        if (!riderId || !authToken) {
+          return;
+        }
+
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1; // JS months are 0-indexed
+        const today = now.toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+
+        let url = '';
+        if (earningsFilter === 'Daily') {
+          url = `http://localhost:7004/delivery/rider/${riderId}/earnings/daily?target_date=${today}`;
+        } else if (earningsFilter === 'Weekly') {
+          url = `http://localhost:7004/delivery/rider/${riderId}/earnings/weekly?target_date=${today}`;
+        } else if (earningsFilter === 'Monthly') {
+          url = `http://localhost:7004/delivery/rider/${riderId}/earnings/monthly?year=${year}&month=${month}`;
+        }
+
+        if (!url) return;
+
+        try {
+          const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${authToken}` },
+          });
+          if (!response.ok) throw new Error(`Failed to fetch earnings: ${response.status}`);
+          const data = await response.json();
+          setEarnings(data);
+        } catch (e) {
+          console.error('Earnings fetch error:', e);
+          setEarnings({ totalEarnings: 0.0 }); // Set a default on error
+        }
+      };
+
+      fetchEarnings();
+    }, [riderId, authToken, earningsFilter]);
+
     // Update rider location to backend every 5 seconds
     useEffect(() => {
       if (!riderId || !authToken) return;
@@ -343,30 +382,11 @@
       });
 
     const calculateEarnings = () => {
-      const now = new Date();
-      let startDate;
-
-      if (earningsFilter === "Daily") {
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        return orders
-          .filter(order => ["pending", "confirmed", "preparing", "waitingforpickup", "pickedup", "delivering"].includes(order.currentStatus.toLowerCase()) && new Date(order.orderedAt) >= startDate)
-          .reduce((sum, order) => sum + (order.total || 0), 0)
-          .toFixed(2);
-      } else if (earningsFilter === "Weekly") {
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      } else if (earningsFilter === "Monthly") {
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      } else {
-        return orders
-          .filter(order => ["pending", "confirmed", "preparing", "waitingforpickup", "pickedup", "delivering", "delivered"].includes(order.currentStatus.toLowerCase()))
-          .reduce((sum, order) => sum + (order.total || 0), 0)
-          .toFixed(2);
+      if (earnings && typeof earnings.totalEarnings === 'number') {
+        return earnings.totalEarnings.toFixed(2);
       }
-
-      return orders
-        .filter(order => ["pending", "confirmed", "preparing", "waitingforpickup", "pickedup", "delivering"].includes(order.currentStatus.toLowerCase()) && new Date(order.orderedAt) >= startDate)
-        .reduce((sum, order) => sum + (order.total || 0), 0)
-        .toFixed(2);
+      // Return a loading or default state
+      return '...';
     };
 
     const updateOrderStatus = async (orderId, newStatus) => {
@@ -540,14 +560,18 @@
             const riderLat = position.coords.latitude;
             const riderLng = position.coords.longitude;
             setRiderLocation([riderLat, riderLng]);
-            // Geocode customer address to get coordinates
+            // Try to fetch customer location from backend first, then geocode if needed
             (async () => {
               try {
-                const g = await geocodeAddress(order.address);
-                if (g) setCustomerLocation([g.lat, g.lng]);
+                let custLoc = await fetchCustomerLocationFromBackend(order.id);
+                if (!custLoc) {
+                  const g = await geocodeAddress(order.address);
+                  if (g) custLoc = [g.lat, g.lng];
+                }
+                if (custLoc) setCustomerLocation(custLoc);
                 else setCustomerLocation([14.5995, 120.9842]);
               } catch (e) {
-                console.error('Geocoding error:', e);
+                console.error('Customer location fetch/geocoding error:', e);
                 setCustomerLocation([14.5995, 120.9842]);
               } finally {
                 setShowMapModal(true);
@@ -556,52 +580,15 @@
           },
           (error) => {
             console.error('Geolocation error:', error);
-            // Fallback to default rider location
-            setRiderLocation([14.5995, 120.9842]);
-            // Geocode customer address
-            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(order.address)}`)
-              .then(res => res.json())
-              .then(data => {
-                if (data.length > 0) {
-                  const customerLat = parseFloat(data[0].lat);
-                  const customerLng = parseFloat(data[0].lon);
-                  setCustomerLocation([customerLat, customerLng]);
-                } else {
-                  setCustomerLocation([14.5995, 120.9842]);
-                }
-                setShowMapModal(true);
-              })
-              .catch(err => {
-                console.error('Geocoding error:', err);
-                setCustomerLocation([14.5995, 120.9842]);
-                setShowMapModal(true);
-              });
+            Swal.fire('Location Access Required', 'Please enable location services in your browser to navigate the route.', 'warning');
           }
         );
       } else {
-        // Fallback if geolocation is not supported
-        setRiderLocation([14.5995, 120.9842]);
-        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(order.address)}`)
-          .then(res => res.json())
-          .then(data => {
-            if (data.length > 0) {
-              const customerLat = parseFloat(data[0].lat);
-              const customerLng = parseFloat(data[0].lon);
-              setCustomerLocation([customerLat, customerLng]);
-            } else {
-              setCustomerLocation([14.5995, 120.9842]);
-            }
-            setShowMapModal(true);
-          })
-          .catch(err => {
-            console.error('Geocoding error:', err);
-            setCustomerLocation([14.5995, 120.9842]);
-            setShowMapModal(true);
-          });
+        Swal.fire('Location Not Supported', 'Geolocation is not supported by this browser. Please enable location services.', 'warning');
       }
     };
 
-    // Initialize Mapbox map when modal opens and rider/customer locations are available
+    // Initialize Google Maps map when modal opens and rider/customer locations are available
     useEffect(() => {
       const initMap = async () => {
         try {
@@ -614,39 +601,95 @@
           if (![riderLat, riderLng, custLat, custLng].every(v => Number.isFinite(v))) return;
 
           // remove previous map if any
-          try { if (riderMapRef.map) { riderMapRef.map.remove(); riderMapRef.map = null; } } catch (e) { /* ignore */ }
-
-          const center = [(riderLng + custLng) / 2, (riderLat + custLat) / 2];
-          const map = new mapboxgl.Map({
-            container: riderMapRef.containerId,
-            style: 'mapbox://styles/mapbox/streets-v11',
-            center: center,
-            zoom: 12
-          });
-          riderMapRef.map = map;
-          map.addControl(new mapboxgl.NavigationControl());
-
-          // add markers
-          const riderMarker = new mapboxgl.Marker({ color: '#007bff' }).setLngLat([riderLng, riderLat]).setPopup(new mapboxgl.Popup().setText('Rider')).addTo(map);
-          const custMarker = new mapboxgl.Marker({ color: '#ff4d4f' }).setLngLat([custLng, custLat]).setPopup(new mapboxgl.Popup().setText('Customer')).addTo(map);
-
-          // request directions from Mapbox (use cached helper to avoid duplicate calls)
-          const route = await fetchDirections(riderLng, riderLat, custLng, custLat);
-          if (route && route.geometry) {
-            const routeGeo = { type: 'Feature', geometry: route.geometry };
-            if (map.getSource('route')) {
-              map.getSource('route').setData(routeGeo);
-            } else {
-              map.addSource('route', { type: 'geojson', data: routeGeo });
-              map.addLayer({ id: 'route-line', type: 'line', source: 'route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1d7fa6', 'line-width': 6 } });
-            }
-            const coordsArray = route.geometry.coordinates;
-            const bounds = coordsArray.reduce((b, c) => b.extend(c), new mapboxgl.LngLatBounds(coordsArray[0], coordsArray[0]));
-            map.fitBounds(bounds, { padding: 60 });
+          if (riderMap) {
+            riderMap.setMap(null);
+            setRiderMap(null);
+          }
+          if (riderMarker) {
+            riderMarker.setMap(null);
+            setRiderMarker(null);
+          }
+          if (customerMarker) {
+            customerMarker.setMap(null);
+            setCustomerMarker(null);
+          }
+          if (routePolyline) {
+            routePolyline.setMap(null);
+            setRoutePolyline(null);
           }
 
-          // ensure resize when modal becomes visible
-          setTimeout(() => { try { map.resize(); } catch (e) {} }, 100);
+          const center = { lat: (riderLat + custLat) / 2, lng: (riderLng + custLng) / 2 };
+          const map = new window.google.maps.Map(riderMapRef.current, {
+            center: center,
+            zoom: 12,
+            mapTypeId: window.google.maps.MapTypeId.ROADMAP,
+            mapTypeControl: false,
+          });
+          setRiderMap(map);
+
+          // add markers
+          const riderMarkerInstance = new window.google.maps.Marker({
+            position: { lat: riderLat, lng: riderLng },
+            map: map,
+            title: 'Rider',
+            icon: {
+              url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+                <svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="10" cy="10" r="8" fill="#007bff" stroke="white" stroke-width="2"/>
+                </svg>
+              `),
+              scaledSize: new window.google.maps.Size(20, 20),
+            },
+          });
+          setRiderMarker(riderMarkerInstance);
+
+          const customerMarkerInstance = new window.google.maps.Marker({
+            position: { lat: custLat, lng: custLng },
+            map: map,
+            title: 'Customer',
+            icon: {
+              url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+                <svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="10" cy="10" r="8" fill="#ff4d4f" stroke="white" stroke-width="2"/>
+                </svg>
+              `),
+              scaledSize: new window.google.maps.Size(20, 20),
+            },
+          });
+          setCustomerMarker(customerMarkerInstance);
+
+          // request directions from Google Maps
+          const directionsService = new window.google.maps.DirectionsService();
+          const directionsRenderer = new window.google.maps.DirectionsRenderer({
+            map: map,
+            suppressMarkers: true, // we have our own markers
+            polylineOptions: {
+              strokeColor: '#1d7fa6',
+              strokeWeight: 6,
+            },
+          });
+
+          const request = {
+            origin: { lat: riderLat, lng: riderLng },
+            destination: { lat: custLat, lng: custLng },
+            travelMode: window.google.maps.TravelMode.DRIVING,
+          };
+
+          directionsService.route(request, (result, status) => {
+            if (status === window.google.maps.DirectionsStatus.OK) {
+              directionsRenderer.setDirections(result);
+              setRoutePolyline(directionsRenderer);
+            } else {
+              console.error('Directions request failed due to ' + status);
+            }
+          });
+
+          // fit bounds
+          const bounds = new window.google.maps.LatLngBounds();
+          bounds.extend(new window.google.maps.LatLng(riderLat, riderLng));
+          bounds.extend(new window.google.maps.LatLng(custLat, custLng));
+          map.fitBounds(bounds, 60);
+
         } catch (err) {
           console.error('Map init error (riderhome):', err);
         }
@@ -656,7 +699,22 @@
 
       // cleanup when modal closes
       return () => {
-        try { if (riderMapRef.map) { riderMapRef.map.remove(); riderMapRef.map = null; } } catch (e) { /* ignore */ }
+        if (riderMap) {
+          riderMap.setMap(null);
+          setRiderMap(null);
+        }
+        if (riderMarker) {
+          riderMarker.setMap(null);
+          setRiderMarker(null);
+        }
+        if (customerMarker) {
+          customerMarker.setMap(null);
+          setCustomerMarker(null);
+        }
+        if (routePolyline) {
+          routePolyline.setMap(null);
+          setRoutePolyline(null);
+        }
       };
     }, [showMapModal, selectedOrder, riderLocation, customerLocation]);
 
@@ -841,8 +899,6 @@
                     <p className="detail-item"><FaUser color="#4b929d" /> Customer: <span className="detail-value">{order.customerName}</span></p>
                     <p className="detail-item"><FaPhone color="#4b929d" /> Phone: <span className="detail-value">{order.phone}</span></p>
                     <p className="detail-item"><FaMapMarkerAlt color="#4b929d" /> Address: <span className="detail-value">{order.address}</span></p>
-                  </div>
-                  <div className="order-items-section mobile-stack"> {/* Added mobile-stack for responsiveness */}
                     <h6><FaBox color="#4b929d" /> Items ({order.items?.length || 0})</h6>
                     <ul className="item-list">
                       {order.items?.map((item, i) => (
@@ -851,7 +907,16 @@
                           <span>₱{item.price.toFixed(2)}</span>
                         </li>
                       ))}
+                      <li className="item-row">
+                        <span>Delivery Fee</span>
+                        <span>₱50.00</span>
+                      </li>
                     </ul>
+                    {order.notes && (
+                      <p style={{ backgroundColor: "#fff3cd", padding: "13px", borderRadius: "4px", marginTop: "15px",marginBottom: "-17px",marginLeft: "-5px",color: "#856404", width: "107%" }}>
+                        Note: {order.notes}
+                      </p>
+                    )}
                   </div>
                   <hr className="divider" />
                   <div className="order-total-section mobile-total"> {/* Added mobile-total for font size adjustment */}
@@ -889,7 +954,7 @@
                 <Modal.Title>Navigate to {selectedOrder.customerName}'s Address</Modal.Title>
               </Modal.Header>
               <Modal.Body style={{ maxHeight: '200vh', overflowY: 'auto' }}>
-                <div id="rider-map" style={{ height: '650px', width: '100%' }} />
+                <div ref={riderMapRef} style={{ height: '650px', width: '100%' }} />
               </Modal.Body>
             </Modal>
           )}

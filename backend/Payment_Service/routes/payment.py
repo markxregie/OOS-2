@@ -94,6 +94,9 @@ class ConfirmPaymentRequest(BaseModel):
 # ---- CHECKOUT ENDPOINT ----
 @router.post("/create-checkout")
 async def create_checkout_session(payload: CheckoutRequest, token: str = Depends(oauth2_scheme)):
+    # Debug: Log received items and their addons
+    for idx, item in enumerate(payload.items):
+        logger.info(f"[CHECKOUT] Item {idx}: {item.name} | Addons: {getattr(item, 'addons', None)}")
     await validate_token_and_roles(token, ["user", "admin", "staff"])
 
     # Fetch user profile for customer info
@@ -154,15 +157,27 @@ async def create_checkout_session(payload: CheckoutRequest, token: str = Depends
         line_items = []
         for item in payload.items:
             item_amount = int(item.price * 100)  # Convert to centavos
-            description = f"Quantity: {item.quantity}"
-            if item.addons:
-                description += f" | Addons: {', '.join(item.addons)}"
-
+            # Build item name with embedded bullet list of addons (PayMongo shows only name)
+            item_name_parts = [item.name]
+            if item.addons and len(item.addons) > 0:
+                # One newline before list; PayMongo may render as space if newline unsupported
+                for addon in item.addons:
+                    if isinstance(addon, str):
+                        item_name_parts.append(f"• + {addon}")
+                    elif isinstance(addon, dict):
+                        a_name = addon.get("addon_name") or addon.get("AddOnName") or addon.get("name") or "Addon"
+                        a_price = addon.get("price") or addon.get("Price") or 0
+                        item_name_parts.append(f"• + {a_name} (₱{a_price})")
+                    else:
+                        item_name_parts.append(f"• + {str(addon)}")
+            # Join with newline; fallback to ' | ' if newline stripped by gateway handled client-side
+            item_name = "\n".join(item_name_parts)
+            logger.info(f"[CHECKOUT] Composed item name for PayMongo: {item_name}")
             line_items.append({
-                "name": item.name,
+                "name": item_name,
                 "amount": item_amount,
                 "currency": "PHP",
-                "description": description,
+                "description": f"Quantity: {item.quantity}",
                 "quantity": item.quantity
             })
 
@@ -197,7 +212,7 @@ async def create_checkout_session(payload: CheckoutRequest, token: str = Depends
             "line_items": line_items,
             "description": f"OOS Order - {payload.reference_number}",
             "reference_number": payload.reference_number,
-            "payment_method_types": ["gcash", "card"],
+            "payment_method_types": ["gcash", "paymaya", "card"],
             "success_url": f"{payload.redirect_url}?status=success",
             "cancel_url": f"{payload.redirect_url}?status=cancel"
         }
@@ -212,6 +227,7 @@ async def create_checkout_session(payload: CheckoutRequest, token: str = Depends
         }
 
         async with httpx.AsyncClient() as client:
+            logger.info(f"[CHECKOUT] Final line_items payload: {json.dumps(line_items, indent=2)}")
             response = await client.post(PAYMONGO_API_URL, headers=headers, json=body)
             response.raise_for_status()
 
@@ -269,7 +285,7 @@ async def confirm_payment(payload: ConfirmPaymentRequest, token: str = Depends(o
             # Step 3: Save delivery info
             if payload.delivery_info:
                 delivery_info_payload = {
-                    "FirstName": payload.username,
+                    "FirstName": payload.delivery_info.FirstName,
                     "MiddleName": payload.delivery_info.MiddleName,
                     "LastName": payload.delivery_info.LastName,
                     "Address": payload.delivery_info.Address,
@@ -406,7 +422,7 @@ async def confirm_payment_and_save_pos(payload: ConfirmPaymentRequest, token: st
             # Step 3: Save delivery info if provided
             if payload.delivery_info:
                 delivery_info_payload = {
-                    "FirstName": payload.username,
+                    "FirstName": payload.delivery_info.FirstName,
                     "MiddleName": payload.delivery_info.MiddleName,
                     "LastName": payload.delivery_info.LastName,
                     "Address": payload.delivery_info.Address,

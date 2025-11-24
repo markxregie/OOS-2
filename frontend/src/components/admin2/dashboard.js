@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from "react";
-// 1. Import useSearchParams to read URL query parameters
-import { useSearchParams } from "react-router-dom";
 import coffeeImage from "../../assets/coffee.jpg";
 import "../admin2/dashboard.css";
 import adminImage from "../../assets/administrator.png";
@@ -69,7 +67,6 @@ const CustomTooltip = ({ active, payload, label, popularItems }) => {
 
 
 const Dashboard = () => {
-  const [searchParams] = useSearchParams();
   const [authToken, setAuthToken] = useState(null);
   const [userName, setUserName] = useState("Loading...");
 
@@ -87,37 +84,32 @@ const Dashboard = () => {
   const [recentOrders, setRecentOrders] = useState([]);
   const [allOrders, setAllOrders] = useState([]);
   const [riderEarningsData, setRiderEarningsData] = useState([]);
-  const [earningsFilter, setEarningsFilter] = useState("Weekly");
+  const [earningsFilter, setEarningsFilter] = useState("Daily");
   const [allDeliveryOrders, setAllDeliveryOrders] = useState([]);
   const [riders, setRiders] = useState([]);
-
+  const [topRiders, setTopRiders] = useState([]);
   // --- useEffects for Auth and Data Fetching ---
   useEffect(() => {
-  const tokenFromUrl = searchParams.get('authorization');
-  const usernameFromUrl = searchParams.get('username');
-
-  if (tokenFromUrl) {
-    setAuthToken(tokenFromUrl);
-    localStorage.setItem("authToken", tokenFromUrl); 
-  } else {
     const storedToken = localStorage.getItem("authToken");
-    if (storedToken) {
-      setAuthToken(storedToken);
+    const userData = localStorage.getItem("userData");
+    if (storedToken) setAuthToken(storedToken);
+    if (userData) {
+      try {
+        const parsed = JSON.parse(userData);
+        if (parsed?.username) setUserName(parsed.username);
+      } catch {}
     } else {
-      console.error("Authorization token not found in URL or localStorage.");
+      const storedUsername = localStorage.getItem("userName");
+      if (storedUsername) setUserName(storedUsername);
     }
-  }
 
-  if (usernameFromUrl) {
-    setUserName(usernameFromUrl);
-    localStorage.setItem("userName", usernameFromUrl);
-  } else {
-    const storedUsername = localStorage.getItem("userName");
-    if (storedUsername) {
-      setUserName(storedUsername);
-    }
-  }
-}, [searchParams]);
+    const onStorage = () => {
+      const t = localStorage.getItem("authToken");
+      setAuthToken(t);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   useEffect(() => {
     if (!authToken) { return; }
@@ -167,10 +159,9 @@ const Dashboard = () => {
         }));
         setAllOrders(transformedOrders);
         setRecentOrders(transformedOrders.slice(0, 10));
-        const cancelledCount = transformedOrders.filter(order => order.status.toLowerCase() === "cancelled").length;
-        const deliveredCount = transformedOrders.filter(order => order.orderType.toLowerCase() === "delivery" && order.status.toLowerCase() === "completed").length;
+        const cancelledCount = transformedOrders.filter(order => order.status.toLowerCase() === "cancelled").length; 
         const confirmedCount = transformedOrders.filter(order => order.orderType.toLowerCase() === "pick up" && order.status.toLowerCase() === "completed").length;
-        setDashboardData(prev => ({ ...prev, cancelledOrders: cancelledCount, deliveredOrders: deliveredCount, confirmedOrders: confirmedCount }));
+        setDashboardData(prev => ({ ...prev, cancelledOrders: cancelledCount, confirmedOrders: confirmedCount }));
       })
       .catch((err) => console.error("Failed to fetch recent orders:", err));
   }, [authToken]);
@@ -195,51 +186,38 @@ const Dashboard = () => {
       .then((data) => {
         console.log("Fetched delivery orders:", data);
         setAllDeliveryOrders(data);
+        // Correctly count delivered orders from the delivery-specific endpoint
+        const deliveredCount = data.filter(order => order.currentStatus && order.currentStatus.toLowerCase() === "delivered").length;
+        setDashboardData(prev => ({ ...prev, deliveredOrders: deliveredCount }));
       })
       .catch((err) => console.error("Failed to fetch delivery orders:", err));
   }, [authToken]);
 
+  // New useEffect for time-based rider earnings (optimized)
   useEffect(() => {
-    if (!riders.length || !allDeliveryOrders.length) { return; }
-    // Initialize earnings map with all riders at 0
-    const earningsMap = {};
-    riders.forEach(rider => {
-      earningsMap[rider.FullName] = 0;
-    });
-
-    // Filter active orders: not delivered, cancelled, returned
-    const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
-    let activeOrders = allDeliveryOrders.filter(order => activeStatuses.includes(order.currentStatus) && order.assignedRider);
-
-    // Filter by date based on earningsFilter
-    const now = new Date();
-    if (earningsFilter === "Daily") {
-      const today = now.toISOString().split('T')[0];
-      activeOrders = activeOrders.filter(order => order.orderedAt.startsWith(today));
-    } else if (earningsFilter === "Weekly") {
-      const sevenDaysAgo = new Date(now);
-      sevenDaysAgo.setDate(now.getDate() - 7);
-      activeOrders = activeOrders.filter(order => new Date(order.orderedAt) >= sevenDaysAgo);
-    } else if (earningsFilter === "Monthly") {
-      const thirtyDaysAgo = new Date(now);
-      thirtyDaysAgo.setDate(now.getDate() - 30);
-      activeOrders = activeOrders.filter(order => new Date(order.orderedAt) >= thirtyDaysAgo);
+    if (!authToken) {
+      return;
     }
 
-    // Sum totals for filtered active orders
-    activeOrders.forEach(order => {
-      const riderName = order.assignedRider.fullName;
-      if (earningsMap.hasOwnProperty(riderName)) {
-        earningsMap[riderName] += order.total;
+    const fetchEarnings = async () => {
+      try {
+        const response = await fetch(`http://localhost:7004/delivery/admin/rider-earnings/aggregated/${earningsFilter}`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!response.ok) throw new Error();
+        const data = await response.json();
+        setRiderEarningsData(data.periods);
+        setTopRiders(data.topRiders);
+      } catch (e) {
+        console.error('Failed to fetch aggregated rider earnings:', e);
+        // Fallback to empty data
+        setRiderEarningsData([]);
+        setTopRiders([]);
       }
-    });
+    };
 
-    const transformedData = Object.entries(earningsMap).map(([name, earnings]) => ({
-      name,
-      earnings,
-    }));
-    setRiderEarningsData(transformedData);
-  }, [riders, allDeliveryOrders, earningsFilter]);
+    fetchEarnings();
+  }, [earningsFilter, authToken]);
   // --- End of useEffects ---
 
   const toggleDropdown = () => {
@@ -375,7 +353,8 @@ const Dashboard = () => {
                     </li>
                     <li
                       onClick={() => {
-                        window.location.href = "http://localhost:4002/";
+                        try { localStorage.removeItem("access_token"); localStorage.removeItem("authToken"); localStorage.removeItem("expires_at"); localStorage.removeItem("userData"); } catch {}
+                        window.location.replace("http://localhost:4002/");
                       }}
                       style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#dc3545" }}
                       onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8d7da"}
@@ -457,26 +436,44 @@ const Dashboard = () => {
           </div>
 
           {/* --- Rider Earnings Chart --- */}
-          <div className="dashboard-charts" style={{ marginTop: '20px', display: 'block' }}>
-              <div className="chart-box" style={{ width: '100%', margin: '0', padding: '20px' }}>
-                  <div className="chart-header">
-                      <span>Rider Earnings - {earningsFilter}</span>
-                      <select className="chart-dropdown" value={earningsFilter} onChange={(e) => setEarningsFilter(e.target.value)}>
-                          <option value="Daily">Daily</option>
-                          <option value="Weekly">Weekly</option>
-                          <option value="Monthly">Monthly</option>
-                      </select>
-                  </div>
-                  <ResponsiveContainer width="100%" height={350}>
-                      <BarChart data={riderEarningsData} margin={{ top: 10, right: 30, left: 20, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                          <YAxis tickFormatter={(value) => `₱${value.toLocaleString()}`} />
-                          <Tooltip formatter={(value) => [`₱${value.toLocaleString()}`, 'Earnings']} />
-                          <Bar dataKey="earnings" fill="#00b4d8" name="Rider Earnings" />
-                      </BarChart>
-                  </ResponsiveContainer>
+          <div className="dashboard-charts" style={{ marginTop: '20px', gridTemplateColumns: '2fr 1fr' }}>
+            <div className="chart-box">
+              <div className="chart-header">
+                  <span>Rider Earnings - {earningsFilter}</span>
+                  <select className="chart-dropdown" value={earningsFilter} onChange={(e) => setEarningsFilter(e.target.value)}>
+                      <option value="Daily">Daily</option>
+                      <option value="Weekly">Weekly</option>
+                      <option value="Monthly">Monthly</option>
+                  </select>
               </div>
+              <ResponsiveContainer width="100%" height={350}>
+                  <BarChart data={riderEarningsData} margin={{ top: 10, right: 30, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                      <YAxis tickFormatter={(value) => `₱${value.toLocaleString()}`} />
+                      <Tooltip formatter={(value) => [`₱${value.toLocaleString()}`, 'Total Earnings']} />
+                      <Bar dataKey="earnings" fill="#00b4d8" name="Total Rider Earnings" />
+                  </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="chart-box">
+              <div className="chart-header" style={{ marginBottom: '15px' }}>
+                <span>Top Earner Riders - {earningsFilter}</span>
+              </div>
+              <div style={{ maxHeight: '310px', overflowY: 'auto' }}>
+                {topRiders.map((rider, index) => (
+                  <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 8px', borderBottom: '1px solid #eee' }}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 'bold', marginRight: '15px', color: '#4b929d', minWidth: '20px' }}>{index + 1}.</span>
+                      <span style={{ fontSize: '15px' }}>{rider.name}</span>
+                    </div>
+                    <span style={{ fontSize: '15px', fontWeight: '600', color: '#007bff' }}>
+                      ₱{rider.earnings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* --- Recent Orders and Popular Items Chart Section --- */}

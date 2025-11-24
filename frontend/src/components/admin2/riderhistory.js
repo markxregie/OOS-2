@@ -67,7 +67,8 @@ function RiderHistory() {
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [earningsFilter, setEarningsFilter] = useState("Monthly");
+  const [earningsFilter, setEarningsFilter] = useState("Daily");
+  const [earnings, setEarnings] = useState(null);
 
   const rowsPerPage = 10;
 
@@ -95,6 +96,44 @@ function RiderHistory() {
       fetchOrders();
     }
   }, [riderId, authToken]);
+
+  useEffect(() => {
+    const fetchEarnings = async () => {
+      if (!riderId || !authToken) {
+        return;
+      }
+
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1; // JS months are 0-indexed
+      const today = now.toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+
+      let url = '';
+      if (earningsFilter === 'Daily') {
+        url = `http://localhost:7004/delivery/rider/${riderId}/earnings/daily?target_date=${today}`;
+      } else if (earningsFilter === 'Weekly') {
+        url = `http://localhost:7004/delivery/rider/${riderId}/earnings/weekly?target_date=${today}`;
+      } else if (earningsFilter === 'Monthly') {
+        url = `http://localhost:7004/delivery/rider/${riderId}/earnings/monthly?year=${year}&month=${month}`;
+      }
+
+      if (!url) return;
+
+      try {
+        const response = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${authToken}` },
+        });
+        if (!response.ok) throw new Error(`Failed to fetch earnings: ${response.status}`);
+        const data = await response.json();
+        setEarnings(data);
+      } catch (e) {
+        console.error('Earnings fetch error:', e);
+        setEarnings({ totalEarnings: 0.0 }); // Set a default on error
+      }
+    };
+
+    fetchEarnings();
+  }, [riderId, authToken, earningsFilter]);
 
   // Fetch user info with loading and debug logging
   useEffect(() => {
@@ -267,42 +306,7 @@ function RiderHistory() {
     return '▼';
   };
 
-  const calculateEarnings = () => {
-    const now = new Date();
-    let startDate;
 
-    if (earningsFilter === "Daily") {
-      // Filter orders from today
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
-      return orders
-        .filter(order => activeStatuses.includes(order.currentStatus) && new Date(order.orderedAt) >= startOfDay)
-        .reduce((sum, order) => sum + (order.total || 0), 0)
-        .toFixed(2);
-    } else if (earningsFilter === "Weekly") {
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    } else if (earningsFilter === "Monthly") {
-      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    }
-
-    // For All-Time, include both 'pending' and 'delivered' statuses
-    if (earningsFilter === "All-Time") {
-      const validStatuses = ["pending", "delivered"];
-      return orders
-        .filter(order => validStatuses.includes(order.currentStatus))
-        .reduce((sum, order) => sum + (order.total || 0), 0)
-        .toFixed(2);
-    }
-
-    // For Weekly and Monthly filters, include active statuses and filter by date
-    const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
-    return orders
-      .filter(order => activeStatuses.includes(order.currentStatus) && new Date(order.orderedAt) >= startDate)
-      .reduce((sum, order) => sum + (order.total || 0), 0)
-      .toFixed(2);
-  };
-
-  const earnings = calculateEarnings();
 
 
 
@@ -334,7 +338,7 @@ function RiderHistory() {
         localStorage.removeItem("riderName");
         localStorage.removeItem("riderPhone");
         localStorage.removeItem("riderUsername");
-        window.location.href = "http://localhost:4002/";
+        window.location.replace("http://localhost:4002/");
       }
     });
   };
@@ -439,52 +443,54 @@ function RiderHistory() {
           </div>
         </header>
 
-        <Container fluid className="dashboard-summary-container" style={{ backgroundColor: "#a3d3d8" }}>
-          <div className="rider-selector-group">
-            <div className="rider-info-display">
-              <img src={riderImage} alt={userName} className="rider-profile-pic" />
-              <span className="rider-name-text">{userName}</span>
+        {window.innerWidth > 991 && (
+          <Container fluid className="dashboard-summary-container" style={{ backgroundColor: "#a3d3d8" }}>
+            <div className="rider-selector-group">
+              <div className="rider-info-display">
+                <img src={riderImage} alt={userName} className="rider-profile-pic" />
+                <span className="rider-name-text">{userName}</span>
+              </div>
             </div>
-          </div>
-          <div className="summary-cards-container">
-            <Card className="summary-card">
-              <FaBoxOpen size={32} color="#964b00" />
-              <span className="card-title">Active Orders</span>
-              <span className="card-value">
-                {orders.filter(order => !["delivered", "completed", "cancelled", "returned"].includes(order.currentStatus)).length} orders
-              </span>
-            </Card>
-            <Card className="summary-card">
-              <FaCheckCircle size={32} color="#198754" />
-              <span className="card-title">Completed</span>
-              <span className="card-value">
-                {orders.filter(order => ["delivered", "completed"].includes(order.currentStatus)).length} orders
-              </span>
-            </Card>
-            <Card className="summary-card" style={{ position: 'relative' }}>
-              <Form.Select
-                size="sm"
-                value={earningsFilter}
-                onChange={(e) => setEarningsFilter(e.target.value)}
-                style={{
-                  position: 'absolute',
-                  top: '10px',
-                  right: '10px',
-                  width: '120px',
-                  fontSize: '12px',
-                  padding: '2px 6px'
-                }}
-              >
-                <option value="Daily">Daily</option>
-                <option value="Weekly">Weekly</option>
-                <option value="Monthly">Monthly</option>
-              </Form.Select>
-              <FaDollarSign size={32} color="#fd7e14" />
-              <span className="card-title">Earnings</span>
-              <span className="card-value">₱{earnings}</span>
-            </Card>
-          </div>
-        </Container>
+            <div className="summary-cards-container">
+              <Card className="summary-card">
+                <FaBoxOpen size={32} color="#964b00" />
+                <span className="card-title">Active Orders</span>
+                <span className="card-value">
+                  {orders.filter(order => !["delivered", "completed", "cancelled", "returned"].includes(order.currentStatus)).length} orders
+                </span>
+              </Card>
+              <Card className="summary-card">
+                <FaCheckCircle size={32} color="#198754" />
+                <span className="card-title">Completed</span>
+                <span className="card-value">
+                  {orders.filter(order => ["delivered", "completed"].includes(order.currentStatus)).length} orders
+                </span>
+              </Card>
+              <Card className="summary-card" style={{ position: 'relative' }}>
+                <Form.Select
+                  size="sm"
+                  value={earningsFilter}
+                  onChange={(e) => setEarningsFilter(e.target.value)}
+                  style={{
+                    position: 'absolute',
+                    top: '10px',
+                    right: '10px',
+                    width: '120px',
+                    fontSize: '12px',
+                    padding: '2px 6px'
+                  }}
+                >
+                  <option value="Daily">Daily</option>
+                  <option value="Weekly">Weekly</option>
+                  <option value="Monthly">Monthly</option>
+                </Form.Select>
+                <FaDollarSign size={32} color="#fd7e14" />
+                <span className="card-title">Earnings</span>
+                <span className="card-value">₱{earnings?.totalEarnings || 0}</span>
+              </Card>
+            </div>
+          </Container>
+        )}
 
         <div className="toggle-buttons-container">
           <button

@@ -20,6 +20,8 @@ const ProfilePage = () => {
     postalCode: '',
     landmark: '',
     birthday: '',
+    lat: '',
+    lng: '',
   });
 
   const [profileImage, setProfileImage] = useState(null);
@@ -41,6 +43,8 @@ const ProfilePage = () => {
           streetName: '',
           barangay: '',
           postalCode: '',
+          lat: latLng.lat(),
+          lng: latLng.lng(),
         };
 
         addressComponents.forEach(component => {
@@ -87,7 +91,7 @@ const ProfilePage = () => {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
-        const latLng = { lat: latitude, lng: longitude };
+        const latLng = new window.google.maps.LatLng(latitude, longitude);
 
         if (map && marker) {
           map.setCenter(latLng);
@@ -171,6 +175,8 @@ const ProfilePage = () => {
           postalCode: data.postalCode || '',
           landmark: data.landmark || '',
           birthday: data.birthday || '',
+          lat: data.lat || '',
+          lng: data.lng || '',
           profileImage: data.profileImage || null,
         });
         setProfileImage(data.profileImage || null);
@@ -233,11 +239,22 @@ const ProfilePage = () => {
     loadGoogleMaps();
   }, []);
 
-  // Geocode address when address fields change
+  // Center map on stored lat/lng when profile is loaded
+  useEffect(() => {
+    if (map && marker && userData.lat && userData.lng) {
+      const latLng = { lat: parseFloat(userData.lat), lng: parseFloat(userData.lng) };
+      map.setCenter(latLng);
+      marker.setPosition(latLng);
+    }
+  }, [userData.lat, userData.lng, map, marker]);
+
+  // Geocode address when address fields change (only if no lat/lng stored)
   useEffect(() => {
     if (!map || !marker) return;
 
-    const { region, province, city, streetName, barangay, postalCode } = userData;
+    const { region, province, city, streetName, barangay, postalCode, lat, lng } = userData;
+    if (lat && lng) return; // If lat/lng is stored, don't geocode
+
     if (!region || !province || !city || !streetName || !barangay) return; // Require at least these fields
 
     const address = `${streetName}, ${barangay}, ${city}, ${province}, ${region}, Philippines`;
@@ -248,11 +265,12 @@ const ProfilePage = () => {
         const location = results[0].geometry.location;
         map.setCenter(location);
         marker.setPosition(location);
+        setUserData(prevData => ({ ...prevData, lat: location.lat(), lng: location.lng() }));
       } else {
         console.error('Geocode failed due to: ' + status);
       }
     });
-  }, [userData.region, userData.province, userData.city, userData.streetName, userData.barangay, userData.postalCode, map, marker]);
+  }, [userData.region, userData.province, userData.city, userData.streetName, userData.barangay, userData.postalCode, userData.lat, userData.lng, map, marker]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -380,6 +398,8 @@ const ProfilePage = () => {
       formData.append('email', email);
       formData.append('phoneNumber', phone);
       formData.append('birthday', birthday);
+      formData.append('lat', userData.lat);
+      formData.append('lng', userData.lng);
 
       const response = await fetch('http://localhost:4000/users/profile/update', {
         method: 'PUT',

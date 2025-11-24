@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Container } from "react-bootstrap";
 import { FaChevronDown, FaBell, FaSignOutAlt, FaBoxOpen, FaCheckCircle, FaSpinner, FaTruck, FaFilter, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTimesCircle, FaTruckPickup, FaTruckMoving, FaUndo, FaAngleDoubleLeft, FaAngleLeft, FaAngleRight, FaAngleDoubleRight } from "react-icons/fa";
 import { Card, Form } from "react-bootstrap";
@@ -9,7 +9,6 @@ import adminImage from "../../assets/administrator.png";
 
 function DeliveryManagement() {
   const userRole = "Admin";
-  const [searchParams] = useState(() => new URLSearchParams(window.location.search));
   const [authToken, setAuthToken] = useState(null);
   const [userName, setUserName] = useState("Loading...");
   const [error, setError] = useState(null);
@@ -35,11 +34,24 @@ function DeliveryManagement() {
     return stored ? JSON.parse(stored) : {};
   });
 
-  // Optimized data fetching with parallel requests
-  const fetchInitialData = useCallback(async () => {
+  // Reference for last fetch time to avoid dependency issues
+  const lastFetchTimeRef = useRef(0);
+  const CACHE_DURATION = 5000; // 5 seconds cache
+
+  // Optimized data fetching with parallel requests and caching
+  const fetchInitialData = useCallback(async (forceRefresh = false, showLoading = true) => {
     if (!authToken) return;
+    
+    // Prevent fetching if cache is still valid
+    const now = Date.now();
+    if (!forceRefresh && (now - lastFetchTimeRef.current) < CACHE_DURATION) {
+      return;
+    }
+    
     setError(null);
-    setIsLoading(true);
+    if (showLoading) {
+      setIsLoading(true);
+    }
 
     try {
       const [ordersResponse, ridersResponse, pendingResponse] = await Promise.all([
@@ -63,18 +75,24 @@ function DeliveryManagement() {
         ridersResponse.json(),
         pendingResponse.json()
       ]);
+      
+      // Map assignedRider to string format to match UI expectations
       const ordersWithAssignments = ordersData.map(order => ({
         ...order,
-        assignedRider: localAssignments[order.id] ?? order.assignedRider ?? null
+        assignedRider: order.assignedRider || null
       }));
+      
       setOrders(ordersWithAssignments);
       setRiders(Array.isArray(ridersData) ? ridersData : []);
       setPendingOrdersCount(Array.isArray(pendingData) ? pendingData.length : 0);
+      lastFetchTimeRef.current = now;
     } catch (err) {
       console.error('Error fetching data:', err);
       setError('Failed to load data. Please refresh the page.');
     } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        setIsLoading(false);
+      }
     }
   }, [authToken]);
 
@@ -83,9 +101,9 @@ function DeliveryManagement() {
 
     let interval;
     const initialize = async () => {
-      await fetchInitialData();
-      // Start refresh loop
-      interval = setInterval(fetchInitialData, 10000);
+      await fetchInitialData(true, true); // Force refresh on mount with loading spinner
+      // Background refresh every 30 seconds without loading spinner
+      interval = setInterval(() => fetchInitialData(true, false), 30000);
     };
 
     initialize();
@@ -93,91 +111,26 @@ function DeliveryManagement() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [authToken]);
+  }, [authToken, fetchInitialData]);
 
   useEffect(() => {
-    const tokenFromUrl = searchParams.get('authorization');
-    const usernameFromUrl = searchParams.get('username');
-
-    if (tokenFromUrl) {
-      setAuthToken(tokenFromUrl);
-      localStorage.setItem("authToken", tokenFromUrl); // Save to localStorage
-    } else {
-      const storedToken = localStorage.getItem("authToken");
-      if (storedToken) {
-        setAuthToken(storedToken);
-      } else {
-        console.error("Authorization token not found in URL or localStorage.");
-      }
-    }
-
-    if (usernameFromUrl) {
-      setUserName(usernameFromUrl);
-      localStorage.setItem("userName", usernameFromUrl); // Save to localStorage
+    const storedToken = localStorage.getItem("authToken");
+    if (storedToken) setAuthToken(storedToken);
+    const userData = localStorage.getItem("userData");
+    if (userData) {
+      try { const parsed = JSON.parse(userData); if (parsed?.username) setUserName(parsed.username); } catch {}
     } else {
       const storedUsername = localStorage.getItem("userName");
-      if (storedUsername) {
-        setUserName(storedUsername);
-      }
+      if (storedUsername) setUserName(storedUsername);
     }
-  }, [searchParams]);
+    const onStorage = () => { setAuthToken(localStorage.getItem("authToken")); };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
-  useEffect(() => {
-    if (!authToken) return;
+  // Removed redundant rider fetching - now handled in fetchInitialData
 
-    const fetchRiders = async () => {
-      try {
-        const response = await fetch("http://localhost:7001/delivery/riders", {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        console.log("Fetched riders:", data);
-        setRiders(Array.isArray(data) ? data : []);
-      } catch (error) {
-        console.error("Failed to fetch riders:", error);
-        setRiders([]);
-      }
-    };
-
-    fetchRiders();
-  }, [authToken]);
-
-  useEffect(() => {
-    if (!authToken) return;
-
-    const fetchPendingOrdersCount = async () => {
-      try {
-        const response = await fetch("http://localhost:7004/cart/admin/orders/pending", {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-          },
-        });
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        // The backend endpoint returns list of pending orders, so count length
-        if (Array.isArray(data)) {
-          setPendingOrdersCount(data.length);
-        } else if (data.pending_orders_count !== undefined) {
-          setPendingOrdersCount(data.pending_orders_count);
-        } else {
-          setPendingOrdersCount(0);
-        }
-      } catch (error) {
-        console.error("Failed to fetch pending orders count:", error);
-      }
-    };
-
-    fetchPendingOrdersCount();
-  }, [authToken]);
+  // Removed redundant pending orders fetching - now handled in fetchInitialData
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -254,21 +207,11 @@ function DeliveryManagement() {
       const result = await response.json();
       console.log("Assign rider response:", result);
 
-      // ✅ Update frontend state with selected rider
+      // Update frontend state with selected rider
       handleRiderChange(orderId, riderId);
 
-      // 💡 NEW: Update local assignments and persist to localStorage
-      setLocalAssignments(prev => {
-        const updated = { ...prev, [orderId]: riderId };
-        localStorage.setItem("riderAssignments", JSON.stringify(updated));
-        return updated;
-      });
-
-      // Hide dropdown after assignment
-      setShowChangeRiderDropdown(prev => ({
-        ...prev,
-        [orderId]: false
-      }));
+      // Refresh data silently in background to sync with backend
+      fetchInitialData(true, false);
 
       Swal.fire({
         title: "Rider Assigned Successfully!",
@@ -277,6 +220,9 @@ function DeliveryManagement() {
         confirmButtonColor: "#198754",
         confirmButtonText: "OK"
       });
+
+      // Close the change rider dropdown after successful assignment
+      setShowChangeRiderDropdown(prev => ({ ...prev, [orderId]: false }));
 
     } catch (error) {
       console.error("Failed to assign rider:", error);
@@ -290,10 +236,26 @@ function DeliveryManagement() {
   };
 
   const handleChangeRiderClick = (orderId) => {
-    setShowChangeRiderDropdown(prev => ({
-      ...prev,
-      [orderId]: !prev[orderId]
-    }));
+    Swal.fire({
+      title: 'Confirm Change Rider',
+      text: 'Are you sure you want to change the rider for this order?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#4b929d',
+      cancelButtonColor: '#dc3545',
+      confirmButtonText: 'Yes, Change Rider',
+      cancelButtonText: 'Cancel',
+      customClass: {
+        popup: 'swal-wide'
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        setShowChangeRiderDropdown(prev => ({
+          ...prev,
+          [orderId]: !prev[orderId]
+        }));
+      }
+    });
   };
 
   const handleStatusChange = (orderId, newStatus) => {
@@ -380,9 +342,18 @@ function DeliveryManagement() {
       <div className="error-message">
         <FaTimesCircle size={40} color="#dc3545" />
         <p>{error}</p>
-        <button onClick={fetchInitialData} className="retry-button">
+        <button onClick={() => fetchInitialData(true, true)} className="retry-button">
           Retry
         </button>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="d-flex justify-content-center align-items-center" style={{ height: "100vh" }}>
+        <FaSpinner className="fa-spin" size={50} color="#4b929d" />
+        <p style={{ marginLeft: "15px", fontSize: "1.2rem" }}>Loading delivery data...</p>
       </div>
     );
   }
@@ -408,7 +379,9 @@ function DeliveryManagement() {
                 <div className="profile-dropdown" style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "white", border: "1px solid #ccc", borderRadius: "4px", boxShadow: "0 2px 8px rgba(0,0,0,0.15)", zIndex: 1000, width: "150px" }}>
                   <ul style={{ listStyle: "none", margin: 0, padding: "8px 0" }}>
                     <li
-                      onClick={() => window.location.reload()}
+                      onClick={() => { 
+                        fetchInitialData(true, true); // Force refresh with loading indicator
+                      }}
                       style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#4b929d" }}
                       onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f0f0f0"}
                       onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
@@ -416,7 +389,7 @@ function DeliveryManagement() {
                       <FaUndo /> Refresh
                     </li>
                     <li
-                      onClick={() => { localStorage.removeItem("access_token"); window.location.href = "http://localhost:4002/"; }}
+                      onClick={() => { localStorage.removeItem("access_token"); localStorage.removeItem("authToken"); localStorage.removeItem("expires_at"); localStorage.removeItem("userData"); window.location.replace("http://localhost:4002/"); }}
                       style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#dc3545" }}
                       onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8d7da"}
                       onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
@@ -528,7 +501,7 @@ function DeliveryManagement() {
             const restrictedStatuses = ["pickedup", "delivered", "cancelled", "returned"];
             const canChangeRider = !restrictedStatuses.includes(order.currentStatus?.toLowerCase());
             return (
-              <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "350px", height: "500px", overflowY: "auto" }}>
+              <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "350px", height: "570px", overflow: "hidden" }}>
               <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
                 <h5 style={{ color: "#2c3e50", fontWeight: "700" }}>Order #{order.id}</h5>
                 <p style={{
@@ -558,7 +531,7 @@ function DeliveryManagement() {
                 </p>
               </div>
               <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaClock color="#4b929d" /> Ordered at <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.orderedAt}</span></p>
-              <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaUser color="#4b929d" /> Customer: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.customerName}</span></p>
+              <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaUser color="#4b929d" /> Customer: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{(() => { const parts = order.customerName.split(' '); return parts.length > 0 && /\d/.test(parts[0]) ? parts.slice(1).join(' ') : order.customerName; })()}</span></p>
               <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaPhone color="#4b929d" /> Phone: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.phone?.replace(/^\+1-/, "63") || "N/A"}</span></p>
               <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaMapMarkerAlt color="#4b929d" /> Address: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.address}</span></p>
               <p style={{ fontWeight: "600", marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaBox color="#4b929d" /> Items ({order.items.length})</p>
