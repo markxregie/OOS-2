@@ -1,0 +1,38 @@
+.promotion-swal-popup {
+  background: transparent !important;
+  border-radius: 12px !important;
+  overflow: visible !important; /* Allow the close button to be outside */
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  width: auto !important; /* Let content determine the width */
+  max-width: 90vw; /* But not wider than 90% of the viewport */
+  padding: 0 !important;
+}
+
+.promotion-swal-container {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.promotion-swal-popup .swal2-close {
+    color: #8b8888 !important;
+    background: transparent !important;
+    border-radius: 50%;
+    width: 32px; /* Fixed size */
+    height: 27px; /* Fixed size */
+    line-height: 32px; /* Center the 'x' */
+    font-size: 40px; /* Control the 'x' size */
+    top: -16px;
+    right: -14px;
+}
+
+.promotion-image-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.promotion-image-container img {
+  max-width: 80vw;
+  max-height: 75vh;
+  object-fit: contain; /* This ensures the whole image is visible and centered */
+  border-radius: 12px;
+}

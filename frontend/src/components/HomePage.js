@@ -3,6 +3,7 @@ import Home from './Home';
 import About from './aboutus';
 import Menulanding from './menulanding';
 import Services from './services';
+import PromotionPopup from './PromotionPopup';
 
 const ContactUs = () => {
   return (
@@ -17,9 +18,9 @@ const ContactUs = () => {
 const HomePage = () => {
   return (
     <div>
+      <PromotionPopup />
       <Home />
       <Menulanding />
-
       <About />
       <Services />
     </div>
