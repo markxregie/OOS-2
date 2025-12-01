@@ -31,6 +31,7 @@ import NotFound from './components/NotFound';
 import Resetpassword from './components/Resetpassword';
 import Concerns from './components/concerns';
 import AdminConcerns from './components/admin2/concerns';
+import Promotions from './components/admin2/Promotions';
 import SessionManager from './components/SessionManager';  // <-- Import SessionManager
 import ProtectedRoute from './components/ProtectedRoute';
 
@@ -119,6 +120,7 @@ function MainApp() {
             <Route path="/admin/delivery" element={<DeliveryManagement />} />
             <Route path="/admin/riderdashboard" element={<RiderDashboard />} />
             <Route path="/admin/concerns" element={<AdminConcerns />} />
+            <Route path="/admin/promotions" element={<Promotions />} />
             <Route path="/admin/staff" element={<Staff />} />
             <Route path="/admin/report" element={<Report />} />
           </Route>

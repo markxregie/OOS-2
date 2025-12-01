@@ -7,7 +7,7 @@ import logo from '../../assets/logo.png';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faBars, faHome, faUtensils, faUserFriends,
-  faBox, faCarrot, faCoffee, faTshirt, faEnvelope, faTruck, faMotorcycle, faChartBar
+  faBox, faCarrot, faCoffee, faTshirt, faEnvelope, faTruck, faMotorcycle, faChartBar, faBullhorn
 } from '@fortawesome/free-solid-svg-icons';
 
 function SidebarComponent() {
@@ -60,6 +60,13 @@ function SidebarComponent() {
               active={location.pathname === '/admin/concerns'}
             >
               Concerns
+            </MenuItem>
+            <MenuItem
+              icon={<FontAwesomeIcon icon={faBullhorn} />}
+              component={<Link to="/admin/promotions" />}
+              active={location.pathname === '/admin/promotions'}
+            >
+              Promotions
             </MenuItem>
             <MenuItem
               icon={<FontAwesomeIcon icon={faChartBar} />}
