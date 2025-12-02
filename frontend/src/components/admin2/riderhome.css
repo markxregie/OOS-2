@@ -66,6 +66,22 @@
   gap: 15px;
 }
 
+/* --- SCROLLABLE CARDS ON MOBILE --- */
+@media (max-width: 991px) {
+    .summary-cards-container {
+        display: flex !important; /* Force flex */
+        overflow-x: auto !important; /* Enable scrolling */
+        flex-wrap: nowrap !important; /* No stacking */
+        padding-bottom: 15px; /* Space for scrollbar */
+        scroll-snap-type: x mandatory; /* Snap effect */
+    }
+    .summary-card {
+        min-width: 260px !important; /* Force width */
+        flex: 0 0 auto !important;
+        scroll-snap-align: start;
+    }
+}
+
 .summary-card {
   padding: 18px;
   display: flex;
@@ -271,8 +287,8 @@
   }
  
   /* =======================================================
-     DEFINITIVE MOBILE TABLE FIX 
-     ======================================================= */
+      DEFINITIVE MOBILE TABLE FIX 
+      ======================================================= */
   .orders-table-container {
     /* Use overflow-x auto to allow horizontal scrolling if necessary 
        but the main fix below converts it to a vertical list. */
@@ -395,4 +411,5 @@
     .order-actions .btn {
     width: 130%; /* Or a width that you prefer */
   }
+  
 }
