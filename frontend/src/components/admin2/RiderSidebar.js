@@ -3,7 +3,18 @@ import { FaHome, FaHistory, FaSignOutAlt, FaBell } from "react-icons/fa";
 import logoImage from "../../assets/logo.png";
 import RiderMobileNav from "./RiderMobileNav";
 
-const RiderSidebar = ({ isSidebarOpen, setIsSidebarOpen, navigateToDashboard, navigateToHistory, navigateToNotifications, handleLogout }) => {
+const RiderSidebar = ({ 
+  isSidebarOpen, 
+  setIsSidebarOpen, 
+  navigateToDashboard, 
+  navigateToHistory, 
+  navigateToNotifications, 
+  handleLogout,
+  userName,
+  userRole,
+  riderName, // Added riderName to receive from parent
+  riderPhone
+}) => {
   return (
     <>
       {/* Desktop Sidebar - Conditionally rendered for desktop view */}
@@ -39,6 +50,10 @@ const RiderSidebar = ({ isSidebarOpen, setIsSidebarOpen, navigateToDashboard, na
         navigateToHistory={navigateToHistory}
         navigateToNotifications={navigateToNotifications}
         handleLogout={handleLogout}
+        userName={userName}
+        userRole={userRole}
+        riderName={riderName || userName} // Pass riderName, fallback to userName
+        riderPhone={riderPhone}
       />
     </>
   );

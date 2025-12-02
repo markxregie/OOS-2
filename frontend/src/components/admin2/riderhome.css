@@ -213,6 +213,15 @@
   display: none;
 }
 
+/* Media Query for Desktop View (min-width: 992px) */
+@media (min-width: 992px) {
+  .order-cards-container {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    justify-content: unset;
+  }
+}
+
 /* Media Query for Mobile/Tablet View (max-width: 991px) */
 @media (max-width: 991px) {
   /* General Mobile Layout */
