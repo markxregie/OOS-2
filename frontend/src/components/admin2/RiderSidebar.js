@@ -1,8 +1,9 @@
 import React from 'react';
-import { FaHome, FaHistory, FaSignOutAlt } from "react-icons/fa";
+import { FaHome, FaHistory, FaSignOutAlt, FaBell } from "react-icons/fa";
 import logoImage from "../../assets/logo.png";
+import RiderMobileNav from "./RiderMobileNav";
 
-const RiderSidebar = ({ isSidebarOpen, setIsSidebarOpen, navigateToDashboard, navigateToHistory, handleLogout }) => {
+const RiderSidebar = ({ isSidebarOpen, setIsSidebarOpen, navigateToDashboard, navigateToHistory, navigateToNotifications, handleLogout }) => {
   return (
     <>
       {/* Desktop Sidebar - Conditionally rendered for desktop view */}
@@ -20,6 +21,10 @@ const RiderSidebar = ({ isSidebarOpen, setIsSidebarOpen, navigateToDashboard, na
               <FaHistory />
               {isSidebarOpen && <span>History</span>}
             </li>
+            <li onClick={navigateToNotifications} style={{ cursor: 'pointer' }}>
+              <FaBell />
+              {isSidebarOpen && <span>Notifications</span>}
+            </li>
             <li onClick={handleLogout} style={{ cursor: 'pointer' }}>
               <FaSignOutAlt />
               {isSidebarOpen && <span>Logout</span>}
@@ -28,23 +33,13 @@ const RiderSidebar = ({ isSidebarOpen, setIsSidebarOpen, navigateToDashboard, na
         </div>
       )}
 
-      {/* Mobile Bottom Navigation Bar - ONLY visible on mobile via CSS media query */}
-      <div className="mobile-bottom-nav">
-        <ul className="bottom-nav-menu">
-          <li onClick={navigateToDashboard} style={{ cursor: 'pointer' }}>
-            <FaHome />
-            <span>Dashboard</span>
-          </li>
-          <li onClick={navigateToHistory} style={{ cursor: 'pointer' }}>
-            <FaHistory />
-            <span>History</span>
-          </li>
-          <li onClick={handleLogout} style={{ cursor: 'pointer' }}>
-            <FaSignOutAlt />
-            <span>Logout</span>
-          </li>
-        </ul>
-      </div>
+      {/* Mobile Bottom Navigation Bar - Using RiderMobileNav component */}
+      <RiderMobileNav
+        navigateToDashboard={navigateToDashboard}
+        navigateToHistory={navigateToHistory}
+        navigateToNotifications={navigateToNotifications}
+        handleLogout={handleLogout}
+      />
     </>
   );
 };

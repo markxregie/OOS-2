@@ -27,6 +27,7 @@ import Report from './components/admin2/report';
 import RiderDashboard from './components/admin2/riderdashboard';
 import RiderHome from './components/admin2/riderhome';
 import RiderHistory from './components/admin2/riderhistory';
+import RiderNotifications from './components/admin2/RiderNotifications';
 import NotFound from './components/NotFound';
 import Resetpassword from './components/Resetpassword';
 import Concerns from './components/concerns';
@@ -80,7 +81,7 @@ const ProfileLayout = () => {
 
 function MainApp() {
   const location = useLocation();
-  const hideHeaderPaths = ['/login', '/signup', '/forgot-password', '/reset-password', '/Reset-password', '/admin', '/admin/*', '/rider/home', '/rider/riderhistory', '/usermanagement'];
+  const hideHeaderPaths = ['/login', '/signup', '/forgot-password', '/reset-password', '/Reset-password', '/admin', '/admin/*', '/rider/home', '/rider/riderhistory', '/rider/notifications', '/usermanagement'];
   const shouldHideHeader = hideHeaderPaths.some(path =>
     location.pathname.startsWith(path)
   );
@@ -128,6 +129,7 @@ function MainApp() {
           {/* Rider Home Route without header/sidebar */}
           <Route path="/rider/home" element={<RiderHome />} />
           <Route path="/rider/riderhistory" element={<RiderHistory />} />
+          <Route path="/rider/notifications" element={<RiderNotifications />} />
           {/* 404 Not Found Route */}
           <Route path="*" element={<NotFound />} />
         </Routes>

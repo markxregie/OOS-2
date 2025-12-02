@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   FaClock,
   FaUser,
@@ -10,8 +10,7 @@ import {
   FaUndo,
   FaTimesCircle,
   FaExchangeAlt,
-  FaHome,
-  FaHistory,
+
   FaCog,
   FaCreditCard,
   FaUserTie,
@@ -133,7 +132,8 @@ import Swal from 'sweetalert2';
     const [riderPhone, setRiderPhone] = useState(localStorage.getItem("riderPhone") || "");
     const [userLoading, setUserLoading] = useState(true);
 
-    const location = useLocation();
+  const location = useLocation();
+  const navigate = useNavigate();
 
     useEffect(() => {
       const queryParams = new URLSearchParams(location.search);
@@ -567,11 +567,15 @@ import Swal from 'sweetalert2';
     };
 
     const navigateToDashboard = () => {
-      window.location.href = "/rider/home";
+      navigate("/rider/home");
     };
 
     const navigateToHistory = () => {
-      window.location.href = "/rider/riderhistory";
+      navigate("/rider/riderhistory");
+    };
+
+    const navigateToNotifications = () => {
+      navigate("/rider/notifications");
     };
 
     const navigateToRoute = (order) => {
@@ -769,6 +773,7 @@ import Swal from 'sweetalert2';
           setIsSidebarOpen={setIsSidebarOpen}
           navigateToDashboard={navigateToDashboard}
           navigateToHistory={navigateToHistory}
+          navigateToNotifications={navigateToNotifications}
           handleLogout={handleLogout}
         />
 
