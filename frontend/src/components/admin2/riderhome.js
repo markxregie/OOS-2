@@ -125,6 +125,7 @@ import Swal from 'sweetalert2';
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [currentDate, setCurrentDate] = useState(new Date());
+    const [expandedOrders, setExpandedOrders] = useState(new Set());
 
     const [authToken, setAuthToken] = useState(localStorage.getItem("authToken"));
     const [riderId, setRiderId] = useState(localStorage.getItem("riderId") || "");
@@ -740,6 +741,18 @@ import Swal from 'sweetalert2';
       };
     }, [showMapModal, selectedOrder, riderLocation, customerLocation]);
 
+    const toggleOrderExpansion = (orderId) => {
+      setExpandedOrders(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(orderId)) {
+          newSet.delete(orderId);
+        } else {
+          newSet.add(orderId);
+        }
+        return newSet;
+      });
+    };
+
     const handleLogout = () => {
       setAuthToken(null);
       localStorage.removeItem("authToken");
@@ -799,9 +812,9 @@ import Swal from 'sweetalert2';
           </div>
 
           <div className="order-list-heading">
-            {toggle === "active" && <div>Showing Active Orders</div>}
-            {toggle === "all" && <div>Showing All Orders</div>}
-            {toggle === "completed" && <div>Showing Completed Orders</div>}
+            {toggle === "active" && <div> Active Orders</div>}
+            {toggle === "all" && <div> All Orders</div>}
+            {toggle === "completed" && <div> Completed Orders</div>}
           </div>
 
           <div className="order-cards-container">
@@ -820,7 +833,7 @@ import Swal from 'sweetalert2';
               </div>
             ) : (
               filteredOrders.map((order) => (
-                <Card key={order.id} className="order-card" style={{ marginBottom: '15px' }}>
+                <Card key={order.id} className="order-card">
                   <div className="order-header">
                     <h5 className="order-id">Order #{order.id}</h5>
 
@@ -835,23 +848,29 @@ import Swal from 'sweetalert2';
                     {/* Collapsible Address/Phone for cleaner mobile view */}
                     <p className="detail-item"><FaMapMarkerAlt color="#4b929d" /> <strong>Address:</strong> <span className="detail-value">{order.address}</span></p>
                     
-                    <details style={{ marginTop: '10px', border: '1px solid #eee', padding: '8px', borderRadius: '5px' }}>
-                        <summary style={{ cursor: 'pointer', color: '#4a9ba5', fontWeight: 'bold' }}>
+                    <div style={{ marginTop: '10px', border: '1px solid #eee', padding: '8px', borderRadius: '5px' }}>
+                        <div
+                            style={{ cursor: 'pointer', color: '#4a9ba5', fontWeight: 'bold' }}
+                            onClick={() => toggleOrderExpansion(order.id)}
+                        >
                             <FaBox color="#4b929d" /> {order.items?.length || 0} Items (Click to View)
-                        </summary>
-                        <ul className="item-list" style={{ marginTop: '10px', paddingLeft: '0', listStyle: 'none' }}>
-                        {order.items?.map((item, i) => (
-                            <li key={i} className="item-row" style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #eee', padding: '5px 0' }}>
-                            <span>{item.quantity}x {item.name}</span>
-                            <span>₱{item.price.toFixed(2)}</span>
+                            {expandedOrders.has(order.id) ? <FaChevronUp style={{ marginLeft: '5px' }} /> : <FaChevronRight style={{ marginLeft: '5px' }} />}
+                        </div>
+                        {expandedOrders.has(order.id) && (
+                            <ul className="item-list" style={{ marginTop: '10px', paddingLeft: '0', listStyle: 'none' }}>
+                            {order.items?.map((item, i) => (
+                                <li key={i} className="item-row" style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #eee', padding: '5px 0' }}>
+                                <span>{item.quantity}x {item.name}</span>
+                                <span>₱{item.price.toFixed(2)}</span>
+                                </li>
+                            ))}
+                            <li className="item-row" style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '5px' }}>
+                                <span>Delivery Fee</span>
+                                <span>₱50.00</span>
                             </li>
-                        ))}
-                        <li className="item-row" style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '5px' }}>
-                            <span>Delivery Fee</span>
-                            <span>₱50.00</span>
-                        </li>
-                        </ul>
-                    </details>
+                            </ul>
+                        )}
+                    </div>
 
                     {order.notes && (
                       <p style={{ backgroundColor: "#fff3cd", padding: "10px", borderRadius: "4px", marginTop: "10px", color: "#856404", fontSize: '0.9rem' }}>
@@ -865,14 +884,13 @@ import Swal from 'sweetalert2';
                     <span className="total-value">₱{order.total?.toFixed(2) || "0.00"}</span>
                   </div>
                   
-                  {/* BUTTONS STACK ON MOBILE */}
-                  <div className="order-actions" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {/* FIXED: Use the centralized action button container */}
+                  <div className="order-actions">
                     {(order.currentStatus === 'pickedup' || order.currentStatus === 'delivering') && (
                       <Button
-                        variant="success" // CHANGED TO GREEN FOR VISIBILITY
-                        className="navigate-route-button"
+                        variant="success"
+                        className="navigate-route-button action-btn"
                         onClick={() => navigateToRoute(order)}
-                        style={{ width: '100%', fontWeight: 'bold', padding: '12px' }}
                       >
                         <FaMapMarkedAlt className="me-2" /> Navigate Route
                       </Button>
@@ -881,9 +899,8 @@ import Swal from 'sweetalert2';
                     {shouldRenderButton(order.currentStatus) && (
                       <Button
                         variant="primary"
-                        className={`status-change-button ${getButtonClass(order.currentStatus)}`}
+                        className={`status-change-button action-btn ${getButtonClass(order.currentStatus)}`}
                         onClick={() => handleProgressiveStatusChange(order.id, order.currentStatus)}
-                        style={{ width: '100%', padding: '12px' }}
                       >
                         {getButtonText(order.currentStatus)}
                       </Button>

@@ -122,12 +122,13 @@
 
 .order-card {
   width: 100%;
-  max-width: 650px; /* Max width for desktop readability */
+  max-width: 500px; /* Max width for desktop readability */
   margin-bottom: 15px;
   /* Ensure padding inside the card handles spacing */
-  padding: 20px;
-  box-sizing: border-box;
-  min-height: 570px; /* Ensure sufficient height for content, including expanded dropdown and buttons */
+  padding: 20px; 
+  box-sizing: border-box; 
+  display: flex;
+  flex-direction: column;
 }
 
 .order-header {
@@ -147,12 +148,10 @@
 .order-actions {
   display: flex;
   flex-direction: column;
-  align-items: stretch; /* Make buttons equal height */
-  justify-content: space-between; /* Push buttons to edges */
+  align-items: center; /* Center horizontally */
+  justify-content: center;
   gap: 10px;
-  margin-top: 5px;
-  margin-bottom: 15px;
-  flex-wrap: wrap; /* Allow buttons to wrap if needed */
+  margin-top: 15px;
   width: 100%; /* Take full width of the card content area */
 }
 
@@ -163,11 +162,10 @@
 }
 /* Restore button background colors that might be overridden */
 .order-actions .btn-success {
-  background-color: #198754 !important; /* Bootstrap success green */
-  border-color: #198754 !important;
+  background-color: #198754; /* Bootstrap success green */
 }
 .order-actions .btn-primary {
-  background-color: #0d6efd !important; /* Bootstrap primary blue */
+  background-color: #0d6efd; /* Bootstrap primary blue */
 }
 
 /* ----------------------------------------------------
@@ -224,8 +222,6 @@
   .main-content {
     margin-left: 0;
     width: 100%;
-    max-width: 600px; /* Center the content with max width */
-    margin: 0 auto; /* Center horizontally */
     padding-bottom: 60px; /* Space for the fixed bottom nav */
     padding-left: 10px; /* Add slight padding to body */
     padding-right: 10px;
@@ -361,35 +357,26 @@
   }
 
   /* --- MOBILE BUTTON FIX --- */
-  /* Stack buttons vertically in mobile to prevent exceeding card boundaries */
-    .order-actions {
-        flex-direction: column; /* Stack buttons vertically */
-        align-items: stretch; /* Make buttons full width */
-        width: 100%;
-        margin-left: 0;
-        margin-right: 0;
-        gap: 10px; /* Add a gap between the buttons */
-    }
+  /* No negative margins, simple centering */
+  .order-actions {
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+  }
   .order-actions .btn {
-    width: 100%; /* Full width buttons */
-    max-width: 100%; /* Prevent overflow */
+    width: 100%; 
   }
   
   .order-card {
     width: 100%;
-    margin-left: 5px;
-    margin-right: 0; 
-    height: auto; 
-    flex-shrink: 0; 
+    margin-left: 0;
+    margin-right: 0;
   }
 
   .order-cards-container {
     flex-direction: column;
     align-items: center;
   }
-
-  .order-actions .btn {
-    margin-bottom: 0; 
-  }
-
 }
