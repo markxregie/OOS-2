@@ -1,12 +1,80 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Table, Badge, Nav, Card, Button, Modal, Form } from 'react-bootstrap';
-import { FaChevronDown, FaBell, FaSignOutAlt, FaUndo, FaEye, FaTrashAlt, FaTag, FaEnvelope, FaUser, FaClock, FaCommentDots, FaAngleLeft, FaAngleRight, FaAngleDoubleLeft, FaAngleDoubleRight, FaPlus, FaImage, FaCalendarAlt, FaTimes, FaEdit } from "react-icons/fa"; 
+import { FaChevronDown, FaBell, FaSignOutAlt, FaUndo, FaEye, FaTrashAlt, FaTag, FaEnvelope, FaUser, FaClock, FaCommentDots, FaAngleLeft, FaAngleRight, FaAngleDoubleLeft, FaAngleDoubleRight, FaPlus, FaImage, FaCalendarAlt, FaTimes, FaEdit } from "react-icons/fa";
 import Swal from 'sweetalert2';
 import './concerns.css'; // Keeping your existing CSS import
 import adminImage from "../../assets/administrator.png";
 
-// Placeholder image for demonstration if no image is uploaded
-const placeholderImg = "https://via.placeholder.com/400x200?text=Upload+Banner";
+// API Base URL for Promotion Service
+const PROMOTION_API_BASE = 'http://localhost:7010';
+
+
+
+// API Functions
+const fetchPromotions = async () => {
+  try {
+    const response = await fetch(`${PROMOTION_API_BASE}/promotions`);
+    if (!response.ok) throw new Error('Failed to fetch promotions');
+    const data = await response.json();
+    return data.promotions || [];
+  } catch (error) {
+    console.error('Error fetching promotions:', error);
+    return [];
+  }
+};
+
+const fetchInactivePromotions = async () => {
+  try {
+    const response = await fetch(`${PROMOTION_API_BASE}/promotions/inactive`);
+    if (!response.ok) throw new Error('Failed to fetch inactive promotions');
+    const data = await response.json();
+    return data.promotions || [];
+  } catch (error) {
+    console.error('Error fetching inactive promotions:', error);
+    return [];
+  }
+};
+
+const uploadPromotion = async (formData) => {
+  try {
+    const response = await fetch(`${PROMOTION_API_BASE}/upload-promotion`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!response.ok) throw new Error('Failed to upload promotion');
+    return await response.json();
+  } catch (error) {
+    console.error('Error uploading promotion:', error);
+    throw error;
+  }
+};
+
+const updatePromotion = async (promotionId, formData) => {
+  try {
+    const response = await fetch(`${PROMOTION_API_BASE}/promotion/${promotionId}`, {
+      method: 'PUT',
+      body: formData,
+    });
+    if (!response.ok) throw new Error('Failed to update promotion');
+    return await response.json();
+  } catch (error) {
+    console.error('Error updating promotion:', error);
+    throw error;
+  }
+};
+
+const deletePromotion = async (promotionId) => {
+  try {
+    const response = await fetch(`${PROMOTION_API_BASE}/promotion/${promotionId}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) throw new Error('Failed to delete promotion');
+    return await response.json();
+  } catch (error) {
+    console.error('Error deleting promotion:', error);
+    throw error;
+  }
+};
 
 const Promotions = () => {
   const userRole = "Admin";
@@ -17,29 +85,16 @@ const Promotions = () => {
   // --- PROMOTIONS STATE ---
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingId, setEditingId] = useState(null); // Track if we are editing
-  
+
   // New State for Viewing Image in Modal
   const [showViewModal, setShowViewModal] = useState(false);
   const [viewImageSrc, setViewImageSrc] = useState(null);
 
-  const [promotions, setPromotions] = useState([
-    { 
-        id: 1, 
-        title: 'Grand Opening Promo', 
-        status: 'Active', 
-        startDate: '2025-10-24', 
-        endDate: '2025-10-31', 
-        image: 'https://images.unsplash.com/photo-1497935586351-b67a49e012bf?auto=format&fit=crop&q=80&w=1000' 
-    },
-    { 
-        id: 2, 
-        title: 'Rainy Season Discount', 
-        status: 'Inactive', 
-        startDate: '2025-09-10', 
-        endDate: '2025-09-20', 
-        image: 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&q=80&w=1000' 
-    }
-  ]);
+  // Tab state
+  const [activeTab, setActiveTab] = useState('active'); // 'active' or 'inactive'
+
+  const [promotions, setPromotions] = useState([]);
+  const [inactivePromotions, setInactivePromotions] = useState([]);
   
   // Form State
   const [newPromoTitle, setNewPromoTitle] = useState('');
@@ -49,6 +104,15 @@ const Promotions = () => {
   const [previewUrl, setPreviewUrl] = useState(null);
 
   useEffect(() => {
+    // Fetch promotions on component mount
+    const loadPromotions = async () => {
+      const activeData = await fetchPromotions();
+      const inactiveData = await fetchInactivePromotions();
+      setPromotions(activeData);
+      setInactivePromotions(inactiveData);
+    };
+    loadPromotions();
+
     // Timer to update the current date every minute
     const timer = setInterval(() => {
       setCurrentDate(new Date());
@@ -76,68 +140,92 @@ const Promotions = () => {
     }
   };
 
-  const handleSavePromotion = () => {
+  const handleSavePromotion = async () => {
     // Validation
-    if (!newPromoTitle || !startDate || !endDate) {
-        Swal.fire('Error', 'Please fill in the title and date range.', 'error');
+    if (!newPromoTitle.trim()) {
+        Swal.fire('Error', 'Please enter a promotion title.', 'error');
         return;
     }
-    
+
+    if (!startDate || !endDate) {
+        Swal.fire('Error', 'Please select both start and end dates.', 'error');
+        return;
+    }
+
+    // Validate date format
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        Swal.fire('Error', 'Invalid date format. Please select valid dates.', 'error');
+        return;
+    }
+
+    if (start >= end) {
+        Swal.fire('Error', 'Start date must be before end date.', 'error');
+        return;
+    }
+
     // If adding new, require image. If editing, image is optional (keep old one).
     if (!editingId && !selectedFile && !previewUrl) {
         Swal.fire('Error', 'Please upload a banner image.', 'error');
         return;
     }
 
-    if (editingId) {
-        // --- UPDATE EXISTING ---
-        setPromotions(promotions.map(p => {
-            if (p.id === editingId) {
-                return {
-                    ...p,
-                    title: newPromoTitle,
-                    startDate: startDate,
-                    endDate: endDate,
-                    // If a new preview exists, use it, otherwise keep old image
-                    image: previewUrl || p.image,
-                    // Simple logic: if today is within range, set Active
-                    status: (new Date() >= new Date(startDate) && new Date() <= new Date(endDate)) ? 'Active' : 'Inactive'
-                };
+    try {
+        if (editingId) {
+            // --- UPDATE EXISTING ---
+            const formData = new FormData();
+            formData.append('title', newPromoTitle);
+            formData.append('start_date', startDate);
+            formData.append('end_date', endDate);
+            if (selectedFile) {
+                formData.append('file', selectedFile);
             }
-            return p;
-        }));
-        
-        Swal.fire({
-            icon: 'success',
-            title: 'Updated!',
-            text: 'Promotion details have been updated.',
-            confirmButtonColor: '#4a9ba5'
-        });
 
-    } else {
-        // --- CREATE NEW ---
-        const newId = promotions.length + 1;
-        const newPromo = {
-            id: newId,
-            title: newPromoTitle,
-            startDate: startDate,
-            endDate: endDate,
-            // Simple logic: if today is within range, set Active
-            status: (new Date() >= new Date(startDate) && new Date() <= new Date(endDate)) ? 'Active' : 'Inactive',
-            image: previewUrl // In real app, this would be the URL returned from backend
-        };
+            await updatePromotion(editingId, formData);
 
-        setPromotions([newPromo, ...promotions]);
+            Swal.fire({
+                icon: 'success',
+                title: 'Updated!',
+                text: 'Promotion details have been updated.',
+                confirmButtonColor: '#4a9ba5'
+            });
+
+        } else {
+            // --- CREATE NEW ---
+            const formData = new FormData();
+            formData.append('title', newPromoTitle);
+            formData.append('start_date', startDate);
+            formData.append('end_date', endDate);
+            formData.append('file', selectedFile);
+
+            await uploadPromotion(formData);
+
+            Swal.fire({
+                icon: 'success',
+                title: 'Published!',
+                text: 'Your new banner is now scheduled.',
+                confirmButtonColor: '#4a9ba5'
+            });
+        }
+
+        // Refresh promotions list
+        const updatedActivePromotions = await fetchPromotions();
+        const updatedInactivePromotions = await fetchInactivePromotions();
+        setPromotions(updatedActivePromotions);
+        setInactivePromotions(updatedInactivePromotions);
+
+        setShowAddModal(false);
+        resetForm();
+
+    } catch (error) {
         Swal.fire({
-            icon: 'success',
-            title: 'Published!',
-            text: 'Your new banner is now scheduled.',
+            icon: 'error',
+            title: 'Error',
+            text: 'Failed to save promotion. Please try again.',
             confirmButtonColor: '#4a9ba5'
         });
     }
-
-    setShowAddModal(false);
-    resetForm();
   };
 
   const handleEditClick = (promo) => {
@@ -150,7 +238,7 @@ const Promotions = () => {
       setShowAddModal(true);
   };
 
-  const handleDeletePromotion = (id) => {
+  const handleDeletePromotion = async (id) => {
     Swal.fire({
         title: 'Delete Banner?',
         text: "This will remove the image from the homepage.",
@@ -158,10 +246,24 @@ const Promotions = () => {
         showCancelButton: true,
         confirmButtonColor: '#dc3545',
         confirmButtonText: 'Yes, delete it!'
-    }).then((result) => {
+    }).then(async (result) => {
         if (result.isConfirmed) {
-            setPromotions(promotions.filter(p => p.id !== id));
-            Swal.fire('Deleted!', 'The promotion has been removed.', 'success');
+            try {
+                await deletePromotion(id);
+                // Refresh both active and inactive promotions lists
+                const updatedActivePromotions = await fetchPromotions();
+                const updatedInactivePromotions = await fetchInactivePromotions();
+                setPromotions(updatedActivePromotions);
+                setInactivePromotions(updatedInactivePromotions);
+                Swal.fire('Deleted!', 'The promotion has been removed.', 'success');
+            } catch (error) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Failed to delete promotion. Please try again.',
+                    confirmButtonColor: '#4a9ba5'
+                });
+            }
         }
     });
   };
@@ -227,20 +329,40 @@ const Promotions = () => {
 
         {/* --- PROMOTIONS CONTENT INTERFACE (TABLE VIEW) --- */}
         <div className="promotions-body" style={{ marginTop: '20px' }}>
-            
+
             {/* Toolbar */}
             <div className="d-flex justify-content-between align-items-center mb-4">
                 <div>
-                    <h5 style={{ color: '#4a9ba5', margin: 0 }}>Active Homepage Banners</h5>
-                    <p className="text-muted" style={{ fontSize: '0.9rem', margin: 0 }}>Manage the slides appearing on the customers POV.</p>
+                    <h5 style={{ color: '#4a9ba5', margin: 0 }}>
+                        {activeTab === 'active' ? 'Active Homepage Banners' : 'Archived Banners'}
+                    </h5>
+                    <p className="text-muted" style={{ fontSize: '0.9rem', margin: 0 }}>
+                        {activeTab === 'active' ? 'Manage the slides appearing on the customers POV.' : 'View expired or deleted promotions.'}
+                    </p>
                 </div>
-                <Button 
-                    onClick={() => { resetForm(); setShowAddModal(true); }}
-                    style={{ backgroundColor: '#4a9ba5', border: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}
-                >
-                    <FaPlus /> Upload New Banner
-                </Button>
+                {activeTab === 'active' && (
+                    <Button
+                        onClick={() => { resetForm(); setShowAddModal(true); }}
+                        style={{ backgroundColor: '#4a9ba5', border: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}
+                    >
+                        <FaPlus /> Upload New Banner
+                    </Button>
+                )}
             </div>
+
+            {/* Tabs */}
+            <Nav variant="tabs" className="mb-4" activeKey={activeTab} onSelect={(selectedKey) => setActiveTab(selectedKey)}>
+                <Nav.Item>
+                    <Nav.Link eventKey="active" style={{ color: activeTab === 'active' ? '#4a9ba5' : '#6c757d', fontWeight: '500' }}>
+                        Active Promotions
+                    </Nav.Link>
+                </Nav.Item>
+                <Nav.Item>
+                    <Nav.Link eventKey="inactive" style={{ color: activeTab === 'inactive' ? '#4a9ba5' : '#6c757d', fontWeight: '500' }}>
+                        Archives
+                    </Nav.Link>
+                </Nav.Item>
+            </Nav>
 
             {/* Banners Table */}
             <div className="table-responsive" style={{ backgroundColor: 'white', borderRadius: '8px', padding: '1rem', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
@@ -255,24 +377,24 @@ const Promotions = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {promotions.map((promo) => (
+                        {(activeTab === 'active' ? promotions : inactivePromotions).map((promo) => (
                             <tr key={promo.id}>
                                 <td>
-                                    <div 
-                                        style={{ 
-                                            width: '120px', 
-                                            height: '60px', 
-                                            overflow: 'hidden', 
-                                            borderRadius: '6px', 
+                                    <div
+                                        style={{
+                                            width: '120px',
+                                            height: '80px',
+                                            overflow: 'hidden',
+                                            borderRadius: '6px',
                                             border: '1px solid #dee2e6',
                                             cursor: 'pointer'
                                         }}
                                         onClick={() => handleViewImage(promo.image)}
                                     >
-                                        <img 
-                                            src={promo.image} 
-                                            alt={promo.title} 
-                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                                        <img
+                                            src={promo.image}
+                                            alt={promo.title}
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                         />
                                     </div>
                                 </td>
@@ -284,11 +406,11 @@ const Promotions = () => {
                                 </td>
                                 <td className="text-muted">
                                     <div style={{ fontSize: '0.9rem' }}>
-                                        <FaCalendarAlt className="me-2" style={{ color: '#4a9ba5' }} /> 
+                                        <FaCalendarAlt className="me-2" style={{ color: '#4a9ba5' }} />
                                         <strong>Start:</strong> {promo.startDate}
                                     </div>
                                     <div style={{ fontSize: '0.9rem', marginTop: '4px' }}>
-                                        <FaClock className="me-2" style={{ color: '#dc3545' }} /> 
+                                        <FaClock className="me-2" style={{ color: '#dc3545' }} />
                                         <strong>End:</strong> &nbsp;&nbsp;{promo.endDate}
                                     </div>
                                 </td>
@@ -301,31 +423,37 @@ const Promotions = () => {
                                     >
                                         <FaEye />
                                     </button>
-                                    <button
-                                        className="btn btn-sm btn-outline-warning me-2"
-                                        title="Edit Promotion"
-                                        onClick={() => handleEditClick(promo)}
-                                        style={{ border: 'none' }}
-                                    >
-                                        <FaEdit />
-                                    </button>
-                                    <button
-                                        className="btn btn-sm btn-outline-danger"
-                                        title="Delete Promotion"
-                                        onClick={() => handleDeletePromotion(promo.id)}
-                                        style={{ border: 'none' }}
-                                    >
-                                        <FaTrashAlt />
-                                    </button>
+                                    {activeTab === 'active' && (
+                                        <>
+                                            <button
+                                                className="btn btn-sm btn-outline-warning me-2"
+                                                title="Edit Promotion"
+                                                onClick={() => handleEditClick(promo)}
+                                                style={{ border: 'none' }}
+                                            >
+                                                <FaEdit />
+                                            </button>
+                                            <button
+                                                className="btn btn-sm btn-outline-danger"
+                                                title="Delete Promotion"
+                                                onClick={() => handleDeletePromotion(promo.id)}
+                                                style={{ border: 'none' }}
+                                            >
+                                                <FaTrashAlt />
+                                            </button>
+                                        </>
+                                    )}
                                 </td>
                             </tr>
                         ))}
                          {/* Empty State if no promos */}
-                         {promotions.length === 0 && (
+                         {(activeTab === 'active' ? promotions : inactivePromotions).length === 0 && (
                             <tr>
                                 <td colSpan="5" className="text-center py-5">
                                     <div style={{ color: '#ccc', fontSize: '2rem', marginBottom: '10px' }}><FaImage /></div>
-                                    <p className="text-muted">No promotions found.</p>
+                                    <p className="text-muted">
+                                        {activeTab === 'active' ? 'No active promotions found.' : 'No inactive/deleted promotions found.'}
+                                    </p>
                                 </td>
                             </tr>
                         )}
