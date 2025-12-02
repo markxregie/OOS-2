@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaTimesCircle, FaExchangeAlt, FaBars, FaHome, FaHistory, FaCog, FaCreditCard, FaUserTie, FaChevronDown, FaUndo, FaSignOutAlt, FaSpinner } from "react-icons/fa";
 import { Container, Card, Form, Spinner } from "react-bootstrap";
 import riderImage from "../../assets/rider.jpg";
-import "./riderdashboard.css"; // Updated CSS import
+import "./riderdashboard.css"; 
 import adminImage from "../../assets/administrator.png";
 
 function RiderDashboard() {

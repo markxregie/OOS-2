@@ -1,12 +1,33 @@
-  import React, { useState, useEffect, useRef } from 'react';
-  import { useLocation } from "react-router-dom";
-  import { FaChevronDown, FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaUndo, FaSignOutAlt, FaTimesCircle, FaExchangeAlt, FaBars, FaHome, FaHistory, FaCog, FaCreditCard, FaUserTie } from "react-icons/fa";
-  import { Container, Card, Form, Button, Modal } from "react-bootstrap";
-  import riderImage from "../../assets/rider.jpg";
-  import logoImage from "../../assets/logo.png";
-  import "./riderhome.css";
+import React, { useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from "react-router-dom";
+import {
+  FaClock,
+  FaUser,
+  FaMapMarkerAlt,
+  FaBox,
+  FaTruckPickup,
+  FaTruckMoving,
+  FaUndo,
+  FaTimesCircle,
+  FaExchangeAlt,
 
-  import Swal from 'sweetalert2';
+  FaCog,
+  FaCreditCard,
+  FaUserTie,
+  FaMapMarkedAlt,
+  FaChevronRight,
+  FaChevronUp,
+  FaCheckCircle,
+  FaBoxOpen
+} from "react-icons/fa";
+import { Container, Card, Button, Modal } from "react-bootstrap";
+import riderImage from "../../assets/rider.jpg";
+import logoImage from "../../assets/logo.png";
+import "./riderhome.css";
+import RiderSidebar from "./RiderSidebar";
+import RiderHeaderSummary from "./RiderHeaderSummary";
+
+import Swal from 'sweetalert2';
 
   // Simple in-memory caches to avoid repeating expensive external requests
   const geocodeCache = new Map(); // address -> { lat, lng }
@@ -103,6 +124,7 @@
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [currentDate, setCurrentDate] = useState(new Date());
+    const [expandedOrders, setExpandedOrders] = useState(new Set());
 
     const [authToken, setAuthToken] = useState(localStorage.getItem("authToken"));
     const [riderId, setRiderId] = useState(localStorage.getItem("riderId") || "");
@@ -110,7 +132,8 @@
     const [riderPhone, setRiderPhone] = useState(localStorage.getItem("riderPhone") || "");
     const [userLoading, setUserLoading] = useState(true);
 
-    const location = useLocation();
+  const location = useLocation();
+  const navigate = useNavigate();
 
     useEffect(() => {
       const queryParams = new URLSearchParams(location.search);
@@ -544,11 +567,15 @@
     };
 
     const navigateToDashboard = () => {
-      window.location.href = "/rider/home";
+      navigate("/rider/home");
     };
 
     const navigateToHistory = () => {
-      window.location.href = "/rider/riderhistory";
+      navigate("/rider/riderhistory");
+    };
+
+    const navigateToNotifications = () => {
+      navigate("/rider/notifications");
     };
 
     const navigateToRoute = (order) => {
@@ -718,6 +745,18 @@
       };
     }, [showMapModal, selectedOrder, riderLocation, customerLocation]);
 
+    const toggleOrderExpansion = (orderId) => {
+      setExpandedOrders(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(orderId)) {
+          newSet.delete(orderId);
+        } else {
+          newSet.add(orderId);
+        }
+        return newSet;
+      });
+    };
+
     const handleLogout = () => {
       setAuthToken(null);
       localStorage.removeItem("authToken");
@@ -729,123 +768,32 @@
 
     return (
       <div className="rider-dashboard-container">
-        {/* Desktop Sidebar - Conditionally rendered for desktop view */}
-        {isSidebarOpen && window.innerWidth > 991 && (
-          <div className="sidebar desktop-sidebar">
-            <div className="sidebar-header">
-              <img src={logoImage} alt="Logo" className="logo" />
-            </div>
-            <ul className="sidebar-menu">
-              <li onClick={navigateToDashboard} style={{ cursor: 'pointer' }}>
-                <FaHome />
-                {isSidebarOpen && <span>Dashboard</span>}
-              </li>
-              <li onClick={navigateToHistory} style={{ cursor: 'pointer' }}>
-                <FaHistory />
-                {isSidebarOpen && <span>History</span>}
-              </li>
-              <li onClick={handleLogout} style={{ cursor: 'pointer' }}>
-                <FaSignOutAlt />
-                {isSidebarOpen && <span>Logout</span>}
-              </li>
-            </ul>
-          </div>
-        )}
+        <RiderSidebar
+          isSidebarOpen={isSidebarOpen}
+          setIsSidebarOpen={setIsSidebarOpen}
+          navigateToDashboard={navigateToDashboard}
+          navigateToHistory={navigateToHistory}
+          navigateToNotifications={navigateToNotifications}
+          handleLogout={handleLogout}
+        />
 
         <div className="main-content">
-          <header className="manage-header">
-            <div className="header-left">
-              {/* Toggle button - used for desktop sidebar collapse/expand, hidden in mobile view */}
-              {window.innerWidth > 991 && (
-                <button
-                  className="menu-toggle"
-                  onClick={() => {
-                    setIsSidebarOpen(!isSidebarOpen);
-                  }}
-                >
-                  <FaBars />
-                </button>
-              )}
-              <h2 className="page-title">Rider Dashboard</h2>
-            </div>
-            <div className="header-right">
-              <div className="header-date">{currentDateFormatted}</div>
-              {window.innerWidth > 991 && (
-                <div className="header-profile">
-                  <div className="bell-icon"><FaBell className="bell-outline" /></div>
-                  <div className="profile-pic" style={{ backgroundImage: `url(${riderImage})` }}></div>
-                  <div className="profile-info">
-                    <div className="profile-role">{getGreeting()}! I'm {userRole}</div>
-                    <div className="profile-name">{userName}</div>
-                  </div>
-                  <div className="dropdown-icon" onClick={() => setDropdownOpen(!dropdownOpen)}>
-                    <FaChevronDown className={dropdownOpen ? "icon-rotated" : ""} />
-                    {dropdownOpen && (
-                      <div className="profile-dropdown">
-                        <ul className="dropdown-menu-list">
-                          <li onClick={() => window.location.reload()}>
-                            <FaUndo /> Refresh
-                          </li>
-                          <li onClick={handleLogout}>
-                            <FaSignOutAlt /> Logout
-                          </li>
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </header>
-
-          {window.innerWidth > 991 && (
-            <Container fluid className="dashboard-summary-container" style={{ backgroundColor: "#a3d3d8", display: window.innerWidth <= 991 ? 'flex' : 'block', flexDirection: window.innerWidth <= 991 ? 'row' : 'column', alignItems: window.innerWidth <= 991 ? 'center' : 'stretch' }}>
-              <div className="rider-selector-group">
-                <div className="rider-info-display">
-                  <img src={riderImage} alt={riderName} className="rider-profile-pic" />
-                  <span className="rider-name-text">{riderName || "Rider"}</span>
-                </div>
-              </div>
-              <div className="summary-cards-container">
-                <Card className="summary-card">
-                  <FaBoxOpen size={32} color="#964b00" />
-                  <span className="card-title">Active Orders</span>
-                  <span className="card-value">
-                    {orders.filter(order => !["delivered", "completed", "cancelled", "returned"].includes(order.currentStatus)).length} orders
-                  </span> 
-                </Card>
-                <Card className="summary-card">
-                  <FaCheckCircle size={32} color="#198754" />
-                  <span className="card-title">Completed</span>
-                  <span className="card-value">
-                    {orders.filter(order => ["delivered", "completed"].includes(order.currentStatus)).length} orders
-                  </span>
-                </Card>
-                <Card className="summary-card" style={{ position: 'relative' }}>
-                  <Form.Select
-                    size="sm"
-                    value={earningsFilter}
-                    onChange={(e) => setEarningsFilter(e.target.value)}
-                    style={{
-                      position: 'absolute',
-                      top: '10px',
-                      right: '10px',
-                      width: '120px',
-                      fontSize: '12px',
-                      padding: '2px 6px'
-                    }}
-                  >
-                    <option value="Daily">Daily</option>
-                    <option value="Weekly">Weekly</option>
-                    <option value="Monthly">Monthly</option>
-                  </Form.Select>
-                  <FaDollarSign size={32} color="#fd7e14" />
-                  <span className="card-title">Earnings</span>
-                  <span className="card-value">₱{calculateEarnings()}</span>
-                </Card>
-              </div>
-            </Container>
-          )}
+          <RiderHeaderSummary
+            currentDateFormatted={currentDateFormatted}
+            isSidebarOpen={isSidebarOpen}
+            setIsSidebarOpen={setIsSidebarOpen}
+            getGreeting={getGreeting}
+            userRole={userRole}
+            userName={userName}
+            dropdownOpen={dropdownOpen}
+            setDropdownOpen={setDropdownOpen}
+            handleLogout={handleLogout}
+            riderName={riderName}
+            orders={orders}
+            earningsFilter={earningsFilter}
+            setEarningsFilter={setEarningsFilter}
+            calculateEarnings={calculateEarnings}
+          />
 
           <div className="toggle-buttons-container">
             <button
@@ -869,16 +817,20 @@
           </div>
 
           <div className="order-list-heading">
-            {toggle === "active" && <div>Showing Active Orders</div>}
-            {toggle === "all" && <div>Showing All Orders</div>}
-            {toggle === "completed" && <div>Showing Completed Orders</div>}
+            {toggle === "active" && <div> Active Orders</div>}
+            {toggle === "all" && <div> All Orders</div>}
+            {toggle === "completed" && <div> Completed Orders</div>}
           </div>
 
           <div className="order-cards-container">
             {loading ? (
-              <div>Loading...</div>
+              <div className="text-center py-5">
+                  <div className="spinner-border text-primary" role="status">
+                      <span className="visually-hidden">Loading...</span>
+                  </div>
+              </div>
             ) : error ? (
-              <div>Error: {error}</div>
+              <div className="alert alert-danger">Error: {error}</div>
             ) : filteredOrders.length === 0 ? (
               <div className="no-orders-message">
                 <FaBoxOpen size={50} color="#ccc" />
@@ -894,52 +846,68 @@
                       {statusIcons[order.currentStatus]} {getStatusStyle(order.currentStatus).text}
                     </div>
                   </div>
-                  <div className="order-details mobile-stack"> {/* Added mobile-stack for responsiveness */}
-                    <p className="detail-item"><FaClock color="#4b929d" /> Ordered at: <span className="detail-value">{new Date(order.orderedAt).toLocaleString()}</span></p>
-                    <p className="detail-item"><FaUser color="#4b929d" /> Customer: <span className="detail-value">{order.customerName}</span></p>
-                    <p className="detail-item"><FaPhone color="#4b929d" /> Phone: <span className="detail-value">{order.phone}</span></p>
-                    <p className="detail-item"><FaMapMarkerAlt color="#4b929d" /> Address: <span className="detail-value">{order.address}</span></p>
-                    <h6><FaBox color="#4b929d" /> Items ({order.items?.length || 0})</h6>
-                    <ul className="item-list">
-                      {order.items?.map((item, i) => (
-                        <li key={i} className="item-row">
-                          <span>{item.quantity}x {item.name}</span>
-                          <span>₱{item.price.toFixed(2)}</span>
-                        </li>
-                      ))}
-                      <li className="item-row">
-                        <span>Delivery Fee</span>
-                        <span>₱50.00</span>
-                      </li>
-                    </ul>
+                  <div className="order-details mobile-stack"> 
+                    <p className="detail-item"><FaClock color="#4b929d" /> <strong>Ordered:</strong> <span className="detail-value">{new Date(order.orderedAt).toLocaleString()}</span></p>
+                    <p className="detail-item"><FaUser color="#4b929d" /> <strong>Customer:</strong> <span className="detail-value">{order.customerName}</span></p>
+                    
+                    {/* Collapsible Address/Phone for cleaner mobile view */}
+                    <p className="detail-item"><FaMapMarkerAlt color="#4b929d" /> <strong>Address:</strong> <span className="detail-value">{order.address}</span></p>
+                    
+                    <div style={{ marginTop: '10px', border: '1px solid #eee', padding: '8px', borderRadius: '5px' }}>
+                        <div
+                            style={{ cursor: 'pointer', color: '#4a9ba5', fontWeight: 'bold' }}
+                            onClick={() => toggleOrderExpansion(order.id)}
+                        >
+                            <FaBox color="#4b929d" /> {order.items?.length || 0} Items (Click to View)
+                            {expandedOrders.has(order.id) ? <FaChevronUp style={{ marginLeft: '5px' }} /> : <FaChevronRight style={{ marginLeft: '5px' }} />}
+                        </div>
+                        {expandedOrders.has(order.id) && (
+                            <ul className="item-list" style={{ marginTop: '10px', paddingLeft: '0', listStyle: 'none' }}>
+                            {order.items?.map((item, i) => (
+                                <li key={i} className="item-row" style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #eee', padding: '5px 0' }}>
+                                <span>{item.quantity}x {item.name}</span>
+                                <span>₱{item.price.toFixed(2)}</span>
+                                </li>
+                            ))}
+                            <li className="item-row" style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '5px' }}>
+                                <span>Delivery Fee</span>
+                                <span>₱50.00</span>
+                            </li>
+                            </ul>
+                        )}
+                    </div>
+
                     {order.notes && (
-                      <p style={{ backgroundColor: "#fff3cd", padding: "13px", borderRadius: "4px", marginTop: "15px",marginBottom: "-17px",marginLeft: "-5px",color: "#856404", width: "107%" }}>
-                        Note: {order.notes}
+                      <p style={{ backgroundColor: "#fff3cd", padding: "10px", borderRadius: "4px", marginTop: "10px", color: "#856404", fontSize: '0.9rem' }}>
+                        <strong>Note:</strong> {order.notes}
                       </p>
                     )}
                   </div>
-                  <hr className="divider" />
-                  <div className="order-total-section mobile-total"> {/* Added mobile-total for font size adjustment */}
+                  <hr className="divider" style={{ margin: '10px 0' }} />
+                  <div className="order-total-section mobile-total" style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '15px' }}>
                     <span className="total-label">Total:</span>
                     <span className="total-value">₱{order.total?.toFixed(2) || "0.00"}</span>
                   </div>
+                  
+                  {/* FIXED: Use the centralized action button container */}
                   <div className="order-actions">
+                    {(order.currentStatus === 'pickedup' || order.currentStatus === 'delivering') && (
+                      <Button
+                        variant="success"
+                        className="navigate-route-button action-btn"
+                        onClick={() => navigateToRoute(order)}
+                      >
+                        <FaMapMarkedAlt className="me-2" /> Navigate Route
+                      </Button>
+                    )}
+                    
                     {shouldRenderButton(order.currentStatus) && (
                       <Button
                         variant="primary"
-                        className={`status-change-button ${getButtonClass(order.currentStatus)}`}
+                        className={`status-change-button action-btn ${getButtonClass(order.currentStatus)}`}
                         onClick={() => handleProgressiveStatusChange(order.id, order.currentStatus)}
                       >
                         {getButtonText(order.currentStatus)}
-                      </Button>
-                    )}
-                    {(order.currentStatus === 'pickedup' || order.currentStatus === 'delivering') && (
-                      <Button
-                        variant="secondary"
-                        className="navigate-route-button"
-                        onClick={() => navigateToRoute(order)}
-                      >
-                        Navigate Route
                       </Button>
                     )}
                   </div>
@@ -958,24 +926,6 @@
               </Modal.Body>
             </Modal>
           )}
-        </div>
-
-        {/* Mobile Bottom Navigation Bar - ONLY visible on mobile via CSS media query */}
-        <div className="mobile-bottom-nav">
-          <ul className="bottom-nav-menu">
-            <li onClick={navigateToDashboard} style={{ cursor: 'pointer' }}>
-              <FaHome />
-              <span>Dashboard</span>
-            </li>
-            <li onClick={navigateToHistory} style={{ cursor: 'pointer' }}>
-              <FaHistory />
-              <span>History</span>
-            </li>
-            <li onClick={handleLogout} style={{ cursor: 'pointer' }}>
-              <FaSignOutAlt />
-              <span>Logout</span>
-            </li>
-          </ul>
         </div>
       </div>
     );

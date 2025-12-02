@@ -1,0 +1,178 @@
+/* --- HEADER STYLES --- */
+.rider-header {
+    background-color: transparent !important;
+    padding: 15px 0 !important;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.rider-header .page-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #2c3e50;
+    margin: 0;
+}
+
+/* --- UNIFIED STATS STRIP STYLES --- */
+.stats-summary-strip {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr); /* Always 3 columns */
+    gap: 15px;
+    margin-bottom: 25px;
+    width: 100%;
+}
+
+.stat-card {
+    background-color: #ffffff;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+    border: 1px solid rgba(0,0,0,0.02);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(0,0,0,0.08);
+}
+
+/* Icon Styling */
+.stat-icon-wrapper {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}
+
+.active-icon { background-color: #fff3e0; color: #e67e22; }
+.success-icon { background-color: #e8f5e9; color: #2ecc71; }
+.warning-icon { background-color: #fff8e1; color: #f1c40f; }
+
+/* Text Content Styling */
+.stat-content {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0; /* Prevents flex overflow */
+}
+
+.stat-value {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: #2c3e50;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.stat-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #95a5a6;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+}
+
+/* Earnings Specifics */
+.earnings-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.stats-filter-select {
+    border: none;
+    background-color: #f8f9fa;
+    color: #6c757d;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 6px;
+    padding: 2px 6px;
+    cursor: pointer;
+    outline: none;
+}
+
+/* --- MOBILE RESPONSIVE TWEAKS --- */
+@media (max-width: 991px) {
+    .rider-header-summary-container {
+        margin-left: 10px;
+        margin-right: 5px;
+        margin-top: -30px;
+    }
+
+    .stats-summary-strip {
+        gap: 10px;
+    }
+
+    .stat-card {
+        padding: 12px 5px; /* Smaller padding on mobile */
+        flex-direction: column; /* Stack Icon & Text vertically on mobile */
+        text-align: center;
+        gap: 6px;
+    }
+
+    .stat-icon-wrapper {
+        width: 36px;
+        height: 36px;
+        font-size: 1rem;
+        border-radius: 50%; /* Circle icons on mobile looks cleaner */
+    }
+
+    .stat-content {
+        align-items: center;
+        justify-content: center; /* Center content vertically */
+    }
+
+    .stat-value {
+        font-size: 1.1rem;
+    }
+
+    .stat-label {
+        font-size: 0.7rem;
+        margin-top: 0; /* Remove top margin on mobile for tighter fit */
+    }
+
+    .earnings-top {
+        flex-direction: column; /* Stack price and dropdown on very small screens */
+        gap: 4px; /* Slight gap between price and dropdown */
+        justify-content: center;
+        width: 100%;
+    }
+    
+    .stats-filter-select {
+        margin-top: 0;
+        font-size: 0.65rem; /* Slightly smaller text for dropdown */
+        padding: 0;
+        background: transparent;
+        text-align: center;
+        width: 100%;
+        text-align-last: center;
+    }
+}
+
+/* Mobile Header Elements */
+.mobile-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #4a9ba5;
+    cursor: pointer;
+}
+
+.mobile-bell-icon {
+    font-size: 1.2rem;
+    color: #7f8c8d;
+}

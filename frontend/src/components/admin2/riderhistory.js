@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from "react-router-dom";
-import { FaChevronDown, FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaUndo, FaSignOutAlt, FaTimesCircle, FaExchangeAlt, FaBars, FaHome, FaHistory, FaCog, FaCreditCard, FaUserTie, FaAngleLeft, FaAngleRight, FaAngleDoubleLeft, FaAngleDoubleRight, FaEye } from "react-icons/fa";
+import { useLocation, useNavigate } from "react-router-dom";
+import { FaChevronDown, FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaUndo, FaSignOutAlt, FaTimesCircle, FaExchangeAlt, FaBars, FaCog, FaCreditCard, FaUserTie, FaAngleLeft, FaAngleRight, FaAngleDoubleLeft, FaAngleDoubleRight, FaEye } from "react-icons/fa";
 import { Form, Container, Table, Card, Button } from "react-bootstrap";
 import riderImage from "../../assets/rider.jpg";
-import logoImage from "../../assets/logo.png";
 import "./riderhome.css";
+import RiderSidebar from "./RiderSidebar";
+import RiderMobileNav from "./RiderMobileNav";
 
 import Swal from 'sweetalert2';
 
@@ -24,6 +25,7 @@ function RiderHistory() {
   const [userLoading, setUserLoading] = useState(true); 
 
   const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
@@ -313,11 +315,15 @@ function RiderHistory() {
 
 
   const navigateToDashboard = () => {
-    window.location.href = "/rider/home";
+    navigate("/rider/home");
   };
 
   const navigateToHistory = () => {
-    window.location.href = "/rider/riderhistory";
+    navigate("/rider/riderhistory");
+  };
+
+  const navigateToNotifications = () => {
+    navigate("/rider/notifications");
   };
 
   const handleLogout = () => {
@@ -371,28 +377,14 @@ function RiderHistory() {
 
   return (
     <div className="rider-dashboard-container">
-      {/* Desktop Sidebar - Conditionally rendered for desktop view (> 991px) and controlled by isSidebarOpen */}
-      {isSidebarOpen && window.innerWidth > 991 && (
-        <div className="sidebar desktop-sidebar">
-          <div className="sidebar-header">
-            <img src={logoImage} alt="Logo" className="logo" />
-          </div>
-          <ul className="sidebar-menu">
-            <li onClick={navigateToDashboard} style={{ cursor: 'pointer' }}>
-              <FaHome />
-              {isSidebarOpen && <span>Dashboard</span>}
-            </li>
-            <li onClick={navigateToHistory} style={{ cursor: 'pointer' }}>
-              <FaHistory />
-              {isSidebarOpen && <span>History</span>}
-            </li>
-            <li onClick={handleLogout} style={{ cursor: 'pointer' }}>
-              <FaSignOutAlt />
-              {isSidebarOpen && <span>Logout</span>}
-            </li>
-          </ul>
-        </div>
-      )}
+      <RiderSidebar
+        isSidebarOpen={isSidebarOpen}
+        setIsSidebarOpen={setIsSidebarOpen}
+        navigateToDashboard={navigateToDashboard}
+        navigateToHistory={navigateToHistory}
+        navigateToNotifications={navigateToNotifications}
+        handleLogout={handleLogout}
+      />
 
       <div className="main-content">
         <header className="manage-header">
@@ -702,23 +694,12 @@ function RiderHistory() {
         </div>
       </div>
 
-      {/* Mobile Bottom Navigation Bar (Added for responsiveness) */}
-      <div className="mobile-bottom-nav">
-        <ul className="bottom-nav-menu">
-          <li onClick={navigateToDashboard} style={{ cursor: 'pointer' }}>
-            <FaHome />
-            <span>Dashboard</span>
-          </li>
-          <li className="active" onClick={navigateToHistory} style={{ cursor: 'pointer' }}>
-            <FaHistory />
-            <span>History</span>
-          </li>
-          <li onClick={handleLogout} style={{ cursor: 'pointer' }}>
-            <FaSignOutAlt />
-            <span>Logout</span>
-          </li>
-        </ul>
-      </div>
+      <RiderMobileNav
+        navigateToDashboard={navigateToDashboard}
+        navigateToHistory={navigateToHistory}
+        navigateToNotifications={navigateToNotifications}
+        handleLogout={handleLogout}
+      />
     </div>
   );
 }
