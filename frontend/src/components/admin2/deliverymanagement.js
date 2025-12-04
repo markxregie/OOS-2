@@ -213,6 +213,23 @@ function DeliveryManagement() {
       // Refresh data silently in background to sync with backend
       fetchInitialData(true, false);
 
+      // Send notification to the assigned rider
+      try {
+        const rider = riders.find(r => r.UserID.toString() === riderId);
+        if (rider) {
+          await fetch("http://localhost:7002/notifications/create?username=" + encodeURIComponent(rider.UserID) + "&title=New%20Order%20Assigned&message=Order%20%23" + orderId + "%20has%20been%20assigned%20to%20you.%20Please%20proceed%20to%20pickup.&type=info&order_id=" + orderId, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${authToken}`,
+              "Content-Type": "application/json"
+            }
+          });
+        }
+      } catch (error) {
+        console.error("Failed to send notification:", error);
+        // Don't show error to user as assignment was successful
+      }
+
       Swal.fire({
         title: "Rider Assigned Successfully!",
         text: "The rider has been assigned to this order.",

@@ -16,10 +16,13 @@ const RiderNotifications = () => {
   const [riderId, setRiderId] = useState(localStorage.getItem("riderId") || "");
   const [riderName, setRiderName] = useState(localStorage.getItem("riderName") || "");
   const [riderPhone, setRiderPhone] = useState(localStorage.getItem("riderPhone") || "");
-  
+
   const [orders, setOrders] = useState([]);
   const [earnings, setEarnings] = useState({ totalEarnings: 0.0 });
   const [earningsFilter, setEarningsFilter] = useState("Daily");
+
+  const [notifications, setNotifications] = useState([]);
+  const [ws, setWs] = useState(null);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -118,65 +121,112 @@ const RiderNotifications = () => {
     return total.toFixed(2);
   };
 
-  // --- NOTIFICATION DATA (Grouped Logic) ---
-  // Ideally, this comes from an API endpoint like /notifications
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      type: 'info',
-      title: 'New Order Assigned',
-      message: 'Order #105 has been assigned to you. Please proceed to pickup.',
-      date: 'Today',
-      time: '10:30 AM',
-      read: false
-    },
-    {
-      id: 2,
-      type: 'success',
-      title: 'Tip Received',
-      message: 'Customer from Order #98 sent you a tip of ₱50.00!',
-      date: 'Today',
-      time: '09:15 AM',
-      read: true
-    },
-    {
-      id: 3,
-      type: 'warning',
-      title: 'Heavy Traffic Alert',
-      message: 'High congestion reported near Quezon Ave. Expect delays.',
-      date: 'Yesterday',
-      time: '05:45 PM',
-      read: true
-    },
-    {
-      id: 4,
-      type: 'success',
-      title: 'Weekly Payout',
-      message: 'Your earnings of ₱4,250.00 for last week have been processed.',
-      date: 'Yesterday',
-      time: '08:00 AM',
-      read: true
-    },
-    {
-        id: 5,
-        type: 'info',
-        title: 'System Update',
-        message: 'The rider app will undergo maintenance on Sunday at 2 AM.',
-        date: 'Dec 01, 2025',
-        time: '12:00 PM',
-        read: true
+  // --- FETCH NOTIFICATIONS ---
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      if (!riderId || !authToken) return;
+      try {
+        const response = await fetch(`http://localhost:7002/notifications/${riderId}`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const data = await response.json();
+        // Transform API data to match UI format
+        const transformedNotifications = data.map(notif => ({
+          id: notif.id,
+          type: notif.type,
+          title: notif.title,
+          message: notif.message,
+          date: new Date(notif.createdAt).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+          time: new Date(notif.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }),
+          read: notif.isRead
+        }));
+        setNotifications(transformedNotifications);
+      } catch (e) {
+        console.error('Failed to fetch notifications:', e);
       }
-  ]);
+    };
+    fetchNotifications();
+  }, [riderId, authToken]);
+
+  // --- WEBSOCKET CONNECTION ---
+  useEffect(() => {
+    if (!riderId || !authToken) return;
+
+    const wsUrl = `ws://localhost:7002/ws/notifications/${riderId}?token=${encodeURIComponent(authToken)}`;
+    const websocket = new WebSocket(wsUrl);
+
+    websocket.onopen = () => {
+      console.log('WebSocket connected for notifications');
+      setWs(websocket);
+    };
+
+    websocket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      console.log('Received notification:', data);
+      // Add new notification to the list
+      const newNotification = {
+        id: data.order_id || Date.now(), // Use order_id or timestamp as fallback
+        type: data.type,
+        title: data.title,
+        message: data.message,
+        date: 'Today',
+        time: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }),
+        read: false
+      };
+      setNotifications(prev => [newNotification, ...prev]);
+    };
+
+    websocket.onclose = () => {
+      console.log('WebSocket disconnected');
+      setWs(null);
+    };
+
+    websocket.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+
+    return () => {
+      if (websocket) {
+        websocket.close();
+      }
+    };
+  }, [riderId, authToken]);
 
   // --- MARK AS READ LOGIC ---
-  const markAsRead = (id) => {
-    setNotifications(notifications.map(n => 
-        n.id === id ? { ...n, read: true } : n
-    ));
+  const markAsRead = async (id) => {
+    try {
+      const response = await fetch(`http://localhost:7002/notifications/${id}/read`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      if (response.ok) {
+        setNotifications(notifications.map(n =>
+            n.id === id ? { ...n, read: true } : n
+        ));
+      }
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, read: true })));
+  const markAllAsRead = async () => {
+    try {
+      const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
+      if (unreadIds.length === 0) return;
+
+      const promises = unreadIds.map(id =>
+        fetch(`http://localhost:7002/notifications/${id}/read`, {
+          method: 'PUT',
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        })
+      );
+
+      await Promise.all(promises);
+      setNotifications(notifications.map(n => ({ ...n, read: true })));
+    } catch (error) {
+      console.error('Failed to mark all notifications as read:', error);
+    }
   };
 
   // Helper to group by date
