@@ -864,7 +864,7 @@ import Swal from 'sweetalert2';
                   </div>
                   <div className="order-details mobile-stack"> 
                     <p className="detail-item"><FaClock color="#4b929d" /> <strong>Ordered:</strong> <span className="detail-value">{new Date(order.orderedAt).toLocaleString()}</span></p>
-                    <p className="detail-item"><FaUser color="#4b929d" /> <strong>Customer:</strong> <span className="detail-value">{order.customerName}</span></p>
+                    <p className="detail-item"><FaUser color="#4b929d" /> <strong>Customer:</strong> <span className="detail-value">{(() => { const parts = order.customerName.split(' '); return parts.length > 0 && /\d/.test(parts[0]) ? parts.slice(1).join(' ') : order.customerName; })()}</span></p>
                     
                     {/* Collapsible Address/Phone for cleaner mobile view */}
                     <p className="detail-item"><FaMapMarkerAlt color="#4b929d" /> <strong>Address:</strong> <span className="detail-value">{order.address}</span></p>
@@ -957,7 +957,7 @@ import Swal from 'sweetalert2';
           {showMapModal && selectedOrder && (
             <Modal centered show={showMapModal} onHide={() => setShowMapModal(false)} size="xl" scrollable>
               <Modal.Header closeButton>
-                <Modal.Title>Navigate to {selectedOrder.customerName}'s Address</Modal.Title>
+                <Modal.Title>Navigate to {(() => { const parts = selectedOrder.customerName.split(' '); return parts.length > 0 && /\d/.test(parts[0]) ? parts.slice(1).join(' ') : selectedOrder.customerName; })()}'s Address</Modal.Title>
               </Modal.Header>
               <Modal.Body style={{ maxHeight: '200vh', overflowY: 'auto' }}>
                 <div ref={riderMapRef} style={{ height: '650px', width: '100%' }} />

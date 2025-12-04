@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Form, Offcanvas, Button } from "react-bootstrap"; // Added Offcanvas, Button
-import { FaChevronDown, FaBell, FaBoxOpen, FaCheckCircle, FaBars, FaUndo, FaSignOutAlt, FaWallet, FaUser, FaPhone } from "react-icons/fa";
+import { FaChevronDown, FaBoxOpen, FaCheckCircle, FaBars, FaUndo, FaSignOutAlt, FaWallet, FaUser, FaPhone } from "react-icons/fa";
 import riderImage from "../../assets/rider.jpg";
 import './RiderHeaderSummary.css'; 
 
@@ -49,7 +49,6 @@ const RiderHeaderSummary = ({
           
           {/* Desktop Profile Section */}
           <div className="header-profile d-none d-lg-flex">
-            <div className="bell-icon"><FaBell className="bell-outline" /></div>
             <div className="profile-pic" style={{ backgroundImage: `url(${riderImage})` }}></div>
             <div className="profile-info">
               <div className="profile-role">{getGreeting()}! I'm {userRole}</div>
@@ -70,7 +69,6 @@ const RiderHeaderSummary = ({
 
           {/* Mobile Profile Icon */}
           <div className="d-flex d-lg-none align-items-center gap-3">
-             <div className="mobile-bell-icon"><FaBell /></div>
              {/* UPDATED: Click opens Drawer instead of Dropdown */}
              <div className="mobile-profile-icon" onClick={() => setShowMobileProfile(true)}>
                 <img src={riderImage} alt="Profile" className="mobile-avatar" />

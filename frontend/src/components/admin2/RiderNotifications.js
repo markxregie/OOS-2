@@ -122,30 +122,31 @@ const RiderNotifications = () => {
   };
 
   // --- FETCH NOTIFICATIONS ---
+  const fetchNotifications = async () => {
+    if (!riderId || !authToken) return;
+    try {
+      const response = await fetch(`http://localhost:7002/notifications/${riderId}`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      // Transform API data to match UI format
+      const transformedNotifications = data.map(notif => ({
+        id: notif.id,
+        type: notif.type,
+        title: notif.title,
+        message: notif.message,
+        date: new Date(notif.createdAt).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+        time: new Date(notif.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }),
+        read: notif.isRead
+      }));
+      setNotifications(transformedNotifications);
+    } catch (e) {
+      console.error('Failed to fetch notifications:', e);
+    }
+  };
+
   useEffect(() => {
-    const fetchNotifications = async () => {
-      if (!riderId || !authToken) return;
-      try {
-        const response = await fetch(`http://localhost:7002/notifications/${riderId}`, {
-          headers: { 'Authorization': `Bearer ${authToken}` }
-        });
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        const data = await response.json();
-        // Transform API data to match UI format
-        const transformedNotifications = data.map(notif => ({
-          id: notif.id,
-          type: notif.type,
-          title: notif.title,
-          message: notif.message,
-          date: new Date(notif.createdAt).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
-          time: new Date(notif.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }),
-          read: notif.isRead
-        }));
-        setNotifications(transformedNotifications);
-      } catch (e) {
-        console.error('Failed to fetch notifications:', e);
-      }
-    };
     fetchNotifications();
   }, [riderId, authToken]);
 
@@ -161,20 +162,11 @@ const RiderNotifications = () => {
       setWs(websocket);
     };
 
-    websocket.onmessage = (event) => {
+    websocket.onmessage = async (event) => {
       const data = JSON.parse(event.data);
       console.log('Received notification:', data);
-      // Add new notification to the list
-      const newNotification = {
-        id: data.order_id || Date.now(), // Use order_id or timestamp as fallback
-        type: data.type,
-        title: data.title,
-        message: data.message,
-        date: 'Today',
-        time: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }),
-        read: false
-      };
-      setNotifications(prev => [newNotification, ...prev]);
+      // Refetch notifications to ensure UI updates with latest data
+      await fetchNotifications();
     };
 
     websocket.onclose = () => {
@@ -238,6 +230,9 @@ const RiderNotifications = () => {
     groups[date].push(notif);
     return groups;
   }, {});
+
+  // Calculate unread notification count
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   const getIcon = (type) => {
     switch (type) {
@@ -322,8 +317,8 @@ const RiderNotifications = () => {
                       <div
                         key={notification.id}
                         className={`notification-card ${!notification.read ? 'unread' : ''}`}
-                        onClick={() => !notification.read && markAsRead(notification.id)} // Allow clicking card to read
-                        style={{ cursor: !notification.read ? 'pointer' : 'default' }}
+                        onClick={() => { if (!notification.read) markAsRead(notification.id); navigateToDashboard(); }} // Mark as read if unread and navigate to home
+                        style={{ cursor: 'pointer' }}
                       >
                         <div className="notification-left">
                             {getIcon(notification.type)}
