@@ -106,6 +106,29 @@ const Report = () => {
   const [modalData, setModalData] = useState(null); // Stores the snapshot of data for the modal
   const [isHashing, setIsHashing] = useState(false); // Loading state for blockchain
   const [reportHash, setReportHash] = useState(null); // The generated hash
+  const [explorerUrl, setExplorerUrl] = useState(null); // Explorer URL from backend
+
+  // Fetch stored hash on modal open for the selected date range
+  useEffect(() => {
+    const loadStoredHash = async () => {
+      if (!showReportModal || !modalData) return;
+      try {
+        const resp = await fetch('http://127.0.0.1:7006/blockchain/report-hash', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ startDate: modalData.startDate, endDate: modalData.endDate })
+        });
+        const res = await resp.json();
+        if (res.success && res.transactionHash) {
+          setReportHash(res.transactionHash);
+          setExplorerUrl(res.explorerUrl || null);
+        }
+      } catch (e) {
+        console.warn('No stored hash found for date range');
+      }
+    };
+    loadStoredHash();
+  }, [showReportModal, modalData]);
 
   // --- ORDER DETAILS MODAL STATE ---
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -313,24 +336,77 @@ const Report = () => {
       setShowDetailsModal(true);
   };
 
-  // --- BLOCKCHAIN SIMULATION FUNCTION ---
-  const secureReportOnBlockchain = () => {
+  // --- REAL BLOCKCHAIN API CALL FUNCTION ---
+  const secureReportOnBlockchain = async () => {
       setIsHashing(true);
       
-      // Simulate API call to Blockchain Node
-      setTimeout(() => {
-          // Generate a fake hash (In real app, this comes from the Smart Contract)
-          const fakeHash = "0x" + Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-          setReportHash(fakeHash);
+      try {
+          // Call the actual blockchain service
+          const response = await fetch('http://127.0.0.1:7006/blockchain/mint-report', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                  startDate: modalData.startDate,
+                  endDate: modalData.endDate,
+                  totalRevenue: modalData.totalRevenue,
+                  totalOrders: modalData.totalOrders,
+                  avgOrderValue: modalData.avgOrderValue,
+                  completionRate: modalData.completionRate,
+                  orders: modalData.orders.map(order => ({
+                      id: order.id,
+                      date: order.date,
+                      customer: order.customer,
+                      status: order.status,
+                      total: order.total,
+                      paymentMethod: order.paymentMethod
+                  }))
+              })
+          });
+
+          const result = await response.json();
+          
+          if (result.success && result.transactionHash) {
+              setReportHash(result.transactionHash);
+              setExplorerUrl(result.explorerUrl || null);
+              setIsHashing(false);
+
+              // Persist report + hash snapshot in backend
+              try {
+                await fetch('http://127.0.0.1:7006/blockchain/report-hash', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ startDate: modalData.startDate, endDate: modalData.endDate })
+                });
+              } catch {}
+              
+              Swal.fire({
+                  icon: 'success',
+                  title: 'Report Secured on Blockchain!',
+                  html: `
+                      <p>This report has been permanently recorded on the BuildBear blockchain.</p>
+                      <p style="font-family: monospace; font-size: 0.9em; word-break: break-all; background: #f0f0f0; padding: 10px; border-radius: 5px;">
+                          <strong>TX Hash:</strong> ${result.transactionHash}
+                      </p>
+                      ${result.explorerUrl ? `<a href="${result.explorerUrl}" target="_blank" rel="noopener noreferrer" style="color: #4a9ba5;">View on BuildBear Explorer</a>` : ''}
+                  `,
+                  confirmButtonColor: '#4a9ba5'
+              });
+          } else {
+              throw new Error(result.error || 'Failed to mint report');
+          }
+      } catch (error) {
+          console.error('Blockchain minting error:', error);
           setIsHashing(false);
           
           Swal.fire({
-            icon: 'success',
-            title: 'Report Secured',
-            text: 'This report has been permanently recorded on the blockchain.',
-            confirmButtonColor: '#4a9ba5'
+              icon: 'error',
+              title: 'Blockchain Minting Failed',
+              text: `Error: ${error.message || 'Unable to connect to blockchain service'}`,
+              confirmButtonColor: '#dc3545'
           });
-      }, 3000); // 3 second simulated delay
+      }
   };
 
   const handleExport = (option) => {
@@ -917,10 +993,73 @@ const Report = () => {
 
                     {reportHash && (
                         <div className="animate__animated animate__fadeIn">
-                            <p style={{ color: '#27ae60', fontWeight: 'bold' }}>Report successfully secured!</p>
-                            <div style={{ background: '#e8f5e9', padding: '10px', borderRadius: '5px', wordBreak: 'break-all', fontFamily: 'monospace', color: '#2e7d32', border: '1px solid #c8e6c9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <div><strong>Transaction Hash:</strong> {reportHash}</div>
-                                <FontAwesomeIcon icon={faClipboard} style={{ cursor: 'pointer', color: '#4a9ba5' }} onClick={() => { navigator.clipboard.writeText(reportHash); Swal.fire('Copied!', 'Hash copied to clipboard.', 'success'); }} />
+                            <p style={{ color: '#27ae60', fontWeight: 'bold', fontSize: '1.1rem' }}>
+                                <FontAwesomeIcon icon={faCheckCircle} /> Report successfully secured on blockchain!
+                            </p>
+                            
+                            {/* Transaction Hash Display */}
+                            <div style={{ 
+                                background: '#e8f5e9', 
+                                padding: '15px', 
+                                borderRadius: '8px', 
+                                wordBreak: 'break-all', 
+                                fontFamily: 'monospace', 
+                                color: '#2e7d32', 
+                                border: '1px solid #c8e6c9', 
+                                marginBottom: '15px' 
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <strong>Transaction Hash:</strong>
+                                        <div style={{ fontSize: '0.9em', marginTop: '5px' }}>{reportHash}</div>
+                                    </div>
+                                    <FontAwesomeIcon 
+                                        icon={faClipboard} 
+                                        style={{ cursor: 'pointer', color: '#4a9ba5', fontSize: '1.2rem', marginLeft: '10px' }} 
+                                        onClick={() => { 
+                                            navigator.clipboard.writeText(reportHash); 
+                                            Swal.fire({
+                                                icon: 'success',
+                                                title: 'Copied!',
+                                                text: 'Transaction hash copied to clipboard.',
+                                                timer: 2000,
+                                                showConfirmButton: false
+                                            }); 
+                                        }} 
+                                        title="Copy to clipboard"
+                                    />
+                                </div>
+                                
+                                {/* BuildBear Explorer Link */}
+                                <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #c8e6c9' }}>
+                                  <a 
+                                    href={explorerUrl || `https://explorer.buildbear.io/selfish-gilgamesh-91962214/tx/${reportHash}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        style={{ 
+                                            color: '#4a9ba5', 
+                                            textDecoration: 'none',
+                                            fontWeight: 'bold',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '8px'
+                                        }}
+                                    >
+                                        <FontAwesomeIcon icon={faLink} />
+                                        View Transaction on BuildBear Explorer
+                                        <span style={{ fontSize: '1.2rem' }}>↗</span>
+                                    </a>
+                                </div>
+                            </div>
+                            
+                            {/* Additional Info */}
+                            <div style={{ fontSize: '0.85rem', color: '#6c757d', textAlign: 'left' }}>
+                                <p style={{ marginBottom: '5px' }}>
+                                    <FontAwesomeIcon icon={faLock} /> This report is now permanently recorded on the BuildBear blockchain.
+                                </p>
+                                <p style={{ marginBottom: '0' }}>
+                                    The transaction hash serves as cryptographic proof of the report's authenticity and timestamp.
+                                </p>
                             </div>
                         </div>
                     )}
