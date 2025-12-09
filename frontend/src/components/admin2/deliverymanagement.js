@@ -348,34 +348,40 @@ function DeliveryManagement() {
     });
 
     if (formValues) {
-      // Here you would typically send the data to your backend API
-      console.log("Saving new delivery fees:", formValues);
-      
-      // For now, we'll just update the local state
-      setDeliveryFees(formValues);
-
-      // Mock API call success
-      Swal.fire({
-        title: 'Success!',
-        text: 'Delivery fee settings have been updated.',
-        icon: 'success',
-        confirmButtonColor: '#4b929d'
-      });
-
-      // Example of what a real API call might look like:
-      /*
       try {
-        const response = await fetch('http://localhost:7004/delivery/admin/fees', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-          body: JSON.stringify(formValues)
+        const response = await fetch('http://localhost:7001/delivery/settings', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({
+            BaseFee: formValues.baseFee,
+            BaseDistanceKm: formValues.baseDistance,
+            ExtraFeePerKm: formValues.surchargePerKm,
+            MaxRadiusKm: formValues.maxRadius,
+            IsSurgePricingActive: formValues.surgePricing,
+            SurgeFlatFee: 20.00 // Assuming fixed for now
+          })
         });
         if (!response.ok) throw new Error('Failed to save settings');
-        // ... handle success
+        // Update local state
+        setDeliveryFees(formValues);
+        Swal.fire({
+          title: 'Success!',
+          text: 'Delivery fee settings have been updated.',
+          icon: 'success',
+          confirmButtonColor: '#4b929d'
+        });
       } catch (err) {
-        // ... handle error
+        console.error('Error saving settings:', err);
+        Swal.fire({
+          title: 'Error',
+          text: 'Failed to save delivery settings. Please try again.',
+          icon: 'error',
+          confirmButtonColor: '#dc3545'
+        });
       }
-      */
     }
   };
 
