@@ -697,6 +697,12 @@ function DeliveryManagement() {
                 </div>
               ))}
               <hr style={{ alignSelf: "stretch" }} />
+              {order.deliveryFee && order.deliveryFee > 0 && ( // Display delivery fee if available
+                <p style={{ fontWeight: "600", marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}>
+                  <span>Delivery Fee</span>
+                  <span style={{ marginLeft: "auto" }}>₱{order.deliveryFee.toFixed(2)}</span>
+                </p>
+              )}
               <p style={{ fontWeight: "600", marginBottom: "0", alignSelf: "flex-start", color: "black", display: "flex", justifyContent: "space-between", width: "100%" }}>
                 <span>Total</span>
                 <span style={{ marginLeft: "auto" }}>₱{order.total.toFixed(2)}</span>

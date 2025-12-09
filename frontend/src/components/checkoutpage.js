@@ -6,8 +6,8 @@ import './checkout.css';
 const CheckoutPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { clearCart } = useContext(CartContext);
-  const { cartItems = [], orderType = 'Pick Up', paymentMethod = 'Cash' } = location.state || {};
+  const { clearCart } = useContext(CartContext); // Receive deliveryFee from location.state
+  const { cartItems = [], orderType = 'Pick Up', paymentMethod = 'Cash', deliveryFee = 0 } = location.state || {};
 
   const [userData, setUserData] = useState({
     username: '',
@@ -96,7 +96,8 @@ const CheckoutPage = () => {
       const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
       return acc + (item.price + addonSum) * item.quantity;
     }, 0);
-    const deliveryFee = orderType === 'Delivery' ? 50 : 0;
+    // Use the passed deliveryFee instead of hardcoded 50
+    const currentDeliveryFee = orderType === 'Delivery' ? deliveryFee : 0;
     return subtotal + deliveryFee;
   };
 
@@ -117,13 +118,14 @@ const confirmPayment = async (saved) => {
   if (!token || !saved) return;
 
   const { cartItems, orderType, paymentMethod, userData: savedUserData, deliveryNotes, reference_number } = saved;
+  // Destructure deliveryFee from saved data
+  const { deliveryFee: savedDeliveryFee } = saved;
   const subtotal = cartItems.reduce((acc, item) => {
     const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
     return acc + (item.price + addonSum) * item.quantity;
   }, 0);
-  const deliveryFee = orderType === "Delivery" ? 50 : 0;
-  const total = subtotal + deliveryFee;
-
+  const currentDeliveryFee = orderType === "Delivery" ? savedDeliveryFee : 0;
+  const total = subtotal + currentDeliveryFee;
   const cartPayload = cartItems.map(item => ({
     product_id: item.product_id,
     product_name: item.product_name,
@@ -170,7 +172,7 @@ const confirmPayment = async (saved) => {
         order_type: orderType,
         payment_method: paymentMethod,
         subtotal,
-        delivery_fee: deliveryFee,
+        delivery_fee: currentDeliveryFee, // Use currentDeliveryFee here
         total,
         notes: deliveryNotes || "",
         cart_items: cartPayload,
@@ -255,7 +257,8 @@ const confirmPayment = async (saved) => {
     const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
     return acc + (item.price + addonSum) * item.quantity;
   }, 0);
-  const deliveryFee = orderType === "Delivery" ? 50 : 0;
+  // Use the passed deliveryFee here
+  const currentDeliveryFee = orderType === "Delivery" ? deliveryFee : 0;
   const total = subtotal + deliveryFee;
   const reference_number = `REF-${Date.now()}`;
 
@@ -285,7 +288,8 @@ const confirmPayment = async (saved) => {
       paymentMethod,
       userData: currentUserData,
       deliveryNotes,
-      reference_number
+      reference_number,
+      deliveryFee: currentDeliveryFee, // Pass deliveryFee here
     };
 
     await confirmPayment(savedData);
@@ -297,11 +301,12 @@ const confirmPayment = async (saved) => {
       paymentMethod,
       userData: currentUserData,
       deliveryNotes,
-      reference_number
+      reference_number, // Missing comma here
+      deliveryFee: currentDeliveryFee, // Pass deliveryFee here
     }));
 
-    const deliveryFee = orderType === "Delivery" ? 50 : 0;
-    // --- Construct detailed items list for PayMongo ---
+    // Use the passed deliveryFee here
+    const paymongoDeliveryFee = orderType === "Delivery" ? currentDeliveryFee : 0;
     const itemsForCheckout = cartItems.map(item => {
       const addonList = item.addons?.map(addon =>
         `${addon.addon_name || addon.AddOnName || addon.name} (₱${addon.price || addon.Price || 0})`
@@ -325,7 +330,7 @@ const confirmPayment = async (saved) => {
           reference_number,
           redirect_url: window.location.origin + "/checkout",
           items: itemsForCheckout,
-          delivery_fee: deliveryFee,
+          delivery_fee: paymongoDeliveryFee, // Use paymongoDeliveryFee here
           order_type: orderType,
           user_data: currentUserData
         }),
@@ -437,8 +442,8 @@ const confirmPayment = async (saved) => {
         {/* --- TOTALS SECTION (COMMON FOR BOTH) --- */}
         <div className="checkout-totals-section">
           <div className="total-row">
-            <span>Delivery Fee:</span>
-            <span>₱{orderType === 'Delivery' ? '50.00' : '0.00'}</span>
+            <span>Delivery Fee:</span> {/* Use the dynamically passed deliveryFee */}
+            <span>₱{orderType === 'Delivery' ? deliveryFee.toFixed(2) : '0.00'}</span>
           </div>
           <div className="total-row grand-total">
             <strong>Grand Total:</strong>

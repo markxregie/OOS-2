@@ -9,6 +9,7 @@ import { CartContext } from '../contexts/CartContext';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import Swal from 'sweetalert2';
+import LocationVerifyModal from './LocationVerifyModal';
 
 // Store location coordinates
 const STORE_LOCATION = {
@@ -543,7 +544,7 @@ const Cart = () => {
                     const confirmButton = Swal.getConfirmButton();
                     confirmButton.onclick = () => {
                       Swal.close();
-                      navigate('/checkout', { state: { cartItems: selectedCartItems, orderType: orderTypeMain, paymentMethod: paymentMethodMain } });
+                      navigate('/checkout', { state: { cartItems: selectedCartItems, orderType: orderTypeMain, paymentMethod: paymentMethodMain, deliveryFee: calculatedFee } });
                     };
 
                     const cancelButton = Swal.getCancelButton();
@@ -589,6 +590,7 @@ const Cart = () => {
       toast.error("Please select items to checkout.");
       return;
     }
+    const token = localStorage.getItem("authToken");
   
     if (orderTypeMain === 'Delivery') {
       if (!window.isSecureContext) {
@@ -599,11 +601,11 @@ const Cart = () => {
         });
         return;
       }
-      setShowOrderModal(false);
-      showLocationCheckAlert();
+      setShowOrderModal(false); // Close the summary modal
+      setIsCheckingLocation(true); // Show the location verification modal
     } else {
       setShowOrderModal(false);
-      navigate('/checkout', { state: { cartItems: selectedCartItems, orderType: orderTypeMain, paymentMethod: paymentMethodMain } });
+      navigate('/checkout', { state: { cartItems: selectedCartItems, orderType: orderTypeMain, paymentMethod: paymentMethodMain, deliveryFee: 0 } });
     }
   };
   
@@ -675,8 +677,8 @@ const Cart = () => {
   }, 0);
   const totalForButton = (subtotalForButton + (orderTypeMain === 'Delivery' ? deliveryFee : 0)).toFixed(2);
 
-
   return (
+    <>
     <section className="container-fluid py-3 px-2 px-md-5 mt-5 pt-5" style={{ backgroundColor: '#eaf4f6', minHeight: '100vh' }}>
       {isCheckingLocation && (
         <div className="location-loader-overlay">
@@ -1047,6 +1049,17 @@ const Cart = () => {
         deliveryFee={deliveryFee} // Pass deliveryFee
       />
     </section>
+    {isCheckingLocation && (
+      <LocationVerifyModal
+        show={isCheckingLocation}
+        onClose={() => setIsCheckingLocation(false)}
+        deliverySettings={deliverySettings}
+        selectedCartItems={selectedCartItems}
+        orderTypeMain={orderTypeMain}
+        paymentMethodMain={paymentMethodMain}
+      />
+    )}
+    </>
   );
 };
 
