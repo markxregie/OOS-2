@@ -2,6 +2,7 @@ import aioodbc
 
 
 # database config
+
 server = 'DESKTOP-OD6PU2O'
 database = 'OOS'
 username = 'sa'
