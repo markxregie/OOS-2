@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Container } from "react-bootstrap";
-import { FaChevronDown, FaBell, FaSignOutAlt, FaBoxOpen, FaCheckCircle, FaSpinner, FaTruck, FaFilter, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTimesCircle, FaTruckPickup, FaTruckMoving, FaUndo, FaAngleDoubleLeft, FaAngleLeft, FaAngleRight, FaAngleDoubleRight } from "react-icons/fa";
+import { FaChevronDown, FaBell, FaSignOutAlt, FaBoxOpen, FaCheckCircle, FaSpinner, FaTruck, FaFilter, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTimesCircle, FaTruckPickup, FaTruckMoving, FaUndo, FaAngleDoubleLeft, FaAngleLeft, FaAngleRight, FaAngleDoubleRight, FaCog } from "react-icons/fa";
 import { Card, Form } from "react-bootstrap";
 import riderImage from "../../assets/rider.jpg";
 import Swal from "sweetalert2";
@@ -32,6 +32,14 @@ function DeliveryManagement() {
   const [localAssignments, setLocalAssignments] = useState(() => {
     const stored = localStorage.getItem("riderAssignments");
     return stored ? JSON.parse(stored) : {};
+  });
+
+  const [deliveryFees, setDeliveryFees] = useState({
+    baseFee: 50.0,
+    baseDistance: 3.0,
+    surchargePerKm: 10.0,
+    maxRadius: 8.0,
+    surgePricing: false,
   });
 
   // Reference for last fetch time to avoid dependency issues
@@ -275,6 +283,102 @@ function DeliveryManagement() {
     });
   };
 
+  const handleSetDeliveryFees = async () => {
+    const { value: formValues } = await Swal.fire({
+      title: 'Delivery Fee Configuration',
+      html: `
+        <div class="fee-config-form">
+          <div class="form-group">
+            <label for="swal-base-fee">Standard Base Fee (₱)</label>
+            <input id="swal-base-fee" class="swal2-input" type="number" step="0.01" value="${deliveryFees.baseFee}">
+            <small class="form-text text-muted">The minimum fee for the first X km.</small>
+          </div>
+          <div class="form-group">
+            <label for="swal-base-distance">Base Distance Coverage (km)</label>
+            <input id="swal-base-distance" class="swal2-input" type="number" step="0.1" value="${deliveryFees.baseDistance}">
+            <small class="form-text text-muted">Distance covered by the base fee.</small>
+          </div>
+          <div class="form-group">
+            <label for="swal-surcharge">Surcharge per Extra KM (₱)</label>
+            <input id="swal-surcharge" class="swal2-input" type="number" step="0.01" value="${deliveryFees.surchargePerKm}">
+            <small class="form-text text-muted">Added for every km beyond the base distance.</small>
+          </div>
+          <div class="form-group">
+            <label for="swal-max-radius">Maximum Delivery Radius (km)</label>
+            <input id="swal-max-radius" class="swal2-input" type="number" step="0.5" value="${deliveryFees.maxRadius}">
+            <small class="form-text text-muted">Orders beyond this distance will be rejected or flagged.</small>
+          </div>
+          <div class="form-group form-check-group">
+            <div class="swal2-checkbox" style="display: flex; align-items: center; justify-content: center; margin-top: 1rem;">
+              <input type="checkbox" id="swal-surge-pricing" ${deliveryFees.surgePricing ? 'checked' : ''}>
+              <label for="swal-surge-pricing" style="margin-left: 0.5rem;">Enable Surge Pricing</label>
+            </div>
+            <small class="form-text text-muted">Enable for rainy days/rush hour (adds flat +₱20).</small>
+          </div>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Save Settings',
+      confirmButtonColor: '#4b929d',
+      cancelButtonColor: '#6c757d',
+      preConfirm: () => {
+        const baseFee = document.getElementById('swal-base-fee').value;
+        const baseDistance = document.getElementById('swal-base-distance').value;
+        const surchargePerKm = document.getElementById('swal-surcharge').value;
+        const maxRadius = document.getElementById('swal-max-radius').value;
+        const surgePricing = document.getElementById('swal-surge-pricing').checked;
+
+        if (!baseFee || !baseDistance || !surchargePerKm || !maxRadius) {
+          Swal.showValidationMessage(`Please fill out all fields`);
+          return false;
+        }
+
+        return {
+          baseFee: parseFloat(baseFee),
+          baseDistance: parseFloat(baseDistance),
+          surchargePerKm: parseFloat(surchargePerKm),
+          maxRadius: parseFloat(maxRadius),
+          surgePricing: surgePricing,
+        };
+      },
+      customClass: {
+        popup: 'fee-config-swal'
+      }
+    });
+
+    if (formValues) {
+      // Here you would typically send the data to your backend API
+      console.log("Saving new delivery fees:", formValues);
+      
+      // For now, we'll just update the local state
+      setDeliveryFees(formValues);
+
+      // Mock API call success
+      Swal.fire({
+        title: 'Success!',
+        text: 'Delivery fee settings have been updated.',
+        icon: 'success',
+        confirmButtonColor: '#4b929d'
+      });
+
+      // Example of what a real API call might look like:
+      /*
+      try {
+        const response = await fetch('http://localhost:7004/delivery/admin/fees', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+          body: JSON.stringify(formValues)
+        });
+        if (!response.ok) throw new Error('Failed to save settings');
+        // ... handle success
+      } catch (err) {
+        // ... handle error
+      }
+      */
+    }
+  };
+
   const handleStatusChange = (orderId, newStatus) => {
     setOrders(prevOrders =>
       prevOrders.map(order =>
@@ -501,7 +605,26 @@ function DeliveryManagement() {
                   {rider.FullName}
                 </option>
               ))}
-            </Form.Select>
+            </Form.Select> {/* Closing tag for Form.Select */}
+            <button
+              onClick={handleSetDeliveryFees}
+              className="fee-settings-btn"
+              style={{
+                backgroundColor: '#4b929d',
+                color: 'white',
+                border: 'none',
+                padding: '0.375rem 0.75rem',
+                borderRadius: '0.25rem',
+                cursor: 'pointer',
+                fontWeight: '600',
+                marginLeft: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}>
+              <FaCog />
+              Set Delivery Fees
+            </button>
           </div>
         </div>
         {/*UPDATED: Use currentOrders which is the paginated slice */}
