@@ -1,28 +1,45 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from "react-router-dom";
-import { FaChevronDown, FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaUndo, FaSignOutAlt, FaTimesCircle, FaExchangeAlt, FaBars, FaCog, FaCreditCard, FaUserTie, FaAngleLeft, FaAngleRight, FaAngleDoubleLeft, FaAngleDoubleRight, FaEye } from "react-icons/fa";
-import { Form, Container, Table, Card, Button } from "react-bootstrap";
+import { FaChevronDown, FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaUndo, FaSignOutAlt, FaTimesCircle, FaBars, FaFilter, FaCalendarAlt, FaChevronRight, FaReceipt, FaMoneyBillWave } from "react-icons/fa";
+import { Form, Container, Table, Card, Button, Offcanvas, Badge, Row, Col } from "react-bootstrap";
 import riderImage from "../../assets/rider.jpg";
-import "./riderhome.css";
+import "./riderhome.css"; 
+import "./riderhistory.css"; 
 import RiderSidebar from "./RiderSidebar";
 import RiderMobileNav from "./RiderMobileNav";
+import RiderHeaderSummary from "./RiderHeaderSummary";
 
 import Swal from 'sweetalert2';
 
 function RiderHistory() {
   const [userRole, setUserRole] = useState("");
-  const [userName, setUserName] = useState("");
+  const [userName, setUserName] = useState(localStorage.getItem("riderName") || "");
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 991);
-  const [sortConfig, setSortConfig] = useState({ key: 'orderedAt', direction: 'descending' });
-
+  
   const [authToken, setAuthToken] = useState(localStorage.getItem("authToken"));
   const [riderId, setRiderId] = useState(localStorage.getItem("riderId") || "");
   const [riderName, setRiderName] = useState(localStorage.getItem("riderName") || "");
   const [riderPhone, setRiderPhone] = useState(localStorage.getItem("riderPhone") || "");
-  const [userLoading, setUserLoading] = useState(true); 
+  
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  
+  // FILTERS
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
+  // EARNINGS STATS FOR HEADER
+  const [earningsFilter, setEarningsFilter] = useState("Daily");
+  const [earnings, setEarnings] = useState(null);
+
+  // DETAILS DRAWER STATE
+  const [showDrawer, setShowDrawer] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -45,103 +62,12 @@ function RiderHistory() {
     const handleResize = () => {
       setIsSidebarOpen(window.innerWidth > 991);
     };
-
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      const dropdown = document.querySelector('.dropdown-icon');
-      if (dropdown && !dropdown.contains(event.target)) {
-        setDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
-  const [toggle, setToggle] = useState("completed");
-  const [orders, setOrders] = useState([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [earningsFilter, setEarningsFilter] = useState("Daily");
-  const [earnings, setEarnings] = useState(null);
-
-  const rowsPerPage = 10;
-
-  useEffect(() => {
-    const fetchOrders = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await fetch(`http://localhost:7004/delivery/rider/${riderId}/orders`, {
-          headers: { 'Authorization': `Bearer ${authToken}` }
-        });
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        // ✅ no remapping needed, backend already normalized
-        setOrders(data);
-      } catch (e) {
-        setError(e.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    if (riderId && authToken) {
-      fetchOrders();
-    }
-  }, [riderId, authToken]);
-
-  useEffect(() => {
-    const fetchEarnings = async () => {
-      if (!riderId || !authToken) {
-        return;
-      }
-
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth() + 1; // JS months are 0-indexed
-      const today = now.toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
-
-      let url = '';
-      if (earningsFilter === 'Daily') {
-        url = `http://localhost:7004/delivery/rider/${riderId}/earnings/daily?target_date=${today}`;
-      } else if (earningsFilter === 'Weekly') {
-        url = `http://localhost:7004/delivery/rider/${riderId}/earnings/weekly?target_date=${today}`;
-      } else if (earningsFilter === 'Monthly') {
-        url = `http://localhost:7004/delivery/rider/${riderId}/earnings/monthly?year=${year}&month=${month}`;
-      }
-
-      if (!url) return;
-
-      try {
-        const response = await fetch(url, {
-          headers: { 'Authorization': `Bearer ${authToken}` },
-        });
-        if (!response.ok) throw new Error(`Failed to fetch earnings: ${response.status}`);
-        const data = await response.json();
-        setEarnings(data);
-      } catch (e) {
-        console.error('Earnings fetch error:', e);
-        setEarnings({ totalEarnings: 0.0 }); // Set a default on error
-      }
-    };
-
-    fetchEarnings();
-  }, [riderId, authToken, earningsFilter]);
-
-  // Fetch user info with loading and debug logging
   useEffect(() => {
     if (authToken) {
-      setUserLoading(true);
-      console.log("Fetching user info");
       fetch("http://localhost:4000/auth/users/me", {
         headers: { "Authorization": `Bearer ${authToken}` }
       })
@@ -156,7 +82,6 @@ function RiderHistory() {
           return res.json();
         })
         .then(async data => {
-          console.log("User data:", data);
           if (!data) return;
           const userId = data.userId || "";
           const userRoleData = data.userRole || "";
@@ -172,7 +97,6 @@ function RiderHistory() {
           setUserRole(userRoleData);
           setUserName(fallbackName);
 
-          // Fetch rider details from riders endpoint
           if (userId) {
             try {
               const riderRes = await fetch(`http://localhost:4000/users/riders/${userId}`, {
@@ -180,7 +104,6 @@ function RiderHistory() {
               });
               if (riderRes.ok) {
                 const riderData = await riderRes.json();
-                console.log("Rider data:", riderData);
                 const riderFullName = riderData.FullName || fallbackName;
                 const riderPhone = riderData.Phone || fallbackPhone;
                 setRiderName(riderFullName);
@@ -189,7 +112,6 @@ function RiderHistory() {
                 localStorage.setItem("riderPhone", riderPhone);
                 setUserName(riderFullName);
               } else {
-                // Fallback to user data
                 setRiderName(fallbackName);
                 localStorage.setItem("riderName", fallbackName);
                 setRiderPhone(fallbackPhone);
@@ -197,38 +119,18 @@ function RiderHistory() {
               }
             } catch (err) {
               console.error("Failed to fetch rider info:", err);
-              // Fallback to user data
               setRiderName(fallbackName);
               localStorage.setItem("riderName", fallbackName);
               setRiderPhone(fallbackPhone);
               localStorage.setItem("riderPhone", fallbackPhone);
             }
-          } else {
-            setRiderName(fallbackName);
-            localStorage.setItem("riderName", fallbackName);
-            setRiderPhone(fallbackPhone);
-            localStorage.setItem("riderPhone", fallbackPhone);
           }
-          setUserLoading(false); // Done loading
         })
         .catch(err => {
           console.error("Failed to fetch user info:", err);
-          setUserLoading(false); // Done loading even on error
         });
     }
   }, [authToken]);
-
-
-
-
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentDate(new Date());
-    }, 60000);
-
-    return () => clearInterval(timer);
-  }, []);
 
   const getGreeting = () => {
     const hour = currentDate.getHours();
@@ -242,138 +144,127 @@ function RiderHistory() {
     hour: "numeric", minute: "numeric",
   });
 
-  const getStatusStyle = (status) => {
-    switch (status) {
-      case "pending":
-        return { color: "#d39e00", backgroundColor: "#fff3cd", text: "Pending" };
-      case "confirmed":
-        return { color: "#198754", backgroundColor: "#d1e7dd", text: "Confirmed" };
-      case "preparing":
-        return { color: "#2980b9", backgroundColor: "#cfe2ff", text: "Preparing" };
-      case "readyToPickup":
-        return { color: "#8e44ad", backgroundColor: "#e5dbff", text: "Ready to Pickup" };
-      case "pickedUp":
-        return { color: "#0d6efd", backgroundColor: "#cfe2ff", text: "Picked Up" };
-      case "inTransit":
-        return { color: "#6610f2", backgroundColor: "#e5dbff", text: "In Transit" };
-      case "delivering":
-        return { color: "#6610f2", backgroundColor: "#e5dbff", text: "Delivering" };
-      case "delivered":
-        return { color: "#198754", backgroundColor: "#d1e7dd", text: "Delivered" };
-      case "completed":
-        return { color: "#198754", backgroundColor: "#d1e7dd", text: "Completed" };
-      case "cancelled":
-        return { color: "#dc3545", backgroundColor: "#f8d7da", text: "Cancelled" };
-      case "returned":
-        return { color: "#fd7e14", backgroundColor: "#ffe5d0", text: "Cancelled/Returned" };
-      default:
-        return { color: "black", backgroundColor: "transparent", text: status };
+  // --- FETCH ORDERS ---
+  useEffect(() => {
+    const fetchOrders = async () => {
+      setLoading(true);
+      try {
+        const response = await fetch(`http://localhost:7004/delivery/rider/${riderId}/orders`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const data = await response.json();
+        // Set all orders for header summary, filter for history display
+        setOrders(data);
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (riderId && authToken) {
+      fetchOrders();
     }
-  };
+  }, [riderId, authToken]);
 
-  const sortedOrders = [...orders]
-    .filter(order => {
-      if (toggle === "completed") {
-        return ["delivered", "completed"].includes(order.currentStatus);
-      } else if (toggle === "all") {
-        return true;
+  // --- FETCH EARNINGS (Reused Logic) ---
+  useEffect(() => {
+    const fetchEarnings = async () => {
+      if (!riderId || !authToken) return;
+      const now = new Date();
+      const today = now.toLocaleDateString('en-CA'); 
+      let url = '';
+      if (earningsFilter === 'Daily') url = `http://localhost:7004/delivery/rider/${riderId}/earnings/daily?target_date=${today}`;
+      else if (earningsFilter === 'Weekly') url = `http://localhost:7004/delivery/rider/${riderId}/earnings/weekly?target_date=${today}`;
+      else if (earningsFilter === 'Monthly') url = `http://localhost:7004/delivery/rider/${riderId}/earnings/monthly?year=${now.getFullYear()}&month=${now.getMonth() + 1}`;
+
+      if (!url) return;
+      try {
+        const response = await fetch(url, { headers: { 'Authorization': `Bearer ${authToken}` } });
+        if (!response.ok) throw new Error('Failed');
+        const data = await response.json();
+        setEarnings(data);
+      } catch (e) {
+        setEarnings({ totalEarnings: 0.0 });
       }
-      return false;
-    })
-    .sort((a, b) => {
-      if (a[sortConfig.key] < b[sortConfig.key]) {
-        return sortConfig.direction === 'ascending' ? -1 : 1;
+    };
+    fetchEarnings();
+  }, [riderId, authToken, earningsFilter]);
+
+    const calculateEarnings = (filter) => {
+      const now = new Date();
+      let startDate;
+      if (filter === 'Daily') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      } else if (filter === 'Weekly') {
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      } else if (filter === 'Monthly') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
       }
-      if (a[sortConfig.key] > b[sortConfig.key]) {
-        return sortConfig.direction === 'ascending' ? 1 : -1;
-      }
-      return 0;
+      const completedOrders = orders.filter(order => {
+        const orderDate = new Date(order.orderedAt);
+        return ["delivered", "completed"].includes(order.currentStatus) && orderDate >= startDate;
+      });
+      const total = completedOrders.length * 50; // Assuming fixed delivery fee of ₱50 per completed order
+      return total.toFixed(2);
+    };
+
+  // --- GROUPING LOGIC ---
+  const groupedOrders = useMemo(() => {
+    let filtered = orders;
+
+    // 1. Apply Status Filter
+    if (statusFilter !== 'all') {
+        filtered = filtered.filter(o => o.currentStatus.toLowerCase() === statusFilter);
+    }
+
+    // 2. Apply Date Filter
+    if (dateFrom) {
+        filtered = filtered.filter(o => new Date(o.orderedAt) >= new Date(dateFrom));
+    }
+    if (dateTo) {
+        // Add one day to include end date fully
+        const endDate = new Date(dateTo);
+        endDate.setDate(endDate.getDate() + 1);
+        filtered = filtered.filter(o => new Date(o.orderedAt) < endDate);
+    }
+
+    // 3. Sort by Date Descending
+    filtered.sort((a, b) => new Date(b.orderedAt) - new Date(a.orderedAt));
+
+    // 4. Group by Date Header
+    const groups = {};
+    filtered.forEach(order => {
+        const date = new Date(order.orderedAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+        if (!groups[date]) groups[date] = [];
+        groups[date].push(order);
     });
 
-  const requestSort = (key) => {
-    let direction = 'ascending';
-    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending';
-    }
-    setSortConfig({ key, direction });
+    return groups;
+  }, [orders, statusFilter, dateFrom, dateTo]);
+
+  const handleOrderClick = (order) => {
+      setSelectedOrder(order);
+      setShowDrawer(true);
   };
 
-  const getSortIcon = (key) => {
-    if (sortConfig.key !== key) {
-      return '';
-    }
-    if (sortConfig.direction === 'ascending') {
-      return '▲';
-    }
-    return '▼';
+  const getStatusBadge = (status) => {
+      let variant = 'secondary';
+      if (status === 'delivered' || status === 'completed') variant = 'success';
+      else if (status === 'cancelled') variant = 'danger';
+      else if (status === 'returned') variant = 'warning';
+      
+      return <Badge bg={variant} className="status-badge-history">{status}</Badge>;
   };
 
-
-
-
-
-
-
-  const navigateToDashboard = () => {
-    navigate("/rider/home");
-  };
-
-  const navigateToHistory = () => {
-    navigate("/rider/riderhistory");
-  };
-
-  const navigateToNotifications = () => {
-    navigate("/rider/notifications");
-  };
-
+  // Navigation & Logout (Reused)
+  const navigateToDashboard = () => navigate("/rider/home");
+  const navigateToHistory = () => navigate("/rider/riderhistory");
+  const navigateToNotifications = () => navigate("/rider/notifications");
   const handleLogout = () => {
-    Swal.fire({
-      title: 'Are you sure?',
-      text: 'You will be logged out of your account.',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#d33',
-      cancelButtonColor: '#3085d6',
-      confirmButtonText: 'Yes, logout',
-      cancelButtonText: 'Cancel'
-    }).then((result) => {
-      if (result.isConfirmed) {
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("authToken");
-        localStorage.removeItem("riderId");
-        localStorage.removeItem("riderName");
-        localStorage.removeItem("riderPhone");
-        localStorage.removeItem("riderUsername");
-        window.location.replace("http://localhost:4002/");
-      }
-    });
+    localStorage.clear();
+    window.location.replace("http://localhost:4002/");
   };
-
-  // Pagination functions
-  const indexOfLastRow = currentPage * rowsPerPage;
-  const indexOfFirstRow = indexOfLastRow - rowsPerPage;
-  const currentRows = sortedOrders.slice(indexOfFirstRow, indexOfLastRow);
-  const totalPages = Math.ceil(sortedOrders.length / rowsPerPage);
-
-  const paginate = (pageNumber) => setCurrentPage(pageNumber);
-
-  const handlePrevPage = () => {
-    if (currentPage > 1) setCurrentPage(currentPage - 1);
-  };
-
-  const handleNextPage = () => {
-    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-  };
-
-  const handleFirstPage = () => {
-    setCurrentPage(1);
-  };
-
-  const handleLastPage = () => {
-    setCurrentPage(totalPages);
-  };
-
-
 
   return (
     <div className="rider-dashboard-container">
@@ -384,313 +275,97 @@ function RiderHistory() {
         navigateToHistory={navigateToHistory}
         navigateToNotifications={navigateToNotifications}
         handleLogout={handleLogout}
+        userName={userName}
+        userRole={userRole}
+        riderName={riderName}
+        riderPhone={riderPhone}
       />
 
       <div className="main-content">
-        <header className="manage-header">
-          <div className="header-left">
-            {/* Menu toggle button */}
-            {window.innerWidth > 991 && (
-              <button
-                className="menu-toggle"
-                onClick={() => {
-                  // Only allow sidebar toggle on desktop. On mobile, the sidebar is permanently hidden by CSS.
-                  if (window.innerWidth > 991) {
-                    setIsSidebarOpen(!isSidebarOpen);
-                  }
-                }}
-              >
-                <FaBars />
-              </button>
-            )}
-            <h2 className="page-title">Rider History</h2>
-          </div>
-          <div className="header-right">
-            <div className="header-date">{currentDateFormatted}</div>
-            {window.innerWidth > 991 && (
-              <div className="header-profile">
-                <div className="bell-icon"><FaBell className="bell-outline" /></div>
-                <div className="profile-pic" style={{ backgroundImage: `url(${riderImage})` }}></div>
-                <div className="profile-info">
-                  <div className="profile-role">{getGreeting()}! I'm {userRole}</div>
-                  <div className="profile-name">{userName}</div>
-                </div>
-                <div className="dropdown-icon" onClick={() => setDropdownOpen(!dropdownOpen)}>
-                  <FaChevronDown className={dropdownOpen ? "icon-rotated" : ""} />
-                  {dropdownOpen && (
-                    <div className="profile-dropdown">
-                      <ul className="dropdown-menu-list">
-                        <li onClick={() => window.location.reload()}>
-                          <FaUndo /> Refresh
-                        </li>
-                        <li onClick={handleLogout}>
-                          <FaSignOutAlt /> Logout
-                        </li>
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </header>
-
         {window.innerWidth > 991 && (
-          <Container fluid className="dashboard-summary-container" style={{ backgroundColor: "#a3d3d8" }}>
-            <div className="rider-selector-group">
-              <div className="rider-info-display">
-                <img src={riderImage} alt={userName} className="rider-profile-pic" />
-                <span className="rider-name-text">{userName}</span>
-              </div>
-            </div>
-            <div className="summary-cards-container">
-              <Card className="summary-card">
-                <FaBoxOpen size={32} color="#964b00" />
-                <span className="card-title">Active Orders</span>
-                <span className="card-value">
-                  {orders.filter(order => !["delivered", "completed", "cancelled", "returned"].includes(order.currentStatus)).length} orders
-                </span>
-              </Card>
-              <Card className="summary-card">
-                <FaCheckCircle size={32} color="#198754" />
-                <span className="card-title">Completed</span>
-                <span className="card-value">
-                  {orders.filter(order => ["delivered", "completed"].includes(order.currentStatus)).length} orders
-                </span>
-              </Card>
-              <Card className="summary-card" style={{ position: 'relative' }}>
-                <Form.Select
-                  size="sm"
-                  value={earningsFilter}
-                  onChange={(e) => setEarningsFilter(e.target.value)}
-                  style={{
-                    position: 'absolute',
-                    top: '10px',
-                    right: '10px',
-                    width: '120px',
-                    fontSize: '12px',
-                    padding: '2px 6px'
-                  }}
-                >
-                  <option value="Daily">Daily</option>
-                  <option value="Weekly">Weekly</option>
-                  <option value="Monthly">Monthly</option>
-                </Form.Select>
-                <FaDollarSign size={32} color="#fd7e14" />
-                <span className="card-title">Earnings</span>
-                <span className="card-value">₱{earnings?.totalEarnings || 0}</span>
-              </Card>
-            </div>
-          </Container>
+             <RiderHeaderSummary
+             currentDateFormatted={currentDateFormatted}
+             isSidebarOpen={isSidebarOpen}
+             setIsSidebarOpen={setIsSidebarOpen}
+             getGreeting={getGreeting}
+             userRole={userRole || "Rider"}
+             userName={userName || riderName}
+             dropdownOpen={dropdownOpen}
+             setDropdownOpen={setDropdownOpen}
+             handleLogout={handleLogout}
+             riderName={riderName}
+             orders={orders}
+             earningsFilter={earningsFilter}
+             setEarningsFilter={setEarningsFilter}
+             calculateEarnings={calculateEarnings}
+             pageTitle="History"
+           />
         )}
 
-        <div className="toggle-buttons-container">
-          <button
-            className={`toggle-button ${toggle === "completed" ? "active" : ""}`}
-            onClick={() => setToggle("completed")}
-          >
-            Completed Orders
-          </button>
-          <button
-            className={`toggle-button ${toggle === "all" ? "active" : ""}`}
-            onClick={() => setToggle("all")}
-          >
-            All Orders
-          </button>
-        </div>
+        {/* --- HISTORY PAGE CONTENT --- */}
+        <div className="history-content-wrapper">
+            
+            {/* ADDED: Mobile Page Title (Visible only on mobile/tablet) */}
+            <h2 className="mobile-page-title d-lg-none">History</h2>
 
-        <div className="order-list-heading">
-          {toggle === "completed" && <div>Showing Completed Orders</div>}
-          {toggle === "all" && <div>Showing All Orders</div>}
-        </div>
-
-        <div className="table-responsive-container">
-          {sortedOrders.length === 0 ? (
-            <div className="no-orders-message">
-              <FaBoxOpen size={50} color="#ccc" />
-              <p>No orders to show.</p>
-            </div>
-          ) : (
-            <>
-
-
-              {/* Custom Table */}
-              <div className="orders-table-container">
-                <table className="orders-table">
-                  <thead>
-                    <tr>
-
-                      <th onClick={() => requestSort('customerName')} style={{ cursor: 'pointer' }}>
-                        Customer Name {getSortIcon('customerName')}
-                      </th>
-                      <th onClick={() => requestSort('referenceNumber')} style={{ cursor: 'pointer' }}>
-                        Reference Number {getSortIcon('referenceNumber')}
-                      </th>
-                      <th onClick={() => requestSort('orderedAt')} style={{ cursor: 'pointer' }}>
-                        Date/Time {getSortIcon('orderedAt')}
-                      </th>
-                      <th onClick={() => requestSort('total')} style={{ cursor: 'pointer' }}>
-                        Total {getSortIcon('total')}
-                      </th>
-                      <th onClick={() => requestSort('currentStatus')} style={{ cursor: 'pointer' }}>
-                        Status {getSortIcon('currentStatus')}
-                      </th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentRows.map((order) => (
-                      <tr key={order.id}>
-
-                        {/* ADDED data-label FOR MOBILE RESPONSIVENESS */}
-                        <td data-label="Customer Name">{order.customerName}</td>
-                        <td data-label="Reference Number">{order.referenceNumber}</td>
-                        <td data-label="Date/Time">{order.orderedAt}</td>
-                        <td data-label="Total">₱{order.total?.toFixed(2) || "0.00"}</td>
-                        <td data-label="Status">
-                          <span className={`status-badge status-${order.currentStatus.toLowerCase()}`}>
-                            {getStatusStyle(order.currentStatus).text}
-                          </span>
-                        </td>
-                        <td data-label="Actions">
-                          <button
-                            className="action-btn view"
-                            onClick={() => {
-                              const statusStyle = getStatusStyle(order.currentStatus);
-                              Swal.fire({
-                                title: `Order #${order.id} Details`,
-                                html: `
-                                  <div style="text-align: left; font-family: Arial, sans-serif; max-width: 500px;">
-                                    <div style="margin-bottom: 15px;">
-                                      <strong style="color: #333;">Order Date:</strong> ${new Date(order.orderedAt).toLocaleString()}
-                                    </div>
-                                    <div style="margin-bottom: 15px;">
-                                      <strong style="color: #333;">Customer:</strong> ${order.customerName}
-                                    </div>
-                                    <div style="margin-bottom: 15px;">
-                                      <strong style="color: #333;">Delivery Address:</strong> ${order.address}
-                                    </div>
-                                    <div style="margin-bottom: 15px;">
-                                      <strong style="color: #333;">Items Ordered:</strong>
-                                      <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-                                        <thead>
-                                          <tr style="background-color: #f8f9fa;">
-                                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Item</th>
-                                            <th style="border: 1px solid #ddd; padding: 8px; text-align: center;">Qty</th>
-                                            <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Price</th>
-                                            <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Subtotal</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          ${order.items.map(item => `
-                                            <tr>
-                                              <td style="border: 1px solid #ddd; padding: 8px;">${item.name}</td>
-                                              <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${item.quantity}</td>
-                                              <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">₱${item.price.toFixed(2)}</td>
-                                              <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">₱${(item.quantity * item.price).toFixed(2)}</td>
-                                            </tr>
-                                          `).join('')}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                    <div style="margin-bottom: 15px; text-align: right; font-size: 18px; font-weight: bold;">
-                                      <strong style="color: #333;">Total Amount:</strong> ₱${order.total.toFixed(2)}
-                                    </div>
-                                    <div style="margin-bottom: 15px;">
-                                      <strong style="color: #333;">Order Status:</strong>
-                                      <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; color: ${statusStyle.color}; background-color: ${statusStyle.backgroundColor}; font-weight: bold;">
-                                        ${statusStyle.text}
-                                      </span>
-                                    </div>
-                                  </div>
-                                `,
-                                showCloseButton: true,
-                                focusConfirm: false,
-                                confirmButtonText: 'Close',
-                                customClass: {
-                                  popup: 'swal-wide'
-                                }
-                              });
-                            }}
-                            title="View Details"
-                          >
-                            <FaEye />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination Controls */}
-              {totalPages > 1 && (
-                <div className="pagination-container">
-                  <div className="pagination-info">
-                    Showing {indexOfFirstRow + 1} to {Math.min(indexOfLastRow, sortedOrders.length)} of {sortedOrders.length} entries
-                  </div>
-                  <div className="pagination-controls">
-                    <button
-                      className="pagination-btn"
-                      onClick={handleFirstPage}
-                      disabled={currentPage === 1}
-                      title="First Page"
-                    >
-                      <FaAngleDoubleLeft />
-                    </button>
-                    <button
-                      className="pagination-btn"
-                      onClick={handlePrevPage}
-                      disabled={currentPage === 1}
-                      title="Previous Page"
-                    >
-                      <FaAngleLeft />
-                    </button>
-
-                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      let pageNumber;
-                      if (totalPages <= 5) {
-                        pageNumber = i + 1;
-                      } else if (currentPage <= 3) {
-                        pageNumber = i + 1;
-                      } else if (currentPage >= totalPages - 2) {
-                        pageNumber = totalPages - 4 + i;
-                      } else {
-                        pageNumber = currentPage - 2 + i;
-                      }
-
-                      return (
-                        <button
-                          key={pageNumber}
-                          className={`pagination-btn ${currentPage === pageNumber ? 'active' : ''}`}
-                          onClick={() => paginate(pageNumber)}
-                        >
-                          {pageNumber}
-                        </button>
-                      );
-                    })}
-
-                    <button
-                      className="pagination-btn"
-                      onClick={handleNextPage}
-                      disabled={currentPage === totalPages}
-                      title="Next Page"
-                    >
-                      <FaAngleRight />
-                    </button>
-                    <button
-                      className="pagination-btn"
-                      onClick={handleLastPage}
-                      disabled={currentPage === totalPages}
-                      title="Last Page"
-                    >
-                      <FaAngleDoubleRight />
-                    </button>
-                  </div>
+            {/* Filters Header */}
+            <div className="history-filters-card">
+                <h5 className="history-title"><FaClock /> Delivery History</h5>
+                <div className="filters-row">
+                    <div className="filter-group">
+                        <Form.Select size="sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="status-select">
+                            <option value="all">All Status</option>
+                            <option value="delivered">Delivered</option>
+                            <option value="cancelled">Cancelled</option>
+                            <option value="returned">Returned</option>
+                        </Form.Select>
+                    </div>
+                    <div className="filter-group date-group">
+                        <Form.Control type="date" size="sm" placeholder="From" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+                        <span className="to-text">to</span>
+                        <Form.Control type="date" size="sm" placeholder="To" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+                    </div>
                 </div>
-              )}
-            </>
-          )}
+            </div>
+
+            {/* Orders List */}
+            <div className="history-list-container">
+                {loading ? (
+                    <div className="text-center py-5"><div className="spinner-border text-primary"></div></div>
+                ) : Object.keys(groupedOrders).length === 0 ? (
+                    <div className="no-data-placeholder">
+                        <FaBoxOpen className="no-data-icon" />
+                        <p>No delivery history found.</p>
+                    </div>
+                ) : (
+                    Object.keys(groupedOrders).map(dateKey => (
+                        <div key={dateKey} className="history-date-group">
+                            <div className="date-header">{dateKey}</div>
+                            <div className="date-group-list">
+                                {groupedOrders[dateKey].map(order => (
+                                    <div key={order.id} className="history-item-card" onClick={() => handleOrderClick(order)}>
+                                        <div className="history-item-left">
+                                            <div className={`status-indicator ${order.currentStatus}`}>
+                                                {order.currentStatus === 'delivered' ? <FaCheckCircle /> : <FaTimesCircle />}
+                                            </div>
+                                            <div className="history-info">
+                                                <div className="customer-name">{order.customerName}</div>
+                                                <div className="order-meta">
+                                                    {new Date(order.orderedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} • #{order.id}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="history-item-right">
+                                            <div className="order-total">₱{order.total?.toFixed(2)}</div>
+                                            <FaChevronRight className="arrow-icon" />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
         </div>
       </div>
 
@@ -699,7 +374,69 @@ function RiderHistory() {
         navigateToHistory={navigateToHistory}
         navigateToNotifications={navigateToNotifications}
         handleLogout={handleLogout}
+        userName={userName}
+        userRole={userRole}
+        riderName={riderName}
+        riderPhone={riderPhone}
       />
+
+      {/* --- ORDER DETAILS DRAWER (Offcanvas) --- */}
+      <Offcanvas show={showDrawer} onHide={() => setShowDrawer(false)} placement="end" className="history-drawer">
+        <Offcanvas.Header closeButton>
+            <Offcanvas.Title>Order Details</Offcanvas.Title>
+        </Offcanvas.Header>
+        <Offcanvas.Body>
+            {selectedOrder && (
+                <div className="drawer-content">
+                    <div className="drawer-status-section text-center mb-4">
+                        {getStatusBadge(selectedOrder.currentStatus)}
+                        <h3 className="drawer-total mt-2">₱{selectedOrder.total?.toFixed(2)}</h3>
+                        <div className="text-muted small">{new Date(selectedOrder.orderedAt).toLocaleString()}</div>
+                    </div>
+
+                    <div className="drawer-section">
+                        <h6 className="drawer-label"><FaUser /> Customer</h6>
+                        <div className="drawer-value">{selectedOrder.customerName}</div>
+                        <div className="drawer-sub">{selectedOrder.phone}</div>
+                    </div>
+
+                    <div className="drawer-section">
+                        <h6 className="drawer-label"><FaMapMarkerAlt /> Delivery Address</h6>
+                        <div className="drawer-value">{selectedOrder.address}</div>
+                    </div>
+
+                    <div className="drawer-section">
+                        <h6 className="drawer-label"><FaReceipt /> Order Summary</h6>
+                        <div className="drawer-items-list">
+                            {selectedOrder.items && selectedOrder.items.map((item, idx) => (
+                                <div key={idx} className="drawer-item-row">
+                                    <span className="item-qty">{item.quantity}x</span>
+                                    <span className="item-name">{item.name}</span>
+                                    <span className="item-price">₱{item.price.toFixed(2)}</span>
+                                </div>
+                            ))}
+                             <div className="drawer-item-row fee-row">
+                                    <span>Delivery Fee</span>
+                                    <span>₱50.00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                     <div className="drawer-section">
+                        <h6 className="drawer-label"><FaMoneyBillWave /> Payment</h6>
+                        <div className="drawer-value">{selectedOrder.paymentMethod || "Cash on Delivery"}</div>
+                    </div>
+                    
+                    {selectedOrder.notes && (
+                        <div className="drawer-note">
+                            <strong>Note:</strong> {selectedOrder.notes}
+                        </div>
+                    )}
+                </div>
+            )}
+        </Offcanvas.Body>
+      </Offcanvas>
+
     </div>
   );
 }

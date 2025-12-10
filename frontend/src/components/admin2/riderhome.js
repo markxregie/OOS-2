@@ -114,6 +114,7 @@ import Swal from 'sweetalert2';
 
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 991);
+    const [isDesktop, setIsDesktop] = useState(window.innerWidth > 991);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // NEW: State for mobile bottom menu
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [currentOrderToDeliver, setCurrentOrderToDeliver] = useState(null);
@@ -152,6 +153,7 @@ import Swal from 'sweetalert2';
     useEffect(() => {
       const handleResize = () => {
         setIsSidebarOpen(window.innerWidth > 991);
+        setIsDesktop(window.innerWidth > 991);
       };
 
       window.addEventListener('resize', handleResize);
@@ -404,12 +406,22 @@ import Swal from 'sweetalert2';
         return true;
       });
 
-    const calculateEarnings = () => {
-      if (earnings && typeof earnings.totalEarnings === 'number') {
-        return earnings.totalEarnings.toFixed(2);
+    const calculateEarnings = (filter) => {
+      const now = new Date();
+      let startDate;
+      if (filter === 'Daily') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      } else if (filter === 'Weekly') {
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      } else if (filter === 'Monthly') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
       }
-      // Return a loading or default state
-      return '...';
+      const completedOrders = orders.filter(order => {
+        const orderDate = new Date(order.orderedAt);
+        return ["delivered", "completed"].includes(order.currentStatus) && orderDate >= startDate;
+      });
+      const total = completedOrders.length * 50; // Assuming fixed delivery fee of ₱50 per completed order
+      return total.toFixed(2);
     };
 
     const updateOrderStatus = async (orderId, newStatus) => {
@@ -775,6 +787,10 @@ import Swal from 'sweetalert2';
           navigateToHistory={navigateToHistory}
           navigateToNotifications={navigateToNotifications}
           handleLogout={handleLogout}
+          userName={userName}
+          userRole={userRole}
+          riderName={riderName}
+          riderPhone={riderPhone}
         />
 
         <div className="main-content">
@@ -848,32 +864,54 @@ import Swal from 'sweetalert2';
                   </div>
                   <div className="order-details mobile-stack"> 
                     <p className="detail-item"><FaClock color="#4b929d" /> <strong>Ordered:</strong> <span className="detail-value">{new Date(order.orderedAt).toLocaleString()}</span></p>
-                    <p className="detail-item"><FaUser color="#4b929d" /> <strong>Customer:</strong> <span className="detail-value">{order.customerName}</span></p>
+                    <p className="detail-item"><FaUser color="#4b929d" /> <strong>Customer:</strong> <span className="detail-value">{(() => { const parts = order.customerName.split(' '); return parts.length > 0 && /\d/.test(parts[0]) ? parts.slice(1).join(' ') : order.customerName; })()}</span></p>
                     
                     {/* Collapsible Address/Phone for cleaner mobile view */}
                     <p className="detail-item"><FaMapMarkerAlt color="#4b929d" /> <strong>Address:</strong> <span className="detail-value">{order.address}</span></p>
                     
                     <div style={{ marginTop: '10px', border: '1px solid #eee', padding: '8px', borderRadius: '5px' }}>
-                        <div
-                            style={{ cursor: 'pointer', color: '#4a9ba5', fontWeight: 'bold' }}
-                            onClick={() => toggleOrderExpansion(order.id)}
-                        >
-                            <FaBox color="#4b929d" /> {order.items?.length || 0} Items (Click to View)
-                            {expandedOrders.has(order.id) ? <FaChevronUp style={{ marginLeft: '5px' }} /> : <FaChevronRight style={{ marginLeft: '5px' }} />}
-                        </div>
-                        {expandedOrders.has(order.id) && (
-                            <ul className="item-list" style={{ marginTop: '10px', paddingLeft: '0', listStyle: 'none' }}>
-                            {order.items?.map((item, i) => (
-                                <li key={i} className="item-row" style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #eee', padding: '5px 0' }}>
-                                <span>{item.quantity}x {item.name}</span>
-                                <span>₱{item.price.toFixed(2)}</span>
-                                </li>
-                            ))}
-                            <li className="item-row" style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '5px' }}>
-                                <span>Delivery Fee</span>
-                                <span>₱50.00</span>
-                            </li>
-                            </ul>
+                        {isDesktop ? (
+                            <>
+                                <div style={{ color: '#4a9ba5', fontWeight: 'bold' }}>
+                                    <FaBox color="#4b929d" /> {order.items?.length || 0} Items
+                                </div>
+                                <ul className="item-list" style={{ marginTop: '10px', paddingLeft: '0', listStyle: 'none' }}>
+                                {order.items?.map((item, i) => (
+                                    <li key={i} className="item-row" style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #eee', padding: '5px 0' }}>
+                                    <span>{item.quantity}x {item.name}</span>
+                                    <span>₱{item.price.toFixed(2)}</span>
+                                    </li>
+                                ))}
+                                <li className="item-row" style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '5px' }}>
+                                    <span>Delivery Fee</span>
+                                    <span>₱50.00</span>
+                                    </li>                                    
+                                </ul>
+                            </>
+                        ) : (
+                            <>
+                                <div
+                                    style={{ cursor: 'pointer', color: '#4a9ba5', fontWeight: 'bold' }}
+                                    onClick={() => toggleOrderExpansion(order.id)}
+                                >
+                                    <FaBox color="#4b929d" /> {order.items?.length || 0} Items (Click to View)
+                                    {expandedOrders.has(order.id) ? <FaChevronUp style={{ marginLeft: '5px' }} /> : <FaChevronRight style={{ marginLeft: '5px' }} />}
+                                </div>
+                                {expandedOrders.has(order.id) && (
+                                    <ul className="item-list" style={{ marginTop: '10px', paddingLeft: '0', listStyle: 'none' }}>
+                                    {order.items?.map((item, i) => (
+                                        <li key={i} className="item-row" style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #eee', padding: '5px 0' }}>
+                                        <span>{item.quantity}x {item.name}</span>
+                                        <span>₱{item.price.toFixed(2)}</span>
+                                        </li>
+                                    ))}
+                                    <li className="item-row" style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '5px' }}>
+                                        <span>Delivery Fee</span>
+                                        <span>₱50.00</span>
+                                    </li>
+                                    </ul>
+                                )}
+                            </>
                         )}
                     </div>
 
@@ -919,7 +957,7 @@ import Swal from 'sweetalert2';
           {showMapModal && selectedOrder && (
             <Modal centered show={showMapModal} onHide={() => setShowMapModal(false)} size="xl" scrollable>
               <Modal.Header closeButton>
-                <Modal.Title>Navigate to {selectedOrder.customerName}'s Address</Modal.Title>
+                <Modal.Title>Navigate to {(() => { const parts = selectedOrder.customerName.split(' '); return parts.length > 0 && /\d/.test(parts[0]) ? parts.slice(1).join(' ') : selectedOrder.customerName; })()}'s Address</Modal.Title>
               </Modal.Header>
               <Modal.Body style={{ maxHeight: '200vh', overflowY: 'auto' }}>
                 <div ref={riderMapRef} style={{ height: '650px', width: '100%' }} />

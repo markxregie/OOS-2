@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware# router module
-from database import get_db_connection  
-from routers import rider # connection checker (optional)
+from database import get_db_connection, init_delivery_settings
+from routers import rider, fees # connection checker (optional)
 
 app = FastAPI(title="Ordering Service")
 
@@ -24,9 +24,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Initialize delivery settings on startup
+@app.on_event("startup")
+async def startup_event():
+    await init_delivery_settings()
+
 # Include cart routes
 
 app.include_router(rider.router, prefix="/delivery", tags=["riders"])
+app.include_router(fees.router, prefix="/delivery", tags=["fees"])
 
 
 # Health check (optional)

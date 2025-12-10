@@ -4,6 +4,7 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2'; // 1. Import SweetAlert2
+import LocationVerifyModal from './LocationVerifyModal'; // Import LocationVerifyModal
 
 import Lottie from "lottie-react";
 import coffeeTime from "../assets/Coffee Time.json";
@@ -30,8 +31,14 @@ const MenuContent = () => {
   const [selectedAddOns, setSelectedAddOns] = useState([]);
   const [addOnsTotal, setAddOnsTotal] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isCheckingLocation, setIsCheckingLocation] = useState(false); // New state for modal visibility
+  const [deliverySettings, setDeliverySettings] = useState({}); // New state for delivery settings
   const [isLoading, setIsLoading] = useState(true);
 
+  // State to hold the item and its options temporarily for LocationVerifyModal
+  const [itemForLocationCheck, setItemForLocationCheck] = useState(null);
+  const [notesForLocationCheck, setNotesForLocationCheck] = useState('');
+  const [addOnsForLocationCheck, setAddOnsForLocationCheck] = useState([]);
 
   const { cartItems, addToCart: addToContextCart } = useContext(CartContext);
   const navigate = useNavigate();
@@ -227,6 +234,28 @@ const MenuContent = () => {
     };
 
     fetchAllData();
+  }, []);
+
+  // Fetch delivery settings, similar to cart.js
+  useEffect(() => {
+    const fetchDeliverySettings = async () => {
+      try {
+        const token = localStorage.getItem("authToken");
+        if (!token) return;
+        const response = await fetch('http://localhost:7001/delivery/settings', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const settings = await response.json();
+          setDeliverySettings(settings);
+        } else {
+          console.error('Failed to fetch delivery settings');
+        }
+      } catch (error) {
+        console.error('Error fetching delivery settings:', error);
+      }
+    };
+    fetchDeliverySettings();
   }, []);
 
   const subcategories = products[selectedCategory] ? Object.keys(products[selectedCategory]) : [];
@@ -517,7 +546,24 @@ const MenuContent = () => {
       return;
     }
     showSweetAlertBuyNow(item, notes, addOns, addOnsTotal);
-  };
+  }; 
+
+  // Helper to construct the single item array for LocationVerifyModal
+  const createSingleItemArray = (item, notes, addOns, addOnsTotal) => [{
+    product_id: item.ProductID,
+    product_name: item.ProductName,
+    price: item.ProductPrice,
+    product_image: item.ProductImage,
+    product_type: item.ProductTypeName,
+    product_category: item.ProductCategory,
+    quantity: 1,
+    orderNotes: notes,
+    addons: addOns,
+    MerchandiseQuantity: item.MerchandiseQuantity,
+    // Add a temporary total for this item, including add-ons, for the modal's display
+    // The modal will recalculate delivery fee based on this subtotal
+    total: (item.ProductPrice ?? 0) + addOnsTotal
+  }];
 
   const showSweetAlertBuyNow = (item, notes, addOns, addOnsTotal) => {
     if (!item) return;
@@ -587,54 +633,57 @@ const MenuContent = () => {
       buttonsStyling: false,
       preConfirm: () => {
         const selectedDelivery = document.querySelector('input[name="deliveryMethodSwal"]:checked').value;
-        const selectedPayment = document.querySelector('input[name="paymentMethodSwal"]:checked').value;
+        const selectedPayment = document.querySelector('input[name="paymentMethodSwal"]:checked')?.value || 'E-Wallet'; // Default to E-Wallet if not found
         return { delivery: selectedDelivery, payment: selectedPayment };
       }
     }).then((result) => {
       if (result.isConfirmed) {
-        setDeliveryMethod(result.value.delivery);
-        setPaymentMethod(result.value.payment);
-        handleConfirmBuyNow(item, notes, addOns, addOnsTotal, result.value.delivery, result.value.payment);
+        if (result.value.delivery === 'Delivery') {
+          // Store item details and trigger location check
+          setItemForLocationCheck(item);
+          setNotesForLocationCheck(notes);
+          setAddOnsForLocationCheck(addOns);
+          setDeliveryMethod('Delivery'); // Update delivery method state
+          setPaymentMethod(result.value.payment); // Update payment method state
+          setIsCheckingLocation(true);
+        } else {
+          // For Pick-up, proceed directly to checkout
+          setDeliveryMethod(result.value.delivery);
+          setPaymentMethod(result.value.payment);
+          handleConfirmBuyNow(item, notes, addOns, addOnsTotal, result.value.delivery, result.value.payment);
+        }
       }
     });
   };
 
   // Updated handler to accept add-ons details
   const handleConfirmBuyNow = (item, notes, addOns, addOnsTotal, delivery, payment) => {
-  if (item) {
-    // Check availability for Buy Now as well
-    if (item.Status !== 'Available' || (item.ProductTypeName === 'Merchandise' && item.MerchandiseQuantity <= 0)) {
-      toast.error(`${item.ProductName} is currently unavailable.`);
-      return;
-    }
-
-    navigate('/checkout', {
-      state: {
-        cartItems: [{
-          product_id: item.ProductID,
-          product_name: item.ProductName,
-          price: item.ProductPrice,
-          product_image: item.ProductImage,
-          product_type: item.ProductTypeName,
-          product_category: item.ProductCategory,
-          quantity: 1,
-          orderNotes: notes,
-          addons: addOns,
-          MerchandiseQuantity: item.MerchandiseQuantity,
-        }],
-        orderType: delivery,
-        paymentMethod: payment,
-        orderNotes: notes
+    if (item) {
+      // No need for an 'if (item)' check here, as the function is only called when item exists.
+      // Check availability for Buy Now as well
+      if (item.Status !== 'Available' || (item.ProductTypeName === 'Merchandise' && item.MerchandiseQuantity <= 0)) {
+        toast.error(`${item.ProductName} is currently unavailable.`);
+        return;
       }
-    });
-    // Reset temporary states
-    setOrderNotes('');
-    setSelectedAddOns([]);
-    setAddOnsTotal(0);
-    setDeliveryMethod('Pick-up');
-    setPaymentMethod('E-Wallet');
-  }
-};
+
+      const singleItemForCheckout = createSingleItemArray(item, notes, addOns, addOnsTotal);
+
+      navigate('/checkout', {
+        state: {
+          cartItems: singleItemForCheckout,
+          orderType: delivery,
+          paymentMethod: payment,
+        }
+      });
+
+      // Reset temporary states
+      setOrderNotes('');
+      setSelectedAddOns([]);
+      setAddOnsTotal(0);
+      setDeliveryMethod('Pick-up');
+      setPaymentMethod('E-Wallet');
+    }
+  };
   const currentItems = (products[selectedCategory] && products[selectedCategory][selectedSubcategory]) || [];
   const filteredItems = currentItems.filter(item => item.ProductName.toLowerCase().includes(searchQuery.toLowerCase()));
 
@@ -712,6 +761,18 @@ const MenuContent = () => {
         </div>
 
         <ToastContainer position="top-center" autoClose={2000} hideProgressBar />
+
+        {/* Location Verification Modal */}
+        {isCheckingLocation && itemForLocationCheck && (
+          <LocationVerifyModal
+            show={isCheckingLocation}
+            onClose={() => setIsCheckingLocation(false)}
+            deliverySettings={deliverySettings} // Pass deliverySettings here
+            selectedCartItems={createSingleItemArray(itemForLocationCheck, notesForLocationCheck, addOnsForLocationCheck, addOnsTotal)}
+            orderTypeMain="Delivery"
+            paymentMethodMain={paymentMethod}
+          />
+        )}
       </div>
     </section>
   );
