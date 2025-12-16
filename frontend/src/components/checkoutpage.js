@@ -6,7 +6,7 @@ import './checkout.css';
 const CheckoutPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { clearCart } = useContext(CartContext);
+  const { removeFromCart, reloadCart, updateQuantity, setCartItems } = useContext(CartContext);
   const { cartItems = [], orderType = 'Pick Up', paymentMethod = 'Cash' } = location.state || {};
 
   const [userData, setUserData] = useState({
@@ -187,8 +187,10 @@ const confirmPayment = async (saved) => {
       console.log("POS Sale ID:", result.pos_sale_id);
       console.log("Status: Order saved to both OOS and POS as PENDING");
 
-      // Clear the cart immediately after successful order
-      await clearCart();
+      // Mark the checked-out items as ordered and remove from context
+      const orderedItemIds = cartItems.map(item => item.cart_item_id);
+      localStorage.setItem("orderedItemIds", JSON.stringify(orderedItemIds));
+      setCartItems(prev => prev.filter(item => !orderedItemIds.includes(item.cart_item_id)));
       localStorage.removeItem("pendingOrderData");
 
       Swal.fire({

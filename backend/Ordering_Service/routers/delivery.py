@@ -710,52 +710,63 @@ async def get_aggregated_rider_earnings(filter: str, token: str = Depends(oauth2
     try:
         now = date.today()
         periods = []
+        period_earnings = []
 
         if filter.lower() == 'daily':
+            # Optimized: Single query for last 7 days
             periods = [now - timedelta(days=i) for i in range(7)][::-1]
+            query = """
+            SELECT CAST(o.OrderDate AS DATE) AS PeriodDate, ISNULL(SUM(o.DeliveryFee), 0) AS TotalEarnings
+            FROM Orders o
+            WHERE LOWER(o.Status) = 'delivered' AND CAST(o.OrderDate AS DATE) >= ? AND CAST(o.OrderDate AS DATE) <= ?
+            GROUP BY CAST(o.OrderDate AS DATE)
+            ORDER BY CAST(o.OrderDate AS DATE)
+            """
+            start_date = periods[0]
+            end_date = periods[-1]
+            await cursor.execute(query, (start_date, end_date))
+            rows = await cursor.fetchall()
+            earnings_dict = {str(row[0]): float(row[1]) for row in rows}
+            period_earnings = [earnings_dict.get(str(p), 0.0) for p in periods]
+
         elif filter.lower() == 'weekly':
+            # Optimized: Single query for last 4 weeks
             periods = [now - timedelta(weeks=i) for i in range(4)][::-1]
+            query = """
+            SELECT DATEADD(WEEK, DATEDIFF(WEEK, 0, o.OrderDate), 0) AS WeekStart, ISNULL(SUM(o.DeliveryFee), 0) AS TotalEarnings
+            FROM Orders o
+            WHERE LOWER(o.Status) = 'delivered' AND o.OrderDate >= ? AND o.OrderDate <= ?
+            GROUP BY DATEADD(WEEK, DATEDIFF(WEEK, 0, o.OrderDate), 0)
+            ORDER BY DATEADD(WEEK, DATEDIFF(WEEK, 0, o.OrderDate), 0)
+            """
+            start_date = periods[0] - timedelta(days=periods[0].weekday())
+            end_date = periods[-1] + timedelta(days=6 - periods[-1].weekday())
+            await cursor.execute(query, (start_date, end_date))
+            rows = await cursor.fetchall()
+            earnings_dict = {str(row[0]): float(row[1]) for row in rows}
+            period_earnings = [earnings_dict.get(str(p - timedelta(days=p.weekday())), 0.0) for p in periods]
+
         elif filter.lower() == 'monthly':
+            # For monthly, use a single query with GROUP BY YEAR, MONTH
             periods = [(now.year, now.month - i) for i in range(12)]
             periods = [(y if m > 0 else y-1, m if m > 0 else m+12) for y, m in periods]
             periods.reverse()
+            query = """
+            SELECT YEAR(o.OrderDate) AS Year, MONTH(o.OrderDate) AS Month, ISNULL(SUM(o.DeliveryFee), 0) AS TotalEarnings
+            FROM Orders o
+            WHERE LOWER(o.Status) = 'delivered' AND o.OrderDate >= ?
+            GROUP BY YEAR(o.OrderDate), MONTH(o.OrderDate)
+            ORDER BY YEAR(o.OrderDate), MONTH(o.OrderDate)
+            """
+            min_date = date(periods[0][0], periods[0][1], 1)
+            await cursor.execute(query, (min_date,))
+            rows = await cursor.fetchall()
+            earnings_dict = {(row[0], row[1]): float(row[2]) for row in rows}
+            period_earnings = [earnings_dict.get(p, 0.0) for p in periods]
         else:
             raise HTTPException(status_code=400, detail="Invalid filter")
 
-        # Aggregate earnings per period
-        period_earnings = []
-        for period in periods:
-            if filter.lower() == 'daily':
-                query = """
-                SELECT ISNULL(SUM(o.DeliveryFee), 0) AS TotalEarnings
-                FROM Orders o
-                WHERE LOWER(o.Status) = 'delivered' AND CAST(o.OrderDate AS DATE) = ?
-                """
-                params = (period,)
-            elif filter.lower() == 'weekly':
-                start = period - timedelta(days=period.weekday())
-                end = start + timedelta(days=6)
-                query = """
-                SELECT ISNULL(SUM(o.DeliveryFee), 0) AS TotalEarnings
-                FROM Orders o
-                WHERE LOWER(o.Status) = 'delivered' AND o.OrderDate >= ? AND o.OrderDate < ?
-                """
-                params = (start, end + timedelta(days=1))
-            elif filter.lower() == 'monthly':
-                year, month = period
-                query = """
-                SELECT ISNULL(SUM(o.DeliveryFee), 0) AS TotalEarnings
-                FROM Orders o
-                WHERE LOWER(o.Status) = 'delivered' AND YEAR(o.OrderDate) = ? AND MONTH(o.OrderDate) = ?
-                """
-                params = (year, month)
-
-            await cursor.execute(query, params)
-            row = await cursor.fetchone()
-            earnings = float(row[0]) if row else 0.0
-            period_earnings.append(earnings)
-
-        # For top riders, sum earnings over the periods
+        # For top riders, sum earnings over the periods - optimized single query
         rider_totals = {}
         if filter.lower() == 'daily':
             start_date = periods[0]
@@ -765,6 +776,7 @@ async def get_aggregated_rider_earnings(filter: str, token: str = Depends(oauth2
             FROM Orders o
             WHERE LOWER(o.Status) = 'delivered' AND CAST(o.OrderDate AS DATE) >= ? AND CAST(o.OrderDate AS DATE) <= ?
             GROUP BY o.AssignedRiderID
+            HAVING o.AssignedRiderID IS NOT NULL
             """
             params_rider = (start_date, end_date)
         elif filter.lower() == 'weekly':
@@ -775,6 +787,7 @@ async def get_aggregated_rider_earnings(filter: str, token: str = Depends(oauth2
             FROM Orders o
             WHERE LOWER(o.Status) = 'delivered' AND o.OrderDate >= ? AND o.OrderDate <= ?
             GROUP BY o.AssignedRiderID
+            HAVING o.AssignedRiderID IS NOT NULL
             """
             params_rider = (start_date, end_date)
         elif filter.lower() == 'monthly':
@@ -787,26 +800,40 @@ async def get_aggregated_rider_earnings(filter: str, token: str = Depends(oauth2
             FROM Orders o
             WHERE LOWER(o.Status) = 'delivered' AND YEAR(o.OrderDate) >= ? AND YEAR(o.OrderDate) <= ? AND MONTH(o.OrderDate) >= ? AND MONTH(o.OrderDate) <= ?
             GROUP BY o.AssignedRiderID
+            HAVING o.AssignedRiderID IS NOT NULL
             """
             params_rider = (min_year, max_year, min_month, max_month)
 
         await cursor.execute(rider_query, params_rider)
         rider_rows = await cursor.fetchall()
-        rider_totals = {row[0]: float(row[1]) for row in rider_rows if row[0]}
+        rider_totals = {row[0]: float(row[1]) for row in rider_rows}
 
-        # Get rider names
+        # Batch fetch rider names
         top_riders = []
-        for rider_id, earnings in rider_totals.items():
+        if rider_totals:
+            rider_ids = list(rider_totals.keys())
             try:
-                async with httpx.AsyncClient() as client:
-                    response = await client.get(f"http://localhost:4000/users/riders/{rider_id}")
-                    if response.status_code == 200:
-                        rider_data = response.json()
-                        name = rider_data.get("FullName", f"Rider {rider_id}")
-                        top_riders.append({"name": name, "earnings": earnings})
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    tasks = [client.get(f"http://localhost:4000/users/riders/{rid}") for rid in rider_ids]
+                    responses = await asyncio.gather(*tasks, return_exceptions=True)
+                    rider_names = {}
+                    for rid, response in zip(rider_ids, responses):
+                        if isinstance(response, Exception):
+                            logger.warning(f"Failed to fetch rider {rid}: {response}")
+                            rider_names[rid] = f"Rider {rid}"
+                        elif response.status_code == 200:
+                            rider_data = response.json()
+                            rider_names[rid] = rider_data.get("FullName", f"Rider {rid}")
+                        else:
+                            rider_names[rid] = f"Rider {rid}"
+
+                    for rider_id, earnings in rider_totals.items():
+                        top_riders.append({"name": rider_names.get(rider_id, f"Rider {rider_id}"), "earnings": earnings})
+
             except Exception as e:
-                logger.warning(f"Failed to fetch rider info for {rider_id}: {e}")
-                top_riders.append({"name": f"Rider {rider_id}", "earnings": earnings})
+                logger.warning(f"Batch rider fetch failed: {e}")
+                for rider_id, earnings in rider_totals.items():
+                    top_riders.append({"name": f"Rider {rider_id}", "earnings": earnings})
 
         top_riders.sort(key=lambda x: x['earnings'], reverse=True)
         top_riders = top_riders[:10]

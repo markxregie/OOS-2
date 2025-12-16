@@ -160,7 +160,7 @@ const Cart = () => {
 
   const PRODUCTS_BASE_URL = "http://127.0.0.1:8001";
 
-  const { cartItems, updateQuantity, removeFromCart, clearCart } = useContext(CartContext);
+  const { cartItems, setCartItems, updateQuantity, removeFromCart, clearCart } = useContext(CartContext);
 
   const [maxQuantities, setMaxQuantities] = useState({});
   const [showOrderModal, setShowOrderModal] = useState(false);
@@ -232,6 +232,11 @@ const Cart = () => {
   console.log("🧾 Current cartItems:", cartItems);
 
   const [selectedCartItems, setSelectedCartItems] = useState([]);
+
+  // Effect to clear selectedCartItems when cartItems change (e.g., after checkout removes items)
+  useEffect(() => {
+    setSelectedCartItems(prev => prev.filter(item => cartItems.some(ci => ci.cart_item_id === item.cart_item_id)));
+  }, [cartItems]);
   
   // Existing state variables...
   const [receiptFile, setReceiptFile] = useState(null);
@@ -501,7 +506,10 @@ const Cart = () => {
       toast.error("Please select items to checkout.");
       return;
     }
-  
+
+    // Clear selected items after checkout to prevent them from staying selected
+    setSelectedCartItems([]);
+
     // This logic now applies to both mobile and desktop checkout flows
     if (orderTypeMain === 'Delivery') {
       if (!window.isSecureContext) {
