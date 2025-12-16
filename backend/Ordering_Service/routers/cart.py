@@ -362,7 +362,7 @@ async def get_user_orders(token: str = Depends(oauth2_scheme)):
 
     # Step 1: Fetch all orders for user
     await cursor.execute("""
-        SELECT o.OrderID, o.OrderDate, o.OrderType, o.Status
+        SELECT o.OrderID, o.OrderDate, o.OrderType, o.Status, o.DeliveryFee, o.TotalAmount
         FROM Orders o
         WHERE o.UserName = ?
         ORDER BY o.OrderDate DESC
@@ -440,6 +440,8 @@ async def get_user_orders(token: str = Depends(oauth2_scheme)):
             "date": order_row[1],
             "orderType": order_row[2],
             "status": order_row[3],
+            "deliveryFee": float(order_row[4]) if order_row[4] is not None else 0.0,
+            "totalAmount": float(order_row[5]) if order_row[5] is not None else 0.0,
             "products": products,
         })
 

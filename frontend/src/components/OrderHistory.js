@@ -83,10 +83,13 @@ const OrderHistory = () => {
         const cancelledOrders = [];
 
         data.forEach(order => {
-          const total = order.products.reduce((sum, p) => {
-            const addonSum = p.addons ? p.addons.reduce((s, a) => s + (a.price || a.Price || 0), 0) : 0;
-            return sum + (p.price + addonSum) * p.quantity;
-          }, 0) + (order.orderType === 'Delivery' ? 50 : 0);
+          const deliveryFee = order.deliveryFee;
+          const total = order.totalAmount !== undefined ? order.totalAmount : (
+            order.products.reduce((sum, p) => {
+              const addonSum = p.addons ? p.addons.reduce((s, a) => s + (a.price || a.Price || 0), 0) : 0;
+              return sum + (p.price + addonSum) * p.quantity;
+            }, 0) + deliveryFee
+          );
 
           // --- 3. Map images to products in the order ---
           const productsWithImages = order.products.map(p => ({
@@ -104,6 +107,7 @@ const OrderHistory = () => {
             status: isCompleted ? 'completed' : displayStatus,
             date: order.date,
             total,
+            deliveryFee,
           };
           
           if (isCompleted) {
@@ -159,7 +163,7 @@ const OrderHistory = () => {
       const addonSum = p.addons ? p.addons.reduce((s, a) => s + (a.price || a.Price || 0), 0) : 0;
       return sum + (p.price + addonSum) * p.quantity;
     }, 0);
-    const deliveryFee = order.orderType === 'Delivery' ? 50 : 0;
+    const deliveryFee = order.deliveryFee;
 
     const invoiceHtml = `
       <div class="receipt-container" style="font-family: 'Courier New', Courier, monospace; text-align: left; max-width: 450px; margin: auto; font-size: 1.05em;">

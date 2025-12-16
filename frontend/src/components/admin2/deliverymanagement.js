@@ -6,6 +6,7 @@ import riderImage from "../../assets/rider.jpg";
 import Swal from "sweetalert2";
 import "./deliverymanagement.css";
 import adminImage from "../../assets/administrator.png";
+import { showPreparationTimeModal } from "./modals/PreparationTimeModal";
 
 function DeliveryManagement() {
   const userRole = "Admin";
@@ -631,6 +632,25 @@ function DeliveryManagement() {
               <FaCog />
               Set Delivery Fees
             </button>
+          <button
+            onClick={showPreparationTimeModal}
+            className="prep-time-btn"
+            style={{
+              backgroundColor: '#4b929d',
+              color: 'white',
+              border: 'none',
+              padding: '0.375rem 0.75rem',
+              borderRadius: '0.25rem',
+              cursor: 'pointer',
+              fontWeight: '600',
+              marginLeft: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px'
+            }}>
+            <FaClock />
+            Set Prep Time
+          </button>
           </div>
         </div>
         {/*UPDATED: Use currentOrders which is the paginated slice */}
