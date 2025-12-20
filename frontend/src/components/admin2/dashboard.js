@@ -160,7 +160,13 @@ const Dashboard = () => {
         setAllOrders(transformedOrders);
         setRecentOrders(transformedOrders.slice(0, 10));
         const cancelledCount = transformedOrders.filter(order => order.status.toLowerCase() === "cancelled").length; 
-        const confirmedCount = transformedOrders.filter(order => order.orderType.toLowerCase() === "pick up" && order.status.toLowerCase() === "completed").length;
+        // Count pickup orders that are completed (handle both "pick up" and "pickup" variants)
+        const confirmedCount = transformedOrders.filter(order => {
+          const orderType = order.orderType ? order.orderType.toLowerCase().replace(/\s+/g, '') : '';
+          const status = order.status ? order.status.toLowerCase() : '';
+          return orderType === "pickup" && status === "completed";
+        }).length;
+        console.log("Pickup orders count:", confirmedCount, "Total orders:", transformedOrders.length);
         setDashboardData(prev => ({ ...prev, cancelledOrders: cancelledCount, confirmedOrders: confirmedCount }));
       })
       .catch((err) => console.error("Failed to fetch recent orders:", err));

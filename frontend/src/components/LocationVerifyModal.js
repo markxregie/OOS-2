@@ -72,24 +72,107 @@ const LocationVerifyModal = ({ show, onClose, deliverySettings, selectedCartItem
             cancelButtonText: 'Cancel',
             allowOutsideClick: false,
             didOpen: () => {
+                // Map initialization helper
+                const createGeoJSONCircle = (center, radiusInMeters, points = 64) => {
+                    const coords = [];
+                    const [cx, cy] = center;
+                    for (let i = 0; i < points; i++) {
+                        const theta = (i / points) * (2 * Math.PI);
+                        const dx = radiusInMeters * Math.cos(theta);
+                        const dy = radiusInMeters * Math.sin(theta);
+                        const lng = cx + (dx / (111320 * Math.cos(cy * (Math.PI / 180))));
+                        const lat = cy + (dy / 110540);
+                        coords.push([lng, lat]);
+                    }
+                    coords.push(coords[0]);
+                    return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [coords] } };
+                };
+
+                const maxRadiusKm = deliverySettings.MaxRadiusKm || 8.0;
+                const maxRadiusMeters = maxRadiusKm * 1000;
+                const baseRadiusMeters = (deliverySettings.BaseDistanceKm || 3.0) * 1000;
+
+                // Initialize map immediately for better UX
+                if (!mapboxgl.accessToken) {
+                    const msgEl = document.getElementById('swal-map-msg');
+                    if (msgEl) msgEl.innerText = 'Map configuration error.';
+                    Swal.hideLoading();
+                    return;
+                }
+
+                let map;
+                try {
+                    map = new mapboxgl.Map({
+                        container: 'map-container',
+                        style: 'mapbox://styles/mapbox/streets-v11',
+                        center: [STORE_LOCATION.lng, STORE_LOCATION.lat],
+                        zoom: 13
+                    });
+                    map.addControl(new mapboxgl.NavigationControl());
+                } catch (mapInitError) {
+                    console.error('Map initialization error:', mapInitError);
+                    const msgEl = document.getElementById('swal-map-msg');
+                    if (msgEl) msgEl.innerText = 'Failed to initialize map.';
+                    Swal.hideLoading();
+                    return;
+                }
+
+                // Show map immediately with store location
+                map.on('load', () => {
+                    // Add store marker immediately
+                    new mapboxgl.Marker({ color: 'red' })
+                        .setLngLat([STORE_LOCATION.lng, STORE_LOCATION.lat])
+                        .setPopup(new mapboxgl.Popup().setText('Store Location'))
+                        .addTo(map);
+
+                    // Add delivery radius circles
+                    const baseCircleFeature = createGeoJSONCircle([STORE_LOCATION.lng, STORE_LOCATION.lat], baseRadiusMeters);
+                    map.addSource('base-radius', { type: 'geojson', data: baseCircleFeature });
+                    map.addLayer({ 
+                        id: 'base-radius-fill', 
+                        type: 'fill', 
+                        source: 'base-radius', 
+                        paint: { 'fill-color': '#2ecc71', 'fill-opacity': 0.2 } 
+                    });
+                    map.addLayer({ 
+                        id: 'base-radius-line', 
+                        type: 'line', 
+                        source: 'base-radius', 
+                        paint: { 'line-color': '#27ae60', 'line-width': 2, 'line-dasharray': [2, 2] } 
+                    });
+
+                    const maxCircleFeature = createGeoJSONCircle([STORE_LOCATION.lng, STORE_LOCATION.lat], maxRadiusMeters);
+                    map.addSource('max-radius', { type: 'geojson', data: maxCircleFeature });
+                    map.addLayer({ 
+                        id: 'max-radius-fill', 
+                        type: 'fill', 
+                        source: 'max-radius', 
+                        paint: { 'fill-color': '#e74c3c', 'fill-opacity': 0.15 } 
+                    });
+                    map.addLayer({ 
+                        id: 'max-radius-line', 
+                        type: 'line', 
+                        source: 'max-radius', 
+                        paint: { 'line-color': '#c0392b', 'line-width': 2, 'line-dasharray': [4, 4] } 
+                    });
+
+                    // Ensure map renders properly
+                    setTimeout(() => map.resize(), 100);
+                });
+
+                // Now request user location in parallel with optimized settings
                 Swal.showLoading();
                 navigator.geolocation.getCurrentPosition(
-                    (position) => {
+                    async (position) => {
                         const { latitude, longitude } = position.coords;
                         
                         // Safety Check: If modal closed while getting location
                         if (!Swal.isVisible()) return;
 
-                        Swal.getConfirmButton().disabled = true;
-                        Swal.getCancelButton().disabled = true;
-
                         const userLat = latitude;
                         const userLng = longitude;
 
                         const distance = getDistanceFromLatLonInKm(latitude, longitude, STORE_LOCATION.lat, STORE_LOCATION.lng);
-                        
-                        const maxRadiusKm = deliverySettings.MaxRadiusKm || 8.0;
-                        const isWithinRange = distance <= maxRadiusKm;
 
                         // Calculate Fee
                         let calculatedFee = 0;
@@ -112,83 +195,39 @@ const LocationVerifyModal = ({ show, onClose, deliverySettings, selectedCartItem
                         Swal.getTitle().innerText = 'Location Verified';
                         Swal.hideLoading();
 
-                        // Map Logic
-                        const createGeoJSONCircle = (center, radiusInMeters, points = 64) => {
-                            const coords = [];
-                            const [cx, cy] = center;
-                            for (let i = 0; i < points; i++) {
-                                const theta = (i / points) * (2 * Math.PI);
-                                const dx = radiusInMeters * Math.cos(theta);
-                                const dy = radiusInMeters * Math.sin(theta);
-                                const lng = cx + (dx / (111320 * Math.cos(cy * (Math.PI / 180))));
-                                const lat = cy + (dy / 110540);
-                                coords.push([lng, lat]);
-                            }
-                            coords.push(coords[0]);
-                            return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [coords] } };
-                        };
-
-                        const maxRadiusMeters = maxRadiusKm * 1000;
-                        const baseRadiusMeters = (deliverySettings.BaseDistanceKm || 3.0) * 1000;
-
-                        if (!mapboxgl.accessToken) {
-                             const msgEl = document.getElementById('swal-map-msg');
-                             if (msgEl) msgEl.innerText = 'Map configuration error.';
-                             return;
-                        }
-
-                        let map;
-                        try {
-                            map = new mapboxgl.Map({
-                                container: 'map-container',
-                                style: 'mapbox://styles/mapbox/streets-v11',
-                                center: [STORE_LOCATION.lng, STORE_LOCATION.lat],
-                                zoom: 13
-                            });
-                            map.addControl(new mapboxgl.NavigationControl());
-                        } catch (mapInitError) {
-                            const msgEl = document.getElementById('swal-map-msg');
-                            if (msgEl) msgEl.innerText = 'Failed to initialize map.';
-                            return;
-                        }
-
-                        map.on('load', async () => {
+                        // Wait for map to be ready, then add user location
+                        const addUserLocationToMap = async () => {
                             try {
-                                new mapboxgl.Marker({ color: 'red' }).setLngLat([STORE_LOCATION.lng, STORE_LOCATION.lat]).setPopup(new mapboxgl.Popup().setText('Store Location')).addTo(map);
-                                new mapboxgl.Marker({ color: 'blue' }).setLngLat([userLng, userLat]).setPopup(new mapboxgl.Popup().setText('Your Location')).addTo(map);
+                                // Add user marker
+                                new mapboxgl.Marker({ color: 'blue' })
+                                    .setLngLat([userLng, userLat])
+                                    .setPopup(new mapboxgl.Popup().setText('Your Location'))
+                                    .addTo(map);
 
-                                // Add Radius Circles
-                                const baseCircleFeature = createGeoJSONCircle([STORE_LOCATION.lng, STORE_LOCATION.lat], baseRadiusMeters);
-                                if (!map.getSource('base-radius')) {
-                                    map.addSource('base-radius', { type: 'geojson', data: baseCircleFeature });
-                                    map.addLayer({ id: 'base-radius-fill', type: 'fill', source: 'base-radius', paint: { 'fill-color': '#2ecc71', 'fill-opacity': 0.2 } });
-                                    map.addLayer({ id: 'base-radius-line', type: 'line', source: 'base-radius', paint: { 'line-color': '#27ae60', 'line-width': 2, 'line-dasharray': [2, 2] } });
-                                }
-
-                                const maxCircleFeature = createGeoJSONCircle([STORE_LOCATION.lng, STORE_LOCATION.lat], maxRadiusMeters);
-                                if (!map.getSource('max-radius')) {
-                                    map.addSource('max-radius', { type: 'geojson', data: maxCircleFeature });
-                                    map.addLayer({ id: 'max-radius-fill', type: 'fill', source: 'max-radius', paint: { 'fill-color': '#e74c3c', 'fill-opacity': 0.15 } });
-                                    map.addLayer({ id: 'max-radius-line', type: 'line', source: 'max-radius', paint: { 'line-color': '#c0392b', 'line-width': 2, 'line-dasharray': [4, 4] } });
-                                }
-
+                                // Fit bounds to show both locations
                                 const bounds = new mapboxgl.LngLatBounds();
                                 bounds.extend([STORE_LOCATION.lng, STORE_LOCATION.lat]);
                                 bounds.extend([userLng, userLat]);
-                                map.fitBounds(bounds, { padding: 40, maxZoom: 15 });
-                                setTimeout(() => map.resize(), 200);
+                                map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 1000 });
 
-                                // Directions API
+                                // Fetch and display route
                                 const dirRes = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${STORE_LOCATION.lng},${STORE_LOCATION.lat};${userLng},${userLat}?geometries=geojson&access_token=${MAPBOX_ACCESS_TOKEN}`);
                                 if (dirRes.ok) {
                                     const dirData = await dirRes.json();
                                     if (dirData.routes && dirData.routes[0]) {
                                         const route = dirData.routes[0].geometry;
+                                        
                                         if (map.getSource('route')) {
                                             map.getSource('route').setData({ type: 'Feature', geometry: route });
                                         } else {
                                             map.addSource('route', { type: 'geojson', data: { type: 'Feature', geometry: route } });
-                                            map.addLayer({ id: 'route-line', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#3b82f6', 'line-width': 4 } });
+                                            map.addLayer({ 
+                                                id: 'route-line', 
+                                                type: 'line', 
+                                                source: 'route', 
+                                                layout: { 'line-cap': 'round', 'line-join': 'round' }, 
+                                                paint: { 'line-color': '#3b82f6', 'line-width': 4 } 
+                                            });
                                         }
 
                                         const distanceKm = (dirData.routes[0].distance / 1000).toFixed(2);
@@ -255,34 +294,75 @@ const LocationVerifyModal = ({ show, onClose, deliverySettings, selectedCartItem
                                         cancelButton.onclick = () => {
                                             isSwalOpen.current = false;
                                             Swal.close();
-                                            onClose(); // Call the parent onClose to reset state
+                                            onClose();
                                         };
                                     }
                                 }
                             } catch (err) {
-                                console.error('Mapbox render error', err);
+                                console.error('Error adding user location to map:', err);
                             }
-                        });
+                        };
+
+                        // Execute after map is loaded
+                        if (map.loaded()) {
+                            addUserLocationToMap();
+                        } else {
+                            map.once('load', addUserLocationToMap);
+                        }
                     },
                     (error) => {
                         // Error Handling
+                        console.error('Geolocation error:', error);
                         isSwalOpen.current = false; // Reset flag
-                        let title = 'Location Access Denied';
+                        let title = 'Location Access Issue';
                         let text = 'We need your location to check for delivery eligibility.';
-                        if (error.code === error.PERMISSION_DENIED) {
-                            title = 'Location Permission Blocked';
+                        
+                        if (error.code === 1) { // PERMISSION_DENIED
+                            title = 'Location Permission Required';
                             text = `
                                 <div class="text-start">
-                                    It looks like you've previously blocked location access. 
-                                    <br/><br/> 
-                                    To proceed, please enable location permissions in your browser settings.
+                                    <p>Please allow location access to continue with delivery.</p>
+                                    <p class="mt-2"><strong>Steps:</strong></p>
+                                    <ol class="text-start ps-3">
+                                        <li>Click the location icon <i class="bi bi-geo-alt-fill"></i> in your browser's address bar</li>
+                                        <li>Select "Allow" for location access</li>
+                                        <li>Refresh the page and try again</li>
+                                    </ol>
+                                </div>
+                            `;
+                        } else if (error.code === 2) { // POSITION_UNAVAILABLE
+                            title = 'Location Unavailable';
+                            text = `
+                                <div class="text-start">
+                                    <p>Unable to determine your location. This may be due to:</p>
+                                    <ul class="text-start ps-3">
+                                        <li>GPS/Location services are turned off</li>
+                                        <li>Poor GPS signal</li>
+                                        <li>Browser location services disabled</li>
+                                    </ul>
+                                    <p class="mt-2">Please enable location services and try again.</p>
+                                </div>
+                            `;
+                        } else if (error.code === 3) { // TIMEOUT
+                            title = 'Location Request Timeout';
+                            text = `
+                                <div class="text-start">
+                                    <p>Location request took too long. Please try again.</p>
+                                    <p class="mt-2">Make sure your device's location services are enabled.</p>
                                 </div>
                             `;
                         }
+                        
                         onClose(); // Close the "loading" modal wrapper
-                        Swal.fire({ icon: 'error', title: title, html: text, confirmButtonColor: '#dc3545' });
+                        Swal.fire({ 
+                            icon: 'error', 
+                            title: title, 
+                            html: text, 
+                            confirmButtonColor: '#dc3545',
+                            confirmButtonText: 'OK'
+                        });
                     },
-                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                    { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
                 );
             }
         }).then((result) => {
