@@ -209,6 +209,17 @@ export const CartProvider = ({ children }) => {
   // --- Update quantity ---
   const updateQuantity = async (cartItemId, newQuantity) => {
     if (!token) return;
+    
+    // Optimistic update - update UI immediately
+    setCartItems(prevItems => 
+      prevItems.map(item => 
+        item.cart_item_id === cartItemId 
+          ? { ...item, quantity: newQuantity }
+          : item
+      )
+    );
+
+    // Update backend in background
     try {
       const res = await fetch(`${CART_API_URL}/update/${cartItemId}`, {
         method: "PUT",
@@ -218,10 +229,15 @@ export const CartProvider = ({ children }) => {
         },
         body: JSON.stringify({ quantity: parseInt(newQuantity, 10) }),
       });
-      if (!res.ok) throw new Error("Failed to update quantity");
-      await reloadCart();
+      if (!res.ok) {
+        throw new Error("Failed to update quantity");
+      }
+      // No need to reload cart since we already updated optimistically
     } catch (err) {
       console.error("Error updating quantity:", err);
+      // Revert on error
+      await reloadCart();
+      throw err;
     }
   };
 

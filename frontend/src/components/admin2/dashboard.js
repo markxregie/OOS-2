@@ -88,6 +88,8 @@ const Dashboard = () => {
   const [allDeliveryOrders, setAllDeliveryOrders] = useState([]);
   const [riders, setRiders] = useState([]);
   const [topRiders, setTopRiders] = useState([]);
+  const [isLoadingEarnings, setIsLoadingEarnings] = useState(false);
+  const [earningsCache, setEarningsCache] = useState({});
   // --- useEffects for Auth and Data Fetching ---
   useEffect(() => {
     const storedToken = localStorage.getItem("authToken");
@@ -199,26 +201,49 @@ const Dashboard = () => {
       .catch((err) => console.error("Failed to fetch delivery orders:", err));
   }, [authToken]);
 
-  // New useEffect for time-based rider earnings (optimized)
+  // New useEffect for time-based rider earnings (optimized with caching and loading state)
   useEffect(() => {
     if (!authToken) {
       return;
     }
 
     const fetchEarnings = async () => {
+      // Check cache first
+      if (earningsCache[earningsFilter]) {
+        setRiderEarningsData(earningsCache[earningsFilter].periods);
+        setTopRiders(earningsCache[earningsFilter].topRiders);
+        return;
+      }
+
+      setIsLoadingEarnings(true);
       try {
         const response = await fetch(`http://localhost:7004/delivery/admin/rider-earnings/aggregated/${earningsFilter}`, {
           headers: { 'Authorization': `Bearer ${authToken}` }
         });
         if (!response.ok) throw new Error();
         const data = await response.json();
+        
+        // Update state
         setRiderEarningsData(data.periods);
         setTopRiders(data.topRiders);
+        
+        // Cache the result
+        setEarningsCache(prev => ({
+          ...prev,
+          [earningsFilter]: {
+            periods: data.periods,
+            topRiders: data.topRiders
+          }
+        }));
       } catch (e) {
         console.error('Failed to fetch aggregated rider earnings:', e);
-        // Fallback to empty data
-        setRiderEarningsData([]);
-        setTopRiders([]);
+        // Keep existing data on error instead of clearing
+        if (!earningsCache[earningsFilter]) {
+          setRiderEarningsData([]);
+          setTopRiders([]);
+        }
+      } finally {
+        setIsLoadingEarnings(false);
       }
     };
 
@@ -443,7 +468,7 @@ const Dashboard = () => {
 
           {/* --- Rider Earnings Chart --- */}
           <div className="dashboard-charts" style={{ marginTop: '20px', gridTemplateColumns: '2fr 1fr' }}>
-            <div className="chart-box">
+            <div className="chart-box" style={{ position: 'relative' }}>
               <div className="chart-header">
                   <span>Rider Earnings - {earningsFilter}</span>
                   <select className="chart-dropdown" value={earningsFilter} onChange={(e) => setEarningsFilter(e.target.value)}>
@@ -452,22 +477,50 @@ const Dashboard = () => {
                       <option value="Monthly">Monthly</option>
                   </select>
               </div>
+              {isLoadingEarnings && (
+                <div style={{ 
+                  position: 'absolute', 
+                  top: '50%', 
+                  left: '50%', 
+                  transform: 'translate(-50%, -50%)', 
+                  zIndex: 10,
+                  fontSize: '16px',
+                  color: '#00b4d8',
+                  fontWeight: '600'
+                }}>
+                  Loading...
+                </div>
+              )}
               <ResponsiveContainer width="100%" height={350}>
                   <BarChart data={riderEarningsData} margin={{ top: 10, right: 30, left: 20, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                       <YAxis tickFormatter={(value) => `₱${value.toLocaleString()}`} />
                       <Tooltip formatter={(value) => [`₱${value.toLocaleString()}`, 'Total Earnings']} />
-                      <Bar dataKey="earnings" fill="#00b4d8" name="Total Rider Earnings" />
+                      <Bar dataKey="earnings" fill="#00b4d8" name="Total Rider Earnings" animationDuration={300} />
                   </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="chart-box">
+            <div className="chart-box" style={{ position: 'relative' }}>
               <div className="chart-header" style={{ marginBottom: '15px' }}>
                 <span>Top Earner Riders - {earningsFilter}</span>
               </div>
-              <div style={{ maxHeight: '310px', overflowY: 'auto' }}>
-                {topRiders.map((rider, index) => (
+              {isLoadingEarnings && (
+                <div style={{ 
+                  position: 'absolute', 
+                  top: '50%', 
+                  left: '50%', 
+                  transform: 'translate(-50%, -50%)', 
+                  zIndex: 10,
+                  fontSize: '16px',
+                  color: '#00b4d8',
+                  fontWeight: '600'
+                }}>
+                  Loading...
+                </div>
+              )}
+              <div style={{ maxHeight: '310px', overflowY: 'auto', opacity: isLoadingEarnings ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+                {topRiders.length > 0 ? topRiders.map((rider, index) => (
                   <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 8px', borderBottom: '1px solid #eee' }}>
                     <div style={{ display: 'flex', alignItems: 'center' }}>
                       <span style={{ fontWeight: 'bold', marginRight: '15px', color: '#4b929d', minWidth: '20px' }}>{index + 1}.</span>
@@ -477,7 +530,13 @@ const Dashboard = () => {
                       ₱{rider.earnings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
-                ))}
+                )) : (
+                  !isLoadingEarnings && (
+                    <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                      No data available
+                    </div>
+                  )
+                )}
               </div>
             </div>
           </div>

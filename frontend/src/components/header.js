@@ -69,11 +69,31 @@ export default function AppHeader() {
   // Notification state and functions (copied from Notification.js)
   const [notifications, setNotifications] = useState([]);
 
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
+    const token = localStorage.getItem('authToken');
+    const unreadNotifications = notifications.filter(n => !n.isRead);
+    
+    // Optimistic update - update UI immediately
     setNotifications(notifications.map(notification => ({
       ...notification,
       isRead: true
     })));
+    
+    // Then update backend in the background
+    try {
+      await Promise.all(
+        unreadNotifications.map(notification =>
+          fetch(`http://localhost:7002/notifications/${notification.id}/read`, {
+            method: "PUT",
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          })
+        )
+      );
+    } catch (error) {
+      console.error("Failed to mark all notifications as read:", error);
+    }
   };
 
   const markAsRead = async (id) => {

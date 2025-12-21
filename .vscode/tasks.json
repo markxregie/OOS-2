@@ -62,26 +62,6 @@
       "problemMatcher": []
     },
     {
-      "label": "Start Blockchain Service",
-      "type": "shell",
-      "command": "cd backend/Blockchain_service; python main.py",
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated"
-      },
-      "problemMatcher": []
-    },
-    {
-      "label": "Start Concerns Service",
-      "type": "shell",
-      "command": "cd backend/Concerns_service; python main.py",
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated"
-      },
-      "problemMatcher": []
-    },
-    {
       "label": "Start Frontend",
       "type": "shell",
       "command": "cd frontend; npm start",
@@ -101,8 +81,6 @@
         "Start Track Order Service",
         "Start Notification Service",
         "Start Promotion Service",
-        "Start Blockchain Service",
-        "Start Concerns Service",
         "Start Frontend"
       ],
       "dependsOrder": "parallel"
