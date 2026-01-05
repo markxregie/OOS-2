@@ -63,7 +63,7 @@ function DeliveryManagement() {
     }
 
     try {
-      const [ordersResponse, ridersResponse, pendingResponse] = await Promise.all([
+      const [ordersResponse, ridersResponse, pendingResponse, settingsResponse] = await Promise.all([
         fetch("http://localhost:7004/delivery/admin/delivery/orders", {
           headers: { Authorization: `Bearer ${authToken}` },
         }),
@@ -72,6 +72,9 @@ function DeliveryManagement() {
         }),
         fetch("http://localhost:7004/cart/admin/orders/pending", {
           headers: { Authorization: `Bearer ${authToken}` },
+        }),
+        fetch("http://localhost:7001/delivery/settings", {
+          headers: { Authorization: `Bearer ${authToken}` },
         })
       ]);
 
@@ -79,10 +82,12 @@ function DeliveryManagement() {
         throw new Error('Failed to fetch data');
       }
 
-      const [ordersData, ridersData, pendingData] = await Promise.all([
+      const [ordersData, ridersData, pendingData, settingsData] = await Promise.all([
         ordersResponse.json(),
         ridersResponse.json(),
-        pendingResponse.json()
+        pendingResponse.json(),
+        // settings may fail; handle gracefully by catching parse errors later
+        settingsResponse.ok ? settingsResponse.json() : Promise.resolve(null)
       ]);
       
       // Map assignedRider to string format to match UI expectations
@@ -94,6 +99,20 @@ function DeliveryManagement() {
       setOrders(ordersWithAssignments);
       setRiders(Array.isArray(ridersData) ? ridersData : []);
       setPendingOrdersCount(Array.isArray(pendingData) ? pendingData.length : 0);
+      // If settings returned from backend, map them into local state
+      if (settingsData) {
+        try {
+          setDeliveryFees({
+            baseFee: parseFloat(settingsData.BaseFee) || deliveryFees.baseFee,
+            baseDistance: parseFloat(settingsData.BaseDistanceKm) || deliveryFees.baseDistance,
+            surchargePerKm: parseFloat(settingsData.ExtraFeePerKm) || deliveryFees.surchargePerKm,
+            maxRadius: parseFloat(settingsData.MaxRadiusKm) || deliveryFees.maxRadius,
+            surgePricing: !!settingsData.IsSurgePricingActive,
+          });
+        } catch (err) {
+          console.warn('Failed to parse delivery settings:', err);
+        }
+      }
       lastFetchTimeRef.current = now;
     } catch (err) {
       console.error('Error fetching data:', err);

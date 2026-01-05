@@ -641,7 +641,6 @@ import Swal from 'sweetalert2';
 
           // remove previous map if any
           if (riderMap) {
-            riderMap.setMap(null);
             setRiderMap(null);
           }
           if (riderMarker) {
@@ -739,7 +738,6 @@ import Swal from 'sweetalert2';
       // cleanup when modal closes
       return () => {
         if (riderMap) {
-          riderMap.setMap(null);
           setRiderMap(null);
         }
         if (riderMarker) {

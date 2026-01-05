@@ -172,11 +172,21 @@ const TrackOrder = () => {
     const pickupStatusSteps = ['pending', 'processing', 'waiting for pickup', 'picked up', 'completed'];
 
     useEffect(() => {
+        // Track if component is mounted to prevent updates after unmount
+        let isMounted = true;
+
         const fetchOrderDetails = async () => {
+            // Skip if order is already completed - stops API calls
+            if (order && order.status === 'completed') {
+                return;
+            }
+
             const token = localStorage.getItem('authToken');
             if (!token) {
-                Swal.fire('Error', 'You must be logged in to view order details.', 'error');
-                setLoading(false);
+                if (isMounted && loading) {
+                    Swal.fire('Error', 'You must be logged in to view order details.', 'error');
+                    setLoading(false);
+                }
                 return;
             }
 
@@ -199,6 +209,8 @@ const TrackOrder = () => {
                 if (!orderData) {
                     throw new Error('Order not found.');
                 }
+
+                if (!isMounted) return; // Don't update if unmounted
 
                 // Normalize status for consistency to fix stepper
                 let originalStatus = (orderData.status || '').toLowerCase().trim();
@@ -239,7 +251,7 @@ const TrackOrder = () => {
                         const riderId = detectedRiderId;
                         if (riderId) {
                             const fetched = await fetchRiderLocationFromBackend(riderId);
-                            if (fetched) {
+                            if (fetched && isMounted) {
                                 setRiderLocationState(fetched);
                                 setRiderLastUpdated(Date.now());
                             }
@@ -254,57 +266,66 @@ const TrackOrder = () => {
                     status, // Use the normalized status
                     total: orderData.total
                 });
+                
+                if (loading) {
+                    setLoading(false);
+                }
             } catch (error) {
                 console.error('Error fetching order details:', error);
                 // Avoid showing a popup on every interval failure
-                if (loading) {
+                if (isMounted && loading) {
                     Swal.fire('Error', error.message, 'error');
+                    setLoading(false);
                 }
-            } finally {
-                // Use a functional update to avoid depending on the `loading` state
-                setLoading(currentLoading => (currentLoading ? false : currentLoading));
             }
         };
 
+        // Initial fetch
         fetchOrderDetails();
+        
+        // Set up interval - function checks status internally
         const interval = setInterval(fetchOrderDetails, 5000); // Refresh every 5 seconds
 
-        return () => clearInterval(interval); // Cleanup interval on component unmount
-    }, [orderId, loading]);
+        return () => {
+            isMounted = false;
+            clearInterval(interval);
+        };
+    }, [orderId]); // Only depend on orderId - NOT on order.status
 
-    // Poll for user's pinned location from their profile based on address fields
+    // Fetch user's pinned location from their profile (ONLY ONCE on mount)
     useEffect(() => {
+        let mounted = true; // Prevent state updates after unmount
+        
         const fetchProfileLocation = async () => {
             try {
                 const token = localStorage.getItem('authToken');
-                if (token) {
+                if (token && mounted) {
                     const profileRes = await fetch('http://localhost:4000/users/profile', {
                         headers: { 'Authorization': `Bearer ${token}` },
                     });
-                    if (profileRes.ok) {
+                    if (profileRes.ok && mounted) {
                         const profileData = await profileRes.json();
                         const { region, province, city, streetName, barangay, postalCode, lat, lng } = profileData;
 
                         const geocodeAddress = () => {
-                            // First, set to stored lat/lng if available
+                            // First, set to stored lat/lng if available (priority)
                             if (lat && lng && Number.isFinite(parseFloat(lat)) && Number.isFinite(parseFloat(lng))) {
-                                setUserLocation([parseFloat(lat), parseFloat(lng)]);
-                                console.log('TrackOrder: Set to stored user profile location:', [parseFloat(lat), parseFloat(lng)]);
+                                if (mounted) {
+                                    setUserLocation([parseFloat(lat), parseFloat(lng)]);
+                                    console.log('TrackOrder: Set to stored user profile location:', [parseFloat(lat), parseFloat(lng)]);
+                                }
+                                return; // Don't geocode if we already have coordinates
                             }
 
-                            // Then, try to geocode if address fields are complete
-                            if (region && province && city && streetName && barangay) {
+                            // Only geocode if address fields are complete AND we don't have lat/lng
+                            if (region && province && city && streetName && barangay && window.google && window.google.maps) {
                                 const address = `${streetName}, ${barangay}, ${city}, ${province}, ${region}, Philippines`;
 
-                                // Geocode the address to get lat/lng
-                                const geocoder = new window.google.maps.Geocoder();
-                                geocoder.geocode({ address }, (results, status) => {
-                                    if (status === 'OK' && results[0]) {
-                                        const location = results[0].geometry.location;
-                                        const newLat = location.lat();
-                                        const newLng = location.lng();
-                                        setUserLocation([newLat, newLng]);
-                                        console.log('TrackOrder: Updated to geocoded user profile location:', [newLat, newLng]);
+                                // Use the geocodeAddress utility function that has built-in caching
+                                geocodeAddress(address).then((result) => {
+                                    if (result && mounted) {
+                                        setUserLocation([result.lat, result.lng]);
+                                        console.log('TrackOrder: Updated to geocoded user profile location:', [result.lat, result.lng]);
                                     }
                                 });
                             }
@@ -318,7 +339,9 @@ const TrackOrder = () => {
                             script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}`;
                             script.async = true;
                             script.defer = true;
-                            script.onload = geocodeAddress;
+                            script.onload = () => {
+                                if (mounted) geocodeAddress();
+                            };
                             document.head.appendChild(script);
                         }
                     }
@@ -328,10 +351,12 @@ const TrackOrder = () => {
             }
         };
 
-        fetchProfileLocation(); // Initial fetch
-        const profileInterval = setInterval(fetchProfileLocation, 10000); // Poll every 10 seconds
+        // Fetch only once on mount, not every 10 seconds
+        fetchProfileLocation();
 
-        return () => clearInterval(profileInterval);
+        return () => {
+            mounted = false; // Cleanup
+        };
     }, []);
 
     // Poll rider location from backend if we have a riderId and order is not completed
@@ -347,13 +372,15 @@ const TrackOrder = () => {
                 }
             } catch (e) { /* ignore */ }
         };
-        if (riderIdState && order && order.status !== 'completed') {
+        
+        // Only start polling if order exists and is in transit (not yet completed or cancelled)
+        if (riderIdState && order && ['picked up', 'delivering'].includes(order.status)) {
             // initial fetch
             startPolling();
             interval = setInterval(startPolling, 5000);
         }
         return () => { if (interval) clearInterval(interval); };
-    }, [riderIdState, order]);
+    }, [riderIdState, order?.status]);
 
     // Fetch estimated delivery time from backend (only once per order)
     useEffect(() => {
