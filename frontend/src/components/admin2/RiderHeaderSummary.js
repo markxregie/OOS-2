@@ -17,9 +17,9 @@ const RiderHeaderSummary = ({
   orders,
   earningsFilter,
   setEarningsFilter,
-  calculateEarnings,
   pageTitle = "Dashboard",
   riderName, // Make sure riderName is passed/available
+  earnings,
   riderPhone // Pass riderPhone as prop if available, or use placeholder
 }) => {
 
@@ -114,7 +114,7 @@ const RiderHeaderSummary = ({
           </div>
           <div className="stat-content">
             <div className="earnings-top">
-                <span className="stat-value">₱{calculateEarnings(earningsFilter)}</span>
+                <span className="stat-value">₱{earnings?.totalEarnings?.toFixed(2) || "0.00"}</span>
                 <select
                     className="stats-filter-select"
                     value={earningsFilter}

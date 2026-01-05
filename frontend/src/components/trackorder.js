@@ -651,6 +651,12 @@ const TrackOrder = () => {
                                     <strong>Date Placed:</strong>
                                     <span className="detail-value">{new Date(order.date).toLocaleString()}</span>
                                 </div>
+                                {order.orderType === 'Delivery' && (
+                                    <div className="order-detail-item">
+                                        <strong>Delivery Fee:</strong>
+                                        <span className="detail-value">₱{Number(order.deliveryFee || order.delivery_fee || Math.max(0, (order.total || 0) - (order.products?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0) || 0))).toFixed(2)}</span>
+                                    </div>
+                                )}
                                 <div className="order-detail-item total-amount">
                                     <strong>Total Amount:</strong>
                                     <span className="detail-value">₱{order.total.toFixed(2)}</span>
