@@ -10,6 +10,7 @@ import Lottie from "lottie-react";
 import coffeeTime from "../assets/Coffee Time.json";
 import './menu.css';
 import { CartContext } from '../contexts/CartContext';
+import { checkStoreStatus } from './storeUtils';
 
 // Define API base URLs
 const PRODUCTS_BASE_URL = "http://127.0.0.1:8001";
@@ -325,6 +326,11 @@ const MenuContent = () => {
   const handleAddToCart = async (item, notes, addOns, addOnsTotal) => {
     if (!item) return;
 
+    if (!checkStoreStatus()) {
+      toast.error("Store is closed. Cannot add items to cart.");
+      return;
+    }
+
     const token = localStorage.getItem("authToken");
     if (!token) {
       toast.error("You must be logged in to add to cart.");
@@ -401,6 +407,8 @@ const MenuContent = () => {
     if (!item) return;
     setSelectedItem(item);
 
+    const isStoreOpen = checkStoreStatus();
+
     const imageUrl = item.ProductImage
       ? item.ProductImage.startsWith('http')
         ? item.ProductImage
@@ -461,8 +469,9 @@ const MenuContent = () => {
       showCloseButton: true,
       showCancelButton: false,
       showDenyButton: true,
-      confirmButtonText: 'Add to cart',
-      denyButtonText: 'Buy Now',
+      confirmButtonText: isStoreOpen ? 'Add to cart' : 'Store Closed',
+      denyButtonText: isStoreOpen ? 'Buy Now' : 'Store Closed',
+      footer: !isStoreOpen ? '<span style="color: red; font-weight: bold;">Store is currently closed. Ordering is disabled.</span>' : null,
       cancelButtonText: 'Close',
       customClass: {
         confirmButton: 'btn btn-outline-primary me-2',
@@ -474,6 +483,12 @@ const MenuContent = () => {
       },
       didOpen: () => {
         const checkboxes = Swal.getPopup().querySelectorAll('.addon-checkbox');
+        const confirmBtn = Swal.getConfirmButton();
+        const denyBtn = Swal.getDenyButton();
+        if (!isStoreOpen) {
+          confirmBtn.disabled = true;
+          denyBtn.disabled = true;
+        }
         const priceDisplay = document.getElementById('final-price-display');
         const basePrice = parseFloat(item.ProductPrice ?? 0);
 
@@ -540,6 +555,10 @@ const MenuContent = () => {
 
 
   const handleBuyNow = (item, notes, addOns, addOnsTotal) => {
+    if (!checkStoreStatus()) {
+      toast.error("Store is closed. Cannot place orders.");
+      return;
+    }
     const token = localStorage.getItem("authToken");
     if (!token) {
       toast.error("You must be logged in to buy now.");

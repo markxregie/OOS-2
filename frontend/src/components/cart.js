@@ -10,6 +10,7 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import Swal from 'sweetalert2';
 import LocationVerifyModal from './LocationVerifyModal';
+import { checkStoreStatus } from './storeUtils';
 
 // Store location coordinates
 const STORE_LOCATION = {
@@ -35,7 +36,7 @@ const getImageUrl = (imagePath) => {
 };
 
 // Modal component definition (Order Summary for Mobile)
-const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderTypeMain, handleCheckoutClick, setOrderTypeMain, deliveryFee }) => {
+const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderTypeMain, handleCheckoutClick, setOrderTypeMain, deliveryFee, isStoreOpen }) => {
   const calculateTotal = (item) => {
     const basePrice = item.price || 0;
     const addonsTotal = (item.addons || []).reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0);
@@ -124,10 +125,10 @@ const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderT
             type="button"
             className="btn w-100 mt-4 py-2 fw-bold"
             style={{ backgroundColor: '#4B929D', color: 'white', borderRadius: '10px' }}
-            onClick={handleCheckoutClick}
-            disabled={selectedCartItems.length === 0}
+            onClick={isStoreOpen ? handleCheckoutClick : null}
+            disabled={selectedCartItems.length === 0 || !isStoreOpen}
           >
-            Checkout Now
+            {isStoreOpen ? 'Checkout Now' : 'Store Closed'}
           </button>
         </div>
       </div>
@@ -150,6 +151,7 @@ const Cart = () => {
   const [deliverySettings, setDeliverySettings] = useState({});
   const [deliveryFee, setDeliveryFee] = useState(0);
   const [updateTimeouts, setUpdateTimeouts] = useState({});
+  const isStoreOpen = checkStoreStatus();
 
   useEffect(() => {
     const token = localStorage.getItem("authToken");
@@ -628,6 +630,10 @@ const Cart = () => {
 
   const handleCheckoutClick = async (e) => {
     e.preventDefault();
+    if (!checkStoreStatus()) {
+      toast.error("Store is closed. Cannot proceed to checkout.");
+      return;
+    }
     if (selectedCartItems.length === 0) {
       toast.error("Please select items to checkout.");
       return;
@@ -1051,11 +1057,12 @@ const Cart = () => {
                         <button
                           type="button"
                           className="btn"
-                          style={{ minWidth: '200px', backgroundColor: '#4B929D', color: 'white' }}
-                          onClick={handleCheckoutClick}
+                          style={{ minWidth: '200px', backgroundColor: isStoreOpen ? '#4B929D' : '#6c757d', color: 'white' }}
+                          onClick={isStoreOpen ? handleCheckoutClick : null}
+                          disabled={!isStoreOpen}
                         >
                           <i className="bi bi-cart-check me-2"></i>
-                          Checkout
+                          {isStoreOpen ? 'Checkout' : 'Store Closed'}
                         </button>
                       </div>
                     </td>
@@ -1089,6 +1096,7 @@ const Cart = () => {
         handleCheckoutClick={handleCheckoutClick}
         setOrderTypeMain={setOrderTypeMain} 
         deliveryFee={deliveryFee} // Pass deliveryFee
+        isStoreOpen={isStoreOpen}
       />
     </section>
     {isCheckingLocation && (
