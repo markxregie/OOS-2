@@ -145,6 +145,13 @@
   background-color: #3a7276;
 }
 
+.map-info {
+  font-size: 0.875rem;
+  color: #6c757d;
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+}
+
 /* Mobile responsiveness */
 @media (max-width: 768px) {
   .profile-container {
@@ -215,7 +222,7 @@
     padding: 0.5rem 3rem;
     margin-bottom: 0.5rem;
   }
-  
+
   #firstName.form-input,
   #lastName.form-input {
     margin-bottom: -0.8rem;
@@ -231,7 +238,7 @@
     font-size: 0.9rem;
     margin-bottom: -0.8rem;
     padding: 0.5rem 0.5rem;
-    
+
   }
 
   #landmark.form-input {
@@ -263,5 +270,9 @@
     align-self: stretch;
     padding: 0.5rem 1rem;
   }
-  
+
+  .map-info {
+    font-size: 0.8rem;
+  }
+
 }

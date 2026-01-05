@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useContext } from "react";
 import "../admin2/products.css"; // Renamed CSS file for clarity
 import { FaChevronDown, FaBell, FaFolderOpen, FaEdit, FaArchive } from "react-icons/fa";
 import DataTable from "react-data-table-component";
@@ -7,8 +7,10 @@ import ProductTypeModal from './modals/productTypeModal';
 import AddProductModal from './modals/addProductModal';
 import EditProductModal from './modals/editProductModal';
 import ViewProductModal from './modals/viewProductModal';
+import { AuthContext } from "../AuthContext";
 
 function Products() {
+    const { logout } = useContext(AuthContext);
     const userRole = "Admin";
     const userName = "Lim Alcovendas";
 
@@ -96,6 +98,11 @@ function Products() {
 
     const toggleDropdown = () => setDropdownOpen(!isDropdownOpen);
 
+    const handleLogout = () => {
+        try { logout(); } catch {}
+        window.location.replace("http://localhost:4002/");
+    };
+
     return (
         <div className="products">
             
@@ -118,7 +125,7 @@ function Products() {
                                 <div className="profile-dropdown">
                                     <ul>
                                         <li>Edit Profile</li>
-                                        <li onClick={() => { localStorage.removeItem("access_token"); window.location.href = "/login"; }} style={{ cursor: "pointer" }}>Logout</li>
+                                        <li onClick={handleLogout} style={{ cursor: "pointer" }}>Logout</li>
                                     </ul>
                                 </div>
                             )}

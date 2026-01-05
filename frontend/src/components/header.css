@@ -46,16 +46,17 @@
   background-color: #fffefe !important;
   padding: 0.5rem 1rem;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  position: fixed;
-  top: 0;
-  left: 0;
+  position: relative;
   width: 100%;
   z-index: 1050; /* Increase z-index to be on top of the sidebar */
-  transition: top 0.3s ease-in-out;
+}
+
+.app-header-container {
+  transition: transform 0.3s ease-in-out;
 }
 
 .header-hidden {
-  top: -100px;
+  transform: translateY(-100%);
 }
 
 body {

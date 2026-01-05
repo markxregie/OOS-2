@@ -113,7 +113,7 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
     cursor = await conn.cursor()
 
     try:
-        # Update SQL query to include CashierName
+        # Step 1: Fetch all orders
         await cursor.execute("""
             SELECT
                 o.OrderID,
@@ -125,76 +125,137 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
                 o.DeliveryNotes,
                 o.Status,
                 o.ReferenceNumber,
-                o.CashierName,  -- CashierName included here
+                o.CashierName,
                 di.EmailAddress,
                 di.PhoneNumber,
                 di.Address,
                 di.City,
                 di.Province,
-                di.Landmark
+                di.Landmark,
+                di.FirstName,
+                di.LastName
             FROM Orders o
-                LEFT JOIN (
-                    SELECT FirstName, EmailAddress, PhoneNumber, Address, City, Province, Landmark,
-                           ROW_NUMBER() OVER (PARTITION BY FirstName ORDER BY (SELECT NULL)) as rn
-                    FROM DeliveryInfo
-                ) di ON di.FirstName = o.UserName AND di.rn = 1
+                LEFT JOIN DeliveryInfo di ON di.OrderID = o.OrderID
             ORDER BY o.OrderDate DESC
         """)
 
         orders_data = await cursor.fetchall()
+        
+        if not orders_data:
+            return []
+
+        order_ids = [row[0] for row in orders_data]
+
+        # Step 2: Fetch ALL items for ALL orders in ONE query
+        order_ids_str = ','.join(str(oid) for oid in order_ids)
+        await cursor.execute(f"""
+            SELECT OrderID, OrderItemID, ProductName, Quantity, Price, ProductCategory
+            FROM OrderItems
+            WHERE OrderID IN ({order_ids_str})
+        """)
+        all_items = await cursor.fetchall()
+
+        # Group items by order_id
+        items_by_order = {}
+        order_item_ids = []
+        for item in all_items:
+            order_id = item[0]
+            if order_id not in items_by_order:
+                items_by_order[order_id] = []
+            items_by_order[order_id].append(item)
+            order_item_ids.append(item[1])
+
+        # Step 3: Fetch ALL addons for ALL items in ONE query
+        addons_by_item = {}
+        if order_item_ids:
+            order_item_ids_str = ','.join(str(oiid) for oiid in order_item_ids)
+            await cursor.execute(f"""
+                SELECT OrderItemID, AddOnName, Price, AddOnID
+                FROM OrderItemAddOns
+                WHERE OrderItemID IN ({order_item_ids_str})
+            """)
+            all_addons = await cursor.fetchall()
+
+            for addon in all_addons:
+                item_id = addon[0]
+                if item_id not in addons_by_item:
+                    addons_by_item[item_id] = []
+                addons_by_item[item_id].append({
+                    "addon_name": addon[1],
+                    "price": float(addon[2]),
+                    "addon_id": addon[3]
+                })
+
+        # Step 4: Build response
+        # Fallback: fetch user profile names via auth service endpoint when DeliveryInfo names are absent
+        name_lookup_usernames = [row[1] for row in orders_data if not row[16] and not row[17]]
+        user_name_map = {}
+        if name_lookup_usernames:
+            async with httpx.AsyncClient() as client:
+                for uname in set(name_lookup_usernames):
+                    try:
+                        # Auth/User service likely mounts user routes under /users
+                        resp = await client.get(
+                            "http://localhost:4000/users/employee_name",
+                            params={"username": uname},
+                            headers={"Authorization": f"Bearer {token}"}
+                        )
+                        if resp.status_code == 200:
+                            payload = resp.json()
+                            full = payload.get("employee_name", "").strip()
+                            logger.info(f"[NameFallback] Got full name '{full}' for username '{uname}'")
+                            if full:
+                                parts = full.split()
+                                fn = parts[0] if parts else ""
+                                ln = parts[-1] if len(parts) > 1 else ""
+                                if fn or ln:
+                                    user_name_map[uname] = (fn, ln)
+                        else:
+                            logger.warning(f"[NameFallback] Non-200 {resp.status_code} for username '{uname}' body={resp.text}")
+                    except Exception as e:
+                        logger.warning(f"[NameFallback] fetch failed for {uname}: {e}")
 
         orders = []
         for row in orders_data:
             order_id = row[0]
 
-            # Get item details with price
-            await cursor.execute("""
-                SELECT OrderItemID, ProductName, Quantity, Price, ProductCategory
-                FROM OrderItems
-                WHERE OrderID = ?
-            """, (order_id,))
-            item_rows = await cursor.fetchall()
-
+            # Get items for this order
+            items = items_by_order.get(order_id, [])
             item_list = []
-            for item in item_rows:
-                order_item_id = item[0]
-                # Get add-ons for this item
-                await cursor.execute("""
-                    SELECT AddOnName, Price, AddOnID
-                    FROM OrderItemAddOns
-                    WHERE OrderItemID = ?
-                """, (order_item_id,))
-                addon_rows = await cursor.fetchall()
-                addons_list = [
-                    {
-                        "addon_name": addon[0],
-                        "price": float(addon[1]),
-                        "addon_id": addon[2]
-                    }
-                    for addon in addon_rows
-                ]
+            for item in items:
+                order_item_id = item[1]
+                addons_list = addons_by_item.get(order_item_id, [])
                 item_list.append({
-                    "name": item[1],
-                    "quantity": item[2],
-                    "price": float(item[3]),
-                    "category": item[4],
+                    "name": item[2],
+                    "quantity": item[3],
+                    "price": float(item[4]),
+                    "category": item[5],
                     "addons": addons_list
                 })
 
-            delivery_address = ", ".join(filter(None, [row[11], row[12], row[13], row[14]]))
+            delivery_address = ", ".join(filter(None, [row[12], row[13], row[14], row[15]]))
 
-            # Include the CashierName in the response
+            first_name = row[16]
+            last_name = row[17]
+            if (not first_name and not last_name) and row[1] in user_name_map:
+                fetched_fn, fetched_ln = user_name_map[row[1]]
+                first_name = first_name or fetched_fn
+                last_name = last_name or fetched_ln
+            combined_name = (f"{first_name} {last_name}".strip() if first_name and last_name else None)
+            normalized_order_type = 'Pickup' if str(row[3]).lower().startswith('pick') else row[3]
             orders.append({
                 "order_id": row[0],
-                "customer_name": row[1],
+                "customer_name": combined_name or row[1],
+                "first_name": first_name,
+                "last_name": last_name,
                 "order_date": row[2].strftime("%Y-%m-%d %H:%M:%S"),
-                "order_type": row[3],
+                "order_type": normalized_order_type,
                 "payment_method": row[4],
                 "total_amount": float(row[5]),
                 "deliveryNotes": row[6],
                 "order_status": row[7],
                 "reference_number": row[8],
-                "cashier_name": row[9],  # Add the CashierName here
+                "cashier_name": row[9],
                 "emailAddress": row[10],
                 "phoneNumber": row[11],
                 "deliveryAddress": delivery_address,
@@ -278,7 +339,7 @@ async def get_all_pending_orders(token: str = Depends(oauth2_scheme)):
 
     return orders
 
-@router.get("cart/admin/orders/pending")
+@router.get("/cart/admin/orders/pending")
 async def get_pending_orders_count(token: str = Depends(oauth2_scheme)):
     await validate_token_and_roles(token, ["admin", "staff"])
     conn = await get_db_connection()
@@ -299,49 +360,78 @@ async def get_user_orders(token: str = Depends(oauth2_scheme)):
     conn = await get_db_connection()
     cursor = await conn.cursor()
 
+    # Step 1: Fetch all orders for user
     await cursor.execute("""
-        SELECT o.OrderID, o.OrderDate, o.OrderType, o.Status
+        SELECT o.OrderID, o.OrderDate, o.OrderType, o.Status, o.DeliveryFee, o.TotalAmount
         FROM Orders o
         WHERE o.UserName = ?
         ORDER BY o.OrderDate DESC
     """, (username,))
 
     order_rows = await cursor.fetchall()
+    
+    if not order_rows:
+        await cursor.close()
+        await conn.close()
+        return []
 
+    order_ids = [row[0] for row in order_rows]
+
+    # Step 2: Fetch ALL items for ALL orders in ONE query
+    order_ids_str = ','.join(str(oid) for oid in order_ids)
+    await cursor.execute(f"""
+        SELECT OrderID, OrderItemID, ProductName, Quantity, Price
+        FROM OrderItems
+        WHERE OrderID IN ({order_ids_str})
+    """)
+    all_items = await cursor.fetchall()
+
+    # Group items by order_id
+    items_by_order = {}
+    order_item_ids = []
+    for item in all_items:
+        order_id = item[0]
+        if order_id not in items_by_order:
+            items_by_order[order_id] = []
+        items_by_order[order_id].append(item)
+        order_item_ids.append(item[1])
+
+    # Step 3: Fetch ALL addons for ALL items in ONE query
+    addons_by_item = {}
+    if order_item_ids:
+        order_item_ids_str = ','.join(str(oiid) for oiid in order_item_ids)
+        await cursor.execute(f"""
+            SELECT OrderItemID, AddOnName, Price, AddOnID
+            FROM OrderItemAddOns
+            WHERE OrderItemID IN ({order_item_ids_str})
+        """)
+        all_addons = await cursor.fetchall()
+
+        for addon in all_addons:
+            item_id = addon[0]
+            if item_id not in addons_by_item:
+                addons_by_item[item_id] = []
+            addons_by_item[item_id].append({
+                "addon_name": addon[1],
+                "price": float(addon[2]),
+                "addon_id": addon[3]
+            })
+
+    # Step 4: Build response
     orders = []
     for order_row in order_rows:
         order_id = order_row[0]
 
         # Get items for this order
-        await cursor.execute("""
-            SELECT OrderItemID, ProductName, Quantity, Price
-            FROM OrderItems
-            WHERE OrderID = ?
-        """, (order_id,))
-        item_rows = await cursor.fetchall()
-
+        items = items_by_order.get(order_id, [])
         products = []
-        for item in item_rows:
-            order_item_id = item[0]
-            # Get add-ons for this item
-            await cursor.execute("""
-                SELECT AddOnName, Price, AddOnID
-                FROM OrderItemAddOns
-                WHERE OrderItemID = ?
-            """, (order_item_id,))
-            addon_rows = await cursor.fetchall()
-            addons_list = [
-                {
-                    "addon_name": addon[0],
-                    "price": float(addon[1]),
-                    "addon_id": addon[2]
-                }
-                for addon in addon_rows
-            ]
+        for item in items:
+            order_item_id = item[1]
+            addons_list = addons_by_item.get(order_item_id, [])
             products.append({
-                "name": item[1],
-                "quantity": item[2],
-                "price": float(item[3]),
+                "name": item[2],
+                "quantity": item[3],
+                "price": float(item[4]),
                 "addons": addons_list
             })
 
@@ -350,6 +440,8 @@ async def get_user_orders(token: str = Depends(oauth2_scheme)):
             "date": order_row[1],
             "orderType": order_row[2],
             "status": order_row[3],
+            "deliveryFee": float(order_row[4]) if order_row[4] is not None else 0.0,
+            "totalAmount": float(order_row[5]) if order_row[5] is not None else 0.0,
             "products": products,
         })
 

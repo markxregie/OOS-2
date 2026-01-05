@@ -2,11 +2,11 @@ import React, { useState, useEffect } from "react";
 import { Container, Table, Form } from "react-bootstrap";
 import { CartFill, BellFill, PersonFill, Search, EyeFill, PencilFill, TrashFill, PrinterFill } from "react-bootstrap-icons";
 import { FaChevronDown, FaBell, FaAngleLeft, FaAngleRight, FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa";
-import { useSearchParams } from "react-router-dom";
 import Swal from 'sweetalert2';
 import withReactContent from 'sweetalert2-react-content';
 import "../admin2/manageorder.css";
 import { FaSignOutAlt, FaUndo } from "react-icons/fa";
+import adminImage from "../../assets/administrator.png";
 
 // Initialize SweetAlert with React Content
 const MySwal = withReactContent(Swal);
@@ -111,7 +111,6 @@ const sampleOrders = [
 
 const ManageOrders = () => {
   const userRole = "Admin";
-  const [searchParams] = useSearchParams();
   const [authToken, setAuthToken] = useState(null);
   const [userName, setUserName] = useState("Loading...");
 
@@ -125,32 +124,19 @@ const ManageOrders = () => {
   const itemsPerPage = 10;
 
   useEffect(() => {
-    const tokenFromUrl = searchParams.get('authorization');
-    const usernameFromUrl = searchParams.get('username');
-
-    if (tokenFromUrl) {
-      setAuthToken(tokenFromUrl);
-      localStorage.setItem("authToken", tokenFromUrl); // Save to localStorage
-    } else {
-      // If not in URL, try getting from localStorage
-      const storedToken = localStorage.getItem("authToken");
-      if (storedToken) {
-        setAuthToken(storedToken);
-      } else {
-        console.error("Authorization token not found in URL or localStorage.");
-      }
-    }
-
-    if (usernameFromUrl) {
-      setUserName(usernameFromUrl);
-      localStorage.setItem("userName", usernameFromUrl); // Save to localStorage
+    const storedToken = localStorage.getItem("authToken");
+    if (storedToken) setAuthToken(storedToken);
+    const userData = localStorage.getItem("userData");
+    if (userData) {
+      try { const parsed = JSON.parse(userData); if (parsed?.username) setUserName(parsed.username); } catch {}
     } else {
       const storedUsername = localStorage.getItem("userName");
-      if (storedUsername) {
-        setUserName(storedUsername);
-      }
+      if (storedUsername) setUserName(storedUsername);
     }
-  }, [searchParams]);
+    const onStorage = () => { setAuthToken(localStorage.getItem("authToken")); };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -186,22 +172,33 @@ const ManageOrders = () => {
         const data = await response.json();
         console.log("Backend raw data:", data);
 
-        const transformedOrders = data.map(order => ({
-          id: order.order_id,
-          customer: order.customer_name,
-          date: order.order_date,
-          orderType: order.order_type,
-          paymentMethod: order.payment_method,
-          total: order.total_amount,
-          status: order.order_status,
-          emailAddress: order.emailAddress,
-          phoneNumber: order.phoneNumber,
-          deliveryAddress: order.deliveryAddress,
-          deliveryNotes: order.deliveryNotes,
-          adminNotes: order.adminNotes || "",
-          statusHistory: order.statusHistory || [],
-          items: order.items || []  // ← DIRECTLY use the array
-        }));
+        const transformedOrders = data.map(order => {
+          const firstName = order.first_name || order.firstName || "";
+          const lastName = order.last_name || order.lastName || "";
+          const orderType = order.order_type;
+          const nameFromFields = (firstName && lastName) ? `${firstName} ${lastName}` : "";
+          // Display rules: Delivery prefers DeliveryInfo names; Pickup prefers profile names; fallback to username/customer_name
+          const displayCustomer = nameFromFields || order.customer_name;
+
+          return {
+            id: order.order_id,
+            customer: displayCustomer,
+            firstName,
+            lastName,
+            date: order.order_date,
+            orderType: orderType,
+            paymentMethod: order.payment_method,
+            total: order.total_amount,
+            status: order.order_status,
+            emailAddress: order.emailAddress,
+            phoneNumber: order.phoneNumber,
+            deliveryAddress: order.deliveryAddress,
+            deliveryNotes: order.deliveryNotes,
+            adminNotes: order.adminNotes || "",
+            statusHistory: order.statusHistory || [],
+            items: order.items || []
+          };
+        });
 
         // Filter orders to only include those from today
         const today = new Date();
@@ -223,7 +220,7 @@ const ManageOrders = () => {
 
   const filteredOrders = orders.filter(order => {
     const matchesSearch =
-      order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (order.customer || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.id.toString().includes(searchTerm) ||
       order.status.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.paymentMethod.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -291,6 +288,15 @@ const ManageOrders = () => {
             {items.map((item, index) => (
               <li key={index} className="mb-2">
                 <span className="fw-bold">{item.quantity} x</span> {item.name}
+                {item.addons && item.addons.length > 0 && (
+                  <ul className="list-unstyled ms-3 mt-1" style={{ fontSize: '0.9em', color: '#666' }}>
+                    {item.addons.map((addon, addonIdx) => (
+                      <li key={addonIdx}>
+                        + {addon.addon_name || addon.name} (₱{addon.price ? addon.price.toFixed(2) : '0.00'})
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>
@@ -355,12 +361,24 @@ const ManageOrders = () => {
               </thead>
               <tbody>
                 {order.items.map((item, index) => (
-                  <tr key={index}>
-                    <td>{item.quantity}</td>
-                    <td>{item.name}</td>
-                    <td>{item.price ? item.price.toFixed(2) : "-"}</td>
-                    <td>{item.price ? (item.price * item.quantity).toFixed(2) : "-"}</td>
-                  </tr>
+                  <React.Fragment key={index}>
+                    <tr>
+                      <td>{item.quantity}</td>
+                      <td>{item.name}</td>
+                      <td>{item.price ? item.price.toFixed(2) : "-"}</td>
+                      <td>{item.price ? (item.price * item.quantity).toFixed(2) : "-"}</td>
+                    </tr>
+                    {item.addons && item.addons.length > 0 && item.addons.map((addon, addonIdx) => (
+                      <tr key={`${index}-addon-${addonIdx}`} style={{ backgroundColor: '#f8f9fa' }}>
+                        <td></td>
+                        <td style={{ paddingLeft: '2rem', fontSize: '0.9em', color: '#666' }}>
+                          + {addon.addon_name || addon.name}
+                        </td>
+                        <td style={{ fontSize: '0.9em' }}>{addon.price ? addon.price.toFixed(2) : "-"}</td>
+                        <td style={{ fontSize: '0.9em' }}>{addon.price ? (addon.price * item.quantity).toFixed(2) : "-"}</td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
                 ))}
               </tbody>
             </Table>
@@ -427,14 +445,14 @@ const ManageOrders = () => {
           </div>
           <div className="header-right">
             <div className="header-date">{currentDateFormatted}</div>
-            <div className="header-profile">
-              <div className="profile-pic"></div>
+             <div className="header-profile">
+                 <img src={adminImage} alt="Admin" className="profile-pic" />
               <div className="profile-info">
                 <div className="profile-role">Hi! I'm {userRole}</div>
-                <div className="profile-name">{userName}</div>
+                <div className="profile-name">Admin OOS</div>
               </div>
               <div className="dropdown-icon" onClick={() => setDropdownOpen(!dropdownOpen)}><FaChevronDown /></div>
-              <div className="bell-icon"><FaBell className="bell-outline" /></div>
+              
               {dropdownOpen && (
                 <div className="profile-dropdown" style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "white", border: "1px solid #ccc", borderRadius: "4px", boxShadow: "0 2px 8px rgba(0,0,0,0.15)", zIndex: 1000, width: "150px" }}>
                   <ul style={{ listStyle: "none", margin: 0, padding: "8px 0" }}>
@@ -447,7 +465,7 @@ const ManageOrders = () => {
                       <FaUndo /> Refresh
                     </li>
                     <li
-                      onClick={() => { localStorage.removeItem("access_token"); window.location.href = "http://localhost:4002/"; }}
+                      onClick={() => { try { require('../AuthContext'); } catch {} ; try { /* dynamic import context not ideal */ } catch {} ; localStorage.removeItem("access_token"); localStorage.removeItem("authToken"); localStorage.removeItem("expires_at"); localStorage.removeItem("userData"); window.location.replace("http://localhost:4002/"); }}
                       style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#dc3545" }}
                       onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8d7da"}
                       onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}

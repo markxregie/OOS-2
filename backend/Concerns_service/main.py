@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from database import get_db_connection  # connection checker (optional)
 from routers.concerns import router as concerns_router
 
@@ -20,6 +21,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount uploads directory to serve files
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 app.include_router(concerns_router)
 

@@ -3,36 +3,171 @@
   margin-top: 0 !important;
   padding-top: 0 !important;
 }
-
+.order-cards-container {
+  margin-bottom: 30px !important;
+  padding-top: 0 !important;
+  /* Removed negative margin-right */
+  width: 100%;
+  display: flex; /* Use flexbox for alignment */
+  flex-wrap: wrap; /* Allow cards to wrap to the next line */
+  justify-content: center; /* Center cards horizontally */
+  gap: 15px; /* Add space between cards */
+}
 .riderhome-container {
   margin-top: 0 !important;
   padding-top: 0 !important;
 }
 
-.active-orders-container {
-  display: flex !important;
-  flex-wrap: wrap !important;
-  gap: 20px;
-  justify-content: flex-start !important;
+/* Dashboard Summary - Consistent with riderdashboard.css */
+.dashboard-summary-container {
+  border-radius: 12px;
+  padding: 10px;
+  margin-bottom: 15px;
+  transition: background-color 0.5s ease-in-out;
 }
 
-.active-orders-container.two-cards {
-  gap: 8px;
-  justify-content: center !important;
-}
-
-.active-order-card {
-  padding: 20px;
-  text-align: left ;
+.rider-selector-group {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  width: 300px;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 15px;
 }
 
-.active-orders-container.two-cards .active-order-card {
-  width: 45%;
+.rider-info-display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rider-profile-pic {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #fff;
+}
+
+.rider-name-text {
+  color: #2c3e50;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.rider-select {
+  height: 35px;
+  min-width: 160px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #555;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background-color: #fff;
+  padding: 0 8px;
+}
+
+.summary-cards-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 15px;
+}
+
+/* --- SCROLLABLE CARDS ON MOBILE --- */
+@media (max-width: 991px) {
+    .summary-cards-container {
+        display: flex !important; /* Force flex */
+        overflow-x: auto !important; /* Enable scrolling */
+        flex-wrap: nowrap !important; /* No stacking */
+        padding-bottom: 15px; /* Space for scrollbar */
+        scroll-snap-type: x mandatory; /* Snap effect */
+    }
+    .summary-card {
+        min-width: 260px !important; /* Force width */
+        flex: 0 0 auto !important;
+        scroll-snap-align: start;
+    }
+}
+
+.summary-card {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background-color: #fff;
+  color: #2c3e50;
+  border-radius: 10px;
+  border: none;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s;
+}
+
+.summary-card:hover {
+  transform: translateY(-3px);
+}
+
+.card-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #7f8c8d;
+}
+
+.card-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  text-align: center;
+  color: #2c3e50;
+}
+
+/* --- ORDER CARD STYLES --- */
+
+.order-card {
+  width: 100%;
+  max-width: 650px; /* Max width for desktop readability */
+  margin-bottom: 15px;
+  /* Ensure padding inside the card handles spacing */
+  padding: 20px;
+  box-sizing: border-box;
+  min-height: 570px; /* Ensure sufficient height for content, including expanded dropdown and buttons */
+}
+
+.order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap; 
+}
+
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* --- ACTION BUTTONS FIX --- */
+.order-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch; /* Make buttons equal height */
+  justify-content: space-between; /* Push buttons to edges */
+  gap: 10px;
+  margin-top: 5px;
+  margin-bottom: 15px;
+  flex-wrap: wrap; /* Allow buttons to wrap if needed */
+  width: 100%; /* Take full width of the card content area */
+}
+
+.order-actions .btn {
+  width: 100%; /* Fill the container width */
+  max-width: 100%; /* Prevent overflow */
+  margin: 0; /* Remove negative margins */
+}
+/* Restore button background colors that might be overridden */
+.order-actions .btn-success {
+  background-color: #198754 !important; /* Bootstrap success green */
+  border-color: #198754 !important;
+}
+.order-actions .btn-primary {
+  background-color: #0d6efd !important; /* Bootstrap primary blue */
 }
 
 /* ----------------------------------------------------
@@ -78,6 +213,15 @@
   display: none;
 }
 
+/* Media Query for Desktop View (min-width: 992px) */
+@media (min-width: 992px) {
+  .order-cards-container {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    justify-content: unset;
+  }
+}
+
 /* Media Query for Mobile/Tablet View (max-width: 991px) */
 @media (max-width: 991px) {
   /* General Mobile Layout */
@@ -89,7 +233,11 @@
   .main-content {
     margin-left: 0;
     width: 100%;
+    max-width: 600px; /* Center the content with max width */
+    margin: 0 auto; /* Center horizontally */
     padding-bottom: 60px; /* Space for the fixed bottom nav */
+    padding-left: 10px; /* Add slight padding to body */
+    padding-right: 10px;
   }
 
   .mobile-bottom-nav {
@@ -154,15 +302,14 @@
     flex-wrap: wrap;
     justify-content: center;
   }
-
+ 
   /* =======================================================
-     DEFINITIVE MOBILE TABLE FIX 
-     ======================================================= */
+      DEFINITIVE MOBILE TABLE FIX 
+      ======================================================= */
   .orders-table-container {
-    /* Use overflow-x auto to allow horizontal scrolling if necessary 
-       but the main fix below converts it to a vertical list. */
     overflow-x: hidden; 
-    padding: 0 10px;
+    padding: 0; /* Reset padding here as main-content handles it */
+    width: 100%;
   }
 
   .orders-table {
@@ -221,4 +368,37 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+
+  /* --- MOBILE BUTTON FIX --- */
+  /* Stack buttons vertically in mobile to prevent exceeding card boundaries */
+    .order-actions {
+        flex-direction: column; /* Stack buttons vertically */
+        align-items: stretch; /* Make buttons full width */
+        width: 100%;
+        margin-left: 0;
+        margin-right: 0;
+        gap: 10px; /* Add a gap between the buttons */
+    }
+  .order-actions .btn {
+    width: 100%; /* Full width buttons */
+    max-width: 100%; /* Prevent overflow */
+  }
+  
+  .order-card {
+    width: 100%;
+    margin-left: 5px;
+    margin-right: 0; 
+    height: auto; 
+    flex-shrink: 0; 
+  }
+
+  .order-cards-container {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .order-actions .btn {
+    margin-bottom: 0; 
+  }
+
 }

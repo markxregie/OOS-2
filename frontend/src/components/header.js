@@ -13,6 +13,7 @@ import { useEffect, useState, useContext } from 'react';
 import Swal from 'sweetalert2';
 import { CartContext } from '../contexts/CartContext';
 import { AuthContext } from './AuthContext';
+import { checkStoreStatus } from './storeUtils';
 
 export default function AppHeader() {
   const location = useLocation();
@@ -23,20 +24,20 @@ export default function AppHeader() {
   const { isLoggedIn, login, logout } = useContext(AuthContext);
   const [profileImage, setProfileImage] = useState("https://cdn-icons-png.flaticon.com/512/149/149071.png");
 
-  // Check URL query params for authorization token and login
+  // Clean stray username param if not logged in & handle token from URL once
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tokenFromUrl = params.get('authorization');
-    console.log('Token from URL:', tokenFromUrl);
     if (tokenFromUrl) {
       login({ authToken: tokenFromUrl });
-      console.log('Logged in with token from URL');
-      // Remove token from URL to clean up
       params.delete('authorization');
-      const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
-      window.history.replaceState({}, document.title, newUrl);
     }
-  }, [login]);
+    if (!isLoggedIn && params.has('username')) {
+      params.delete('username');
+    }
+    const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+    window.history.replaceState({}, document.title, newUrl);
+  }, [login, isLoggedIn]);
 
   // New state for header visibility
   const [isVisible, setIsVisible] = useState(true);
@@ -69,11 +70,31 @@ export default function AppHeader() {
   // Notification state and functions (copied from Notification.js)
   const [notifications, setNotifications] = useState([]);
 
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
+    const token = localStorage.getItem('authToken');
+    const unreadNotifications = notifications.filter(n => !n.isRead);
+    
+    // Optimistic update - update UI immediately
     setNotifications(notifications.map(notification => ({
       ...notification,
       isRead: true
     })));
+    
+    // Then update backend in the background
+    try {
+      await Promise.all(
+        unreadNotifications.map(notification =>
+          fetch(`http://localhost:7002/notifications/${notification.id}/read`, {
+            method: "PUT",
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          })
+        )
+      );
+    } catch (error) {
+      console.error("Failed to mark all notifications as read:", error);
+    }
   };
 
   const markAsRead = async (id) => {
@@ -230,8 +251,8 @@ export default function AppHeader() {
     }).then((result) => {
       if (result.isConfirmed) {
         logout();
-        // Redirect to login page on frontend-auth at localhost:4002
-        window.location.href = 'http://localhost:4002/';
+        // Redirect to login page on frontend-auth at localhost:4002 and replace history
+        window.location.replace('http://localhost:4002/');
       }
     });
   };
@@ -257,9 +278,27 @@ export default function AppHeader() {
   const { cartItems } = useContext(CartContext);
   const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0);
 
+  const [isStoreOpen, setIsStoreOpen] = useState(checkStoreStatus());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIsStoreOpen(checkStoreStatus());
+    }, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <>
-      <Navbar expand="lg" onToggle={(expanded) => setIsToggled(expanded)} className={`bg-body-tertiary ${isVisible ? '' : 'header-hidden'}`}>
+    // ADDED: d-flex and flex-column here to force vertical stacking
+    <div className={`fixed-top d-flex flex-column app-header-container ${isVisible ? '' : 'header-hidden'}`} style={{ zIndex: 1030 }}>
+      
+      {!isStoreOpen && (
+        <div className="w-100 text-center py-2 text-white d-lg-flex justify-content-lg-center align-items-lg-center" style={{ backgroundColor: '#dc3545', fontSize: '0.85rem' }}>
+          <div className="me-lg-2"><strong>Store is Closed.</strong> View Only Mode.</div>
+          <div>Mon-Fri: 7AM–9PM | Sat-Sun: 8AM–10PM</div>
+        </div>
+      )}
+
+      <Navbar expand="lg" onToggle={(expanded) => setIsToggled(expanded)} className="bg-body-tertiary">
         <Container className="d-flex align-items-center justify-content-between">
           {/* Left - Logo */}
           <Navbar.Brand as={Link} to="/" className="me-lg-5 me-0">
@@ -500,8 +539,6 @@ export default function AppHeader() {
           </Navbar.Collapse>
         </Container>
       </Navbar>
-
-
-    </>
+    </div>
   );
 }

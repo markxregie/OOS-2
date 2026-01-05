@@ -6,8 +6,8 @@ import './checkout.css';
 const CheckoutPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { clearCart } = useContext(CartContext);
-  const { cartItems = [], orderType = 'Pick Up', paymentMethod = 'Cash' } = location.state || {};
+  const { clearCart } = useContext(CartContext); // Receive deliveryFee from location.state
+  const { cartItems = [], orderType = 'Pick Up', paymentMethod = 'Cash', deliveryFee = 0 } = location.state || {};
 
   const [userData, setUserData] = useState({
     username: '',
@@ -16,9 +16,12 @@ const CheckoutPage = () => {
     lastName: '',
     email: '',
     phone: '',
-    blockStreetSubdivision: '',
-    city: '',
+    region: '',
     province: '',
+    streetName: '',
+    city: '',
+    barangay: '',
+    postalCode: '',
     landmark: '',
   });
 
@@ -47,9 +50,12 @@ const CheckoutPage = () => {
           lastName: data.lastName || '',
           email: data.email || '',
           phone: data.phoneNumber || data.phone || '',
-          blockStreetSubdivision: (data.block || '') + ' ' + (data.street || '') + ' ' + (data.subdivision || ''),
-          city: data.city || '',
+          region: data.region || '',
           province: data.province || '',
+          streetName: data.streetName || '',
+          city: data.city || '',
+          barangay: data.barangay || '',
+          postalCode: data.postalCode || '',
           landmark: data.landmark || '',
         });
       } catch (error) {
@@ -88,33 +94,45 @@ const CheckoutPage = () => {
   const calculateTotal = () => {
     const subtotal = cartItems.reduce((acc, item) => {
       const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
-      return acc + (item.ProductPrice + addonSum) * item.quantity;
+      return acc + (item.price + addonSum) * item.quantity;
     }, 0);
-    const deliveryFee = orderType === 'Delivery' ? 50 : 0;
+    // Use the passed deliveryFee instead of hardcoded 50
+    const currentDeliveryFee = orderType === 'Delivery' ? deliveryFee : 0;
     return subtotal + deliveryFee;
   };
 
   // Replace the confirmPayment function in your CheckoutPage.js
 
 const confirmPayment = async (saved) => {
+  // Show loader immediately
+  Swal.fire({
+    title: 'Processing Order...',
+    text: 'Please wait while we confirm your payment and place your order.',
+    allowOutsideClick: false,
+    didOpen: () => {
+      Swal.showLoading();
+    },
+  });
+
   const token = localStorage.getItem("authToken");
   if (!token || !saved) return;
 
   const { cartItems, orderType, paymentMethod, userData: savedUserData, deliveryNotes, reference_number } = saved;
+  // Destructure deliveryFee from saved data
+  const { deliveryFee: savedDeliveryFee } = saved;
   const subtotal = cartItems.reduce((acc, item) => {
     const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
-    return acc + (item.ProductPrice + addonSum) * item.quantity;
+    return acc + (item.price + addonSum) * item.quantity;
   }, 0);
-  const deliveryFee = orderType === "Delivery" ? 50 : 0;
-  const total = subtotal + deliveryFee;
-
+  const currentDeliveryFee = orderType === "Delivery" ? savedDeliveryFee : 0;
+  const total = subtotal + currentDeliveryFee;
   const cartPayload = cartItems.map(item => ({
     product_id: item.product_id,
-    product_name: item.ProductName,
-    product_type: item.ProductType || '',
-    product_category: item.ProductCategory || '',
+    product_name: item.product_name,
+    product_type: item.product_type || '',
+    product_category: item.product_category || '',
     quantity: item.quantity,
-    price: item.ProductPrice,
+    price: item.price,
     addons: item.addons ? item.addons.map(addon => ({
       addon_id: addon.addon_id || addon.AddOnID || 0,
       addon_name: addon.addon_name || addon.AddOnName || addon.name,
@@ -124,10 +142,10 @@ const confirmPayment = async (saved) => {
   }));
 
   const deliveryInfoPayload = orderType === "Delivery" ? {
-    FirstName: savedUserData.username,
+    FirstName: savedUserData.firstName,
     MiddleName: savedUserData.middleName,
     LastName: savedUserData.lastName,
-    Address: savedUserData.blockStreetSubdivision,
+    Address: `${savedUserData.region}, ${savedUserData.province}, ${savedUserData.streetName}, ${savedUserData.barangay}`,
     City: savedUserData.city,
     Province: savedUserData.province,
     Landmark: savedUserData.landmark,
@@ -154,7 +172,7 @@ const confirmPayment = async (saved) => {
         order_type: orderType,
         payment_method: paymentMethod,
         subtotal,
-        delivery_fee: deliveryFee,
+        delivery_fee: currentDeliveryFee, // Use currentDeliveryFee here
         total,
         notes: deliveryNotes || "",
         cart_items: cartPayload,
@@ -171,6 +189,10 @@ const confirmPayment = async (saved) => {
       console.log("POS Sale ID:", result.pos_sale_id);
       console.log("Status: Order saved to both OOS and POS as PENDING");
 
+      // Clear the cart immediately after successful order
+      await clearCart();
+      localStorage.removeItem("pendingOrderData");
+
       Swal.fire({
         icon: 'success',
         title: 'Success',
@@ -181,10 +203,8 @@ const confirmPayment = async (saved) => {
           </p>
         `,
       }).then(() => {
-        clearCart();
         navigate("/profile/orderhistory");
       });
-      localStorage.removeItem("pendingOrderData");
     } else {
       console.error("❌ Backend Error:");
 
@@ -235,15 +255,16 @@ const confirmPayment = async (saved) => {
   const deliveryNotes = document.getElementById("deliveryNotes")?.value || "";
   const subtotal = cartItems.reduce((acc, item) => {
     const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
-    return acc + (item.ProductPrice + addonSum) * item.quantity;
+    return acc + (item.price + addonSum) * item.quantity;
   }, 0);
-  const deliveryFee = orderType === "Delivery" ? 50 : 0;
+  // Use the passed deliveryFee here
+  const currentDeliveryFee = orderType === "Delivery" ? deliveryFee : 0;
   const total = subtotal + deliveryFee;
   const reference_number = `REF-${Date.now()}`;
 
   // Validate required fields
   if (orderType === "Delivery") {
-    const requiredFields = ['firstName', 'lastName', 'blockStreetSubdivision', 'city', 'province', 'landmark', 'email', 'phone'];
+    const requiredFields = ['firstName', 'lastName', 'region', 'province', 'streetName', 'barangay', 'city', 'postalCode', 'landmark', 'email', 'phone'];
     const missingFields = requiredFields.filter(field => !userData[field]);
 
     if (missingFields.length > 0) {
@@ -267,7 +288,8 @@ const confirmPayment = async (saved) => {
       paymentMethod,
       userData: currentUserData,
       deliveryNotes,
-      reference_number
+      reference_number,
+      deliveryFee: currentDeliveryFee, // Pass deliveryFee here
     };
 
     await confirmPayment(savedData);
@@ -279,18 +301,19 @@ const confirmPayment = async (saved) => {
       paymentMethod,
       userData: currentUserData,
       deliveryNotes,
-      reference_number
+      reference_number, // Missing comma here
+      deliveryFee: currentDeliveryFee, // Pass deliveryFee here
     }));
 
-    const deliveryFee = orderType === "Delivery" ? 50 : 0;
-    // --- Construct detailed items list for PayMongo ---
+    // Use the passed deliveryFee here
+    const paymongoDeliveryFee = orderType === "Delivery" ? currentDeliveryFee : 0;
     const itemsForCheckout = cartItems.map(item => {
       const addonList = item.addons?.map(addon =>
         `${addon.addon_name || addon.AddOnName || addon.name} (₱${addon.price || addon.Price || 0})`
       ) || [];
-      const basePrice = item.ProductPrice + (item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0);
+      const basePrice = item.price + (item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0);
       return {
-        name: item.ProductName,
+        name: item.product_name,
         quantity: item.quantity,
         price: basePrice,
         addons: addonList
@@ -307,11 +330,14 @@ const confirmPayment = async (saved) => {
           reference_number,
           redirect_url: window.location.origin + "/checkout",
           items: itemsForCheckout,
-          delivery_fee: deliveryFee
+          delivery_fee: paymongoDeliveryFee, // Use paymongoDeliveryFee here
+          order_type: orderType,
+          user_data: currentUserData
         }),
       });
       const data = await response.json();
       if (data.checkout_url) {
+        // Don't clear cart yet - only clear after successful payment
         window.location.href = data.checkout_url;
       } else {
         Swal.fire({
@@ -358,7 +384,7 @@ const confirmPayment = async (saved) => {
                 cartItems.map((item, index) => (
                   <tr key={index}>
                     <td>
-                      {item.ProductName}
+                      {item.product_name}
                       {item.addons && item.addons.length > 0 && (
                         <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.85em", color: "#666" }}>
                           {item.addons.map((addon, i) => (
@@ -367,12 +393,12 @@ const confirmPayment = async (saved) => {
                         </ul>
                       )}
                     </td>
-                    <td>{item.ProductType || '-'}</td>
-                    <td>{item.ProductCategory || '-'}</td>
+                    <td>{item.product_type || '-'}</td>
+                    <td>{item.product_category || '-'}</td>
                     <td>{item.quantity}</td>
-                    <td>₱{item.ProductPrice.toFixed(2)}</td>
+                    <td>₱{item.price.toFixed(2)}</td>
                     <td>
-                      ₱{((item.ProductPrice + (item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0)) * item.quantity).toFixed(2)}
+                      ₱{((item.price + (item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0)) * item.quantity).toFixed(2)}
                     </td>
                     <td>{orderType}</td>
                     <td>{paymentMethod}</td>
@@ -390,7 +416,7 @@ const confirmPayment = async (saved) => {
           ) : (
             cartItems.map((item, index) => (
               <div key={index} className="checkout-item-card-mobile">
-                <div className="fw-bold">{item.ProductName}</div>
+                <div className="fw-bold">{item.product_name}</div>
                 {item.addons && item.addons.length > 0 && (
                   <ul className="checkout-addons-mobile">
                     {item.addons.map((addon, i) => (
@@ -402,7 +428,7 @@ const confirmPayment = async (saved) => {
                 )}
                 <div className="checkout-details-mobile">
                   <span>Qty: {item.quantity}</span>
-                  <span>Total: ₱{((item.ProductPrice + (item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0)) * item.quantity).toFixed(2)}</span>
+                  <span>Total: ₱{((item.price + (item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0)) * item.quantity).toFixed(2)}</span>
                 </div>
               </div>
             ))
@@ -416,8 +442,8 @@ const confirmPayment = async (saved) => {
         {/* --- TOTALS SECTION (COMMON FOR BOTH) --- */}
         <div className="checkout-totals-section">
           <div className="total-row">
-            <span>Delivery Fee:</span>
-            <span>₱{orderType === 'Delivery' ? '50.00' : '0.00'}</span>
+            <span>Delivery Fee:</span> {/* Use the dynamically passed deliveryFee */}
+            <span>₱{orderType === 'Delivery' ? deliveryFee.toFixed(2) : '0.00'}</span>
           </div>
           <div className="total-row grand-total">
             <strong>Grand Total:</strong>
@@ -446,33 +472,50 @@ const confirmPayment = async (saved) => {
 
           <div className="checkout-form-row">
             <div className="form-group">
-              <label>Block, Street, Subdivision <span className="text-danger">*</span></label>
-              <input type="text" placeholder="Block, Street, Subdivision" className="form-control" value={userData.blockStreetSubdivision} onChange={e => handleInputChange('blockStreetSubdivision', e.target.value)} />
+              <label>Region <span className="text-danger">*</span></label>
+              <input type="text" placeholder="Region" className="form-control" value={userData.region} readOnly />
+            </div>
+            <div className="form-group">
+              <label>Province <span className="text-danger">*</span></label>
+              <input type="text" placeholder="Province" className="form-control" value={userData.province} readOnly />
+            </div>
+            <div className="form-group">
+              <label>Street Name <span className="text-danger">*</span></label>
+              <input type="text" placeholder="Street Name" className="form-control" value={userData.streetName} readOnly />
+            </div>
+          </div>
+
+          <div className="checkout-form-row">
+            <div className="form-group">
+              <label>Barangay <span className="text-danger">*</span></label>
+              <input type="text" placeholder="Barangay" className="form-control" value={userData.barangay} readOnly />
             </div>
             <div className="form-group">
               <label>City <span className="text-danger">*</span></label>
-              <input type="text" placeholder="City" className="form-control" value={userData.city} onChange={e => handleInputChange('city', e.target.value)} />
+              <input type="text" placeholder="City" className="form-control" value={userData.city} readOnly />
             </div>
             <div className="form-group">
-              <label>Baranggay <span className="text-danger">*</span></label>
-              <input type="text" placeholder="Baranggay" className="form-control" value={userData.province} onChange={e => handleInputChange('province', e.target.value)} />
+              <label>Postal Code <span className="text-danger">*</span></label>
+              <input type="text" placeholder="Postal Code" className="form-control" value={userData.postalCode} readOnly />
             </div>
           </div>
 
           <div className="checkout-form-row">
             <div className="form-group">
               <label>Landmark <span className="text-danger">*</span></label>
-              <input type="text" placeholder="Landmark" className="form-control" value={userData.landmark} onChange={e => handleInputChange('landmark', e.target.value)} />
+              <input type="text" placeholder="Landmark" className="form-control" value={userData.landmark} readOnly />
             </div>
             <div className="form-group">
               <label>Email Address <span className="text-danger">*</span></label>
-              <input type="email" placeholder="Email Address" className="form-control" value={userData.email} onChange={e => handleInputChange('email', e.target.value)} />
+              <input type="email" placeholder="Email Address" className="form-control" value={userData.email} readOnly />
             </div>
             <div className="form-group">
               <label>Phone Number <span className="text-danger">*</span></label>
-              <input type="text" placeholder="Phone Number" className="form-control" value={userData.phone} onChange={e => handleInputChange('phone', e.target.value)} />
+              <input type="text" placeholder="Phone Number" className="form-control" value={userData.phone} readOnly />
             </div>
           </div>
+
+
 
           <div style={{ marginTop: '10px' }}>
             <label htmlFor="deliveryNotes" style={{ color: '#4B929D', display: 'block', marginBottom: '5px' }}>Delivery Notes</label>

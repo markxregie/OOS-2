@@ -1,16 +1,19 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Container } from "react-bootstrap";
-import { FaChevronDown, FaBell, FaSignOutAlt, FaBoxOpen, FaCheckCircle, FaSpinner, FaTruck, FaFilter, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTimesCircle, FaTruckPickup, FaTruckMoving, FaUndo, FaAngleDoubleLeft, FaAngleLeft, FaAngleRight, FaAngleDoubleRight } from "react-icons/fa";
+import { FaChevronDown, FaBell, FaSignOutAlt, FaBoxOpen, FaCheckCircle, FaSpinner, FaTruck, FaFilter, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTimesCircle, FaTruckPickup, FaTruckMoving, FaUndo, FaAngleDoubleLeft, FaAngleLeft, FaAngleRight, FaAngleDoubleRight, FaCog } from "react-icons/fa";
 import { Card, Form } from "react-bootstrap";
 import riderImage from "../../assets/rider.jpg";
 import Swal from "sweetalert2";
 import "./deliverymanagement.css";
+import adminImage from "../../assets/administrator.png";
+import { showPreparationTimeModal } from "./modals/PreparationTimeModal";
 
 function DeliveryManagement() {
   const userRole = "Admin";
-  const [searchParams] = React.useState(() => new URLSearchParams(window.location.search));
   const [authToken, setAuthToken] = useState(null);
   const [userName, setUserName] = useState("Loading...");
+  const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -24,140 +27,138 @@ function DeliveryManagement() {
   const [showChangeRiderDropdown, setShowChangeRiderDropdown] = useState({});
 
   const [riders, setRiders] = useState([]);
-
-  // 💡 NEW: State for pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const ordersPerPage = 12; // 💡 NEW: Constant for orders per page
+  const ordersPerPage = 12;
 
-  // 💡 NEW: Local state for rider assignments to persist across fetches and navigation
   const [localAssignments, setLocalAssignments] = useState(() => {
     const stored = localStorage.getItem("riderAssignments");
     return stored ? JSON.parse(stored) : {};
   });
 
+  const [deliveryFees, setDeliveryFees] = useState({
+    baseFee: 50.0,
+    baseDistance: 3.0,
+    surchargePerKm: 10.0,
+    maxRadius: 8.0,
+    surgePricing: false,
+  });
 
+  // Reference for last fetch time to avoid dependency issues
+  const lastFetchTimeRef = useRef(0);
+  const CACHE_DURATION = 5000; // 5 seconds cache
+
+  // Optimized data fetching with parallel requests and caching
+  const fetchInitialData = useCallback(async (forceRefresh = false, showLoading = true) => {
+    if (!authToken) return;
+    
+    // Prevent fetching if cache is still valid
+    const now = Date.now();
+    if (!forceRefresh && (now - lastFetchTimeRef.current) < CACHE_DURATION) {
+      return;
+    }
+    
+    setError(null);
+    if (showLoading) {
+      setIsLoading(true);
+    }
+
+    try {
+      const [ordersResponse, ridersResponse, pendingResponse, settingsResponse] = await Promise.all([
+        fetch("http://localhost:7004/delivery/admin/delivery/orders", {
+          headers: { Authorization: `Bearer ${authToken}` },
+        }),
+        fetch("http://localhost:7001/delivery/riders", {
+          headers: { Authorization: `Bearer ${authToken}` },
+        }),
+        fetch("http://localhost:7004/cart/admin/orders/pending", {
+          headers: { Authorization: `Bearer ${authToken}` },
+        }),
+        fetch("http://localhost:7001/delivery/settings", {
+          headers: { Authorization: `Bearer ${authToken}` },
+        })
+      ]);
+
+      if (!ordersResponse.ok || !ridersResponse.ok || !pendingResponse.ok) {
+        throw new Error('Failed to fetch data');
+      }
+
+      const [ordersData, ridersData, pendingData, settingsData] = await Promise.all([
+        ordersResponse.json(),
+        ridersResponse.json(),
+        pendingResponse.json(),
+        // settings may fail; handle gracefully by catching parse errors later
+        settingsResponse.ok ? settingsResponse.json() : Promise.resolve(null)
+      ]);
+      
+      // Map assignedRider to string format to match UI expectations
+      const ordersWithAssignments = ordersData.map(order => ({
+        ...order,
+        assignedRider: order.assignedRider || null
+      }));
+      
+      setOrders(ordersWithAssignments);
+      setRiders(Array.isArray(ridersData) ? ridersData : []);
+      setPendingOrdersCount(Array.isArray(pendingData) ? pendingData.length : 0);
+      // If settings returned from backend, map them into local state
+      if (settingsData) {
+        try {
+          setDeliveryFees({
+            baseFee: parseFloat(settingsData.BaseFee) || deliveryFees.baseFee,
+            baseDistance: parseFloat(settingsData.BaseDistanceKm) || deliveryFees.baseDistance,
+            surchargePerKm: parseFloat(settingsData.ExtraFeePerKm) || deliveryFees.surchargePerKm,
+            maxRadius: parseFloat(settingsData.MaxRadiusKm) || deliveryFees.maxRadius,
+            surgePricing: !!settingsData.IsSurgePricingActive,
+          });
+        } catch (err) {
+          console.warn('Failed to parse delivery settings:', err);
+        }
+      }
+      lastFetchTimeRef.current = now;
+    } catch (err) {
+      console.error('Error fetching data:', err);
+      setError('Failed to load data. Please refresh the page.');
+    } finally {
+      if (showLoading) {
+        setIsLoading(false);
+      }
+    }
+  }, [authToken]);
 
   useEffect(() => {
     if (!authToken) return;
 
-    const fetchOrders = async () => {
-      try {
-        const response = await fetch("http://localhost:7004/delivery/admin/delivery/orders", {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        console.log("Fetched orders:", data); 
-
-        const ordersWithAssignments = data.map(order => ({
-          ...order,
-          assignedRider: localAssignments[order.id] ?? order.assignedRider ?? null
-        }));
-
-        setOrders(ordersWithAssignments);
-        setCurrentPage(1); // 💡 NEW: Reset to page 1 on new data fetch
-      } catch (error) {
-        console.error("Failed to fetch delivery orders:", error);
-      }
+    let interval;
+    const initialize = async () => {
+      await fetchInitialData(true, true); // Force refresh on mount with loading spinner
+      // Background refresh every 30 seconds without loading spinner
+      interval = setInterval(() => fetchInitialData(true, false), 30000);
     };
 
-    fetchOrders();
+    initialize();
 
-    // Optional: auto-refresh every 30s
-    const interval = setInterval(fetchOrders, 30000);
-    return () => clearInterval(interval);
-
-  }, [authToken]);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [authToken, fetchInitialData]);
 
   useEffect(() => {
-    const tokenFromUrl = searchParams.get('authorization');
-    const usernameFromUrl = searchParams.get('username');
-
-    if (tokenFromUrl) {
-      setAuthToken(tokenFromUrl);
-      localStorage.setItem("authToken", tokenFromUrl); // Save to localStorage
-    } else {
-      const storedToken = localStorage.getItem("authToken");
-      if (storedToken) {
-        setAuthToken(storedToken);
-      } else {
-        console.error("Authorization token not found in URL or localStorage.");
-      }
-    }
-
-    if (usernameFromUrl) {
-      setUserName(usernameFromUrl);
-      localStorage.setItem("userName", usernameFromUrl); // Save to localStorage
+    const storedToken = localStorage.getItem("authToken");
+    if (storedToken) setAuthToken(storedToken);
+    const userData = localStorage.getItem("userData");
+    if (userData) {
+      try { const parsed = JSON.parse(userData); if (parsed?.username) setUserName(parsed.username); } catch {}
     } else {
       const storedUsername = localStorage.getItem("userName");
-      if (storedUsername) {
-        setUserName(storedUsername);
-      }
+      if (storedUsername) setUserName(storedUsername);
     }
-  }, [searchParams]);
+    const onStorage = () => { setAuthToken(localStorage.getItem("authToken")); };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
-  useEffect(() => {
-    if (!authToken) return;
+  // Removed redundant rider fetching - now handled in fetchInitialData
 
-    const fetchRiders = async () => {
-      try {
-        const response = await fetch("http://localhost:7001/delivery/riders", {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        console.log("Fetched riders:", data);
-        setRiders(Array.isArray(data) ? data : []);
-      } catch (error) {
-        console.error("Failed to fetch riders:", error);
-        setRiders([]);
-      }
-    };
-
-    fetchRiders();
-  }, [authToken]);
-
-  useEffect(() => {
-    if (!authToken) return;
-
-    const fetchPendingOrdersCount = async () => {
-      try {
-        const response = await fetch("http://localhost:7004/cart/admin/orders/pending", {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-          },
-        });
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        // The backend endpoint returns list of pending orders, so count length
-        if (Array.isArray(data)) {
-          setPendingOrdersCount(data.length);
-        } else if (data.pending_orders_count !== undefined) {
-          setPendingOrdersCount(data.pending_orders_count);
-        } else {
-          setPendingOrdersCount(0);
-        }
-      } catch (error) {
-        console.error("Failed to fetch pending orders count:", error);
-      }
-    };
-
-    fetchPendingOrdersCount();
-  }, [authToken]);
+  // Removed redundant pending orders fetching - now handled in fetchInitialData
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -192,6 +193,7 @@ function DeliveryManagement() {
         <div style="text-align: left;">
           <p><strong>Rider:</strong> ${rider.FullName}</p>
           <p><strong>Phone:</strong> ${rider.Phone}</p>
+          <p><strong>Plate No:</strong> ${rider.PlateNumber || 'N/A'}</p>
         </div>
         <p style="margin-top: 15px; font-size: 14px; color: #666;">
           Are you sure you want to assign this rider to this order?
@@ -233,21 +235,28 @@ function DeliveryManagement() {
       const result = await response.json();
       console.log("Assign rider response:", result);
 
-      // ✅ Update frontend state with selected rider
+      // Update frontend state with selected rider
       handleRiderChange(orderId, riderId);
 
-      // 💡 NEW: Update local assignments and persist to localStorage
-      setLocalAssignments(prev => {
-        const updated = { ...prev, [orderId]: riderId };
-        localStorage.setItem("riderAssignments", JSON.stringify(updated));
-        return updated;
-      });
+      // Refresh data silently in background to sync with backend
+      fetchInitialData(true, false);
 
-      // Hide dropdown after assignment
-      setShowChangeRiderDropdown(prev => ({
-        ...prev,
-        [orderId]: false
-      }));
+      // Send notification to the assigned rider
+      try {
+        const rider = riders.find(r => r.UserID.toString() === riderId);
+        if (rider) {
+          await fetch("http://localhost:7002/notifications/create?username=" + encodeURIComponent(rider.UserID) + "&title=New%20Order%20Assigned&message=Order%20%23" + orderId + "%20has%20been%20assigned%20to%20you.%20Please%20proceed%20to%20pickup.&type=info&order_id=" + orderId, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${authToken}`,
+              "Content-Type": "application/json"
+            }
+          });
+        }
+      } catch (error) {
+        console.error("Failed to send notification:", error);
+        // Don't show error to user as assignment was successful
+      }
 
       Swal.fire({
         title: "Rider Assigned Successfully!",
@@ -256,6 +265,9 @@ function DeliveryManagement() {
         confirmButtonColor: "#198754",
         confirmButtonText: "OK"
       });
+
+      // Close the change rider dropdown after successful assignment
+      setShowChangeRiderDropdown(prev => ({ ...prev, [orderId]: false }));
 
     } catch (error) {
       console.error("Failed to assign rider:", error);
@@ -269,10 +281,128 @@ function DeliveryManagement() {
   };
 
   const handleChangeRiderClick = (orderId) => {
-    setShowChangeRiderDropdown(prev => ({
-      ...prev,
-      [orderId]: !prev[orderId]
-    }));
+    Swal.fire({
+      title: 'Confirm Change Rider',
+      text: 'Are you sure you want to change the rider for this order?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#4b929d',
+      cancelButtonColor: '#dc3545',
+      confirmButtonText: 'Yes, Change Rider',
+      cancelButtonText: 'Cancel',
+      customClass: {
+        popup: 'swal-wide'
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        setShowChangeRiderDropdown(prev => ({
+          ...prev,
+          [orderId]: !prev[orderId]
+        }));
+      }
+    });
+  };
+
+  const handleSetDeliveryFees = async () => {
+    const { value: formValues } = await Swal.fire({
+      title: 'Delivery Fee Configuration',
+      html: `
+        <div class="fee-config-form">
+          <div class="form-group">
+            <label for="swal-base-fee">Standard Base Fee (₱)</label>
+            <input id="swal-base-fee" class="swal2-input" type="number" step="0.01" value="${deliveryFees.baseFee}">
+            <small class="form-text text-muted">The minimum fee for the first X km.</small>
+          </div>
+          <div class="form-group">
+            <label for="swal-base-distance">Base Distance Coverage (km)</label>
+            <input id="swal-base-distance" class="swal2-input" type="number" step="0.1" value="${deliveryFees.baseDistance}">
+            <small class="form-text text-muted">Distance covered by the base fee.</small>
+          </div>
+          <div class="form-group">
+            <label for="swal-surcharge">Surcharge per Extra KM (₱)</label>
+            <input id="swal-surcharge" class="swal2-input" type="number" step="0.01" value="${deliveryFees.surchargePerKm}">
+            <small class="form-text text-muted">Added for every km beyond the base distance.</small>
+          </div>
+          <div class="form-group">
+            <label for="swal-max-radius">Maximum Delivery Radius (km)</label>
+            <input id="swal-max-radius" class="swal2-input" type="number" step="0.5" value="${deliveryFees.maxRadius}">
+            <small class="form-text text-muted">Orders beyond this distance will be rejected or flagged.</small>
+          </div>
+          <div class="form-group form-check-group">
+            <div class="swal2-checkbox" style="display: flex; align-items: center; justify-content: center; margin-top: 1rem;">
+              <input type="checkbox" id="swal-surge-pricing" ${deliveryFees.surgePricing ? 'checked' : ''}>
+              <label for="swal-surge-pricing" style="margin-left: 0.5rem;">Enable Surge Pricing</label>
+            </div>
+            <small class="form-text text-muted">Enable for rainy days/rush hour (adds flat +₱20).</small>
+          </div>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Save Settings',
+      confirmButtonColor: '#4b929d',
+      cancelButtonColor: '#6c757d',
+      preConfirm: () => {
+        const baseFee = document.getElementById('swal-base-fee').value;
+        const baseDistance = document.getElementById('swal-base-distance').value;
+        const surchargePerKm = document.getElementById('swal-surcharge').value;
+        const maxRadius = document.getElementById('swal-max-radius').value;
+        const surgePricing = document.getElementById('swal-surge-pricing').checked;
+
+        if (!baseFee || !baseDistance || !surchargePerKm || !maxRadius) {
+          Swal.showValidationMessage(`Please fill out all fields`);
+          return false;
+        }
+
+        return {
+          baseFee: parseFloat(baseFee),
+          baseDistance: parseFloat(baseDistance),
+          surchargePerKm: parseFloat(surchargePerKm),
+          maxRadius: parseFloat(maxRadius),
+          surgePricing: surgePricing,
+        };
+      },
+      customClass: {
+        popup: 'fee-config-swal'
+      }
+    });
+
+    if (formValues) {
+      try {
+        const response = await fetch('http://localhost:7001/delivery/settings', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({
+            BaseFee: formValues.baseFee,
+            BaseDistanceKm: formValues.baseDistance,
+            ExtraFeePerKm: formValues.surchargePerKm,
+            MaxRadiusKm: formValues.maxRadius,
+            IsSurgePricingActive: formValues.surgePricing,
+            SurgeFlatFee: 20.00 // Assuming fixed for now
+          })
+        });
+        if (!response.ok) throw new Error('Failed to save settings');
+        // Update local state
+        setDeliveryFees(formValues);
+        Swal.fire({
+          title: 'Success!',
+          text: 'Delivery fee settings have been updated.',
+          icon: 'success',
+          confirmButtonColor: '#4b929d'
+        });
+      } catch (err) {
+        console.error('Error saving settings:', err);
+        Swal.fire({
+          title: 'Error',
+          text: 'Failed to save delivery settings. Please try again.',
+          icon: 'error',
+          confirmButtonColor: '#dc3545'
+        });
+      }
+    }
   };
 
   const handleStatusChange = (orderId, newStatus) => {
@@ -316,60 +446,89 @@ function DeliveryManagement() {
   };
 
   
-  const filteredOrders = orders
-    .filter(order => (statusFilter === "all" || order.currentStatus === statusFilter))
-    .filter(order => (riderFilter === "all" || order.assignedRider === riderFilter));
+  // Memoized filtered orders and pagination calculations
+  const { filteredOrders, totalPages, currentOrders, indexOfFirstOrder, indexOfLastOrder } = useMemo(() => {
+    const filtered = orders
+      .filter(order => (statusFilter === "all" || order.currentStatus === statusFilter))
+      .filter(order => (riderFilter === "all" || order.assignedRider === riderFilter));
 
-  // Pagination logic
-  const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
-  const indexOfLastOrder = currentPage * ordersPerPage;
-  const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;
-  const currentOrders = filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder);
+    const total = Math.ceil(filtered.length / ordersPerPage);
+    const lastOrderIndex = currentPage * ordersPerPage;
+    const firstOrderIndex = lastOrderIndex - ordersPerPage;
+    const current = filtered.slice(firstOrderIndex, lastOrderIndex);
 
-  const paginate = (pageNumber) => {
+    return {
+      filteredOrders: filtered,
+      totalPages: total,
+      currentOrders: current,
+      indexOfFirstOrder: firstOrderIndex,
+      indexOfLastOrder: lastOrderIndex
+    };
+  }, [orders, statusFilter, riderFilter, currentPage, ordersPerPage]);
+
+  // Optimized pagination handlers with useCallback
+  const paginate = useCallback((pageNumber) => {
     if (pageNumber >= 1 && pageNumber <= totalPages) {
       setCurrentPage(pageNumber);
     }
-  };
+  }, [totalPages]);
 
-  const handlePrevPage = () => {
-    if (currentPage > 1) setCurrentPage(currentPage - 1);
-  };
+  const handlePrevPage = useCallback(() => {
+    if (currentPage > 1) setCurrentPage(prev => prev - 1);
+  }, [currentPage]);
 
-  const handleNextPage = () => {
-    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-  };
+  const handleNextPage = useCallback(() => {
+    if (currentPage < totalPages) setCurrentPage(prev => prev + 1);
+  }, [currentPage, totalPages]);
 
-  const handleFirstPage = () => {
-    setCurrentPage(1);
-  };
+  const handleFirstPage = useCallback(() => setCurrentPage(1), []);
+  const handleLastPage = useCallback(() => setCurrentPage(totalPages), [totalPages]);
 
-  const handleLastPage = () => {
-    setCurrentPage(totalPages);
-  };
+  if (error) {
+    return (
+      <div className="error-message">
+        <FaTimesCircle size={40} color="#dc3545" />
+        <p>{error}</p>
+        <button onClick={() => fetchInitialData(true, true)} className="retry-button">
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="d-flex justify-content-center align-items-center" style={{ height: "100vh" }}>
+        <FaSpinner className="fa-spin" size={50} color="#4b929d" />
+        <p style={{ marginLeft: "15px", fontSize: "1.2rem" }}>Loading delivery data...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="d-flex" style={{ height: "100vh", backgroundColor: "#edf7f9" }}>
       <Container fluid className="p-4 main-content" style={{ marginLeft: "0px", width: "calc(100% - 0px)" }}>
-        <header className="manage-header">
+            <header className="manage-header">
           <div className="header-left">
             <h2 className="page-title">Delivery Management</h2>
           </div>
           <div className="header-right">
             <div className="header-date">{currentDateFormatted}</div>
-            <div className="header-profile">
-              <div className="profile-pic"></div>
+             <div className="header-profile">
+                 <img src={adminImage} alt="Admin" className="profile-pic" />
               <div className="profile-info">
                 <div className="profile-role">Hi! I'm {userRole}</div>
-                <div className="profile-name">{userName}</div>
+                <div className="profile-name">Admin OOS</div>
               </div>
               <div className="dropdown-icon" onClick={() => setDropdownOpen(!dropdownOpen)}><FaChevronDown /></div>
-              <div className="bell-icon"><FaBell className="bell-outline" /></div>
+              
               {dropdownOpen && (
                 <div className="profile-dropdown" style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "white", border: "1px solid #ccc", borderRadius: "4px", boxShadow: "0 2px 8px rgba(0,0,0,0.15)", zIndex: 1000, width: "150px" }}>
                   <ul style={{ listStyle: "none", margin: 0, padding: "8px 0" }}>
                     <li
-                      onClick={() => window.location.reload()}
+                      onClick={() => { 
+                        fetchInitialData(true, true); // Force refresh with loading indicator
+                      }}
                       style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#4b929d" }}
                       onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f0f0f0"}
                       onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
@@ -377,7 +536,7 @@ function DeliveryManagement() {
                       <FaUndo /> Refresh
                     </li>
                     <li
-                      onClick={() => { localStorage.removeItem("access_token"); window.location.href = "http://localhost:4002/"; }}
+                      onClick={() => { localStorage.removeItem("access_token"); localStorage.removeItem("authToken"); localStorage.removeItem("expires_at"); localStorage.removeItem("userData"); window.location.replace("http://localhost:4002/"); }}
                       style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#dc3545" }}
                       onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8d7da"}
                       onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
@@ -472,7 +631,45 @@ function DeliveryManagement() {
                   {rider.FullName}
                 </option>
               ))}
-            </Form.Select>
+            </Form.Select> {/* Closing tag for Form.Select */}
+            <button
+              onClick={handleSetDeliveryFees}
+              className="fee-settings-btn"
+              style={{
+                backgroundColor: '#4b929d',
+                color: 'white',
+                border: 'none',
+                padding: '0.375rem 0.75rem',
+                borderRadius: '0.25rem',
+                cursor: 'pointer',
+                fontWeight: '600',
+                marginLeft: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}>
+              <FaCog />
+              Set Delivery Fees
+            </button>
+          <button
+            onClick={showPreparationTimeModal}
+            className="prep-time-btn"
+            style={{
+              backgroundColor: '#4b929d',
+              color: 'white',
+              border: 'none',
+              padding: '0.375rem 0.75rem',
+              borderRadius: '0.25rem',
+              cursor: 'pointer',
+              fontWeight: '600',
+              marginLeft: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px'
+            }}>
+            <FaClock />
+            Set Prep Time
+          </button>
           </div>
         </div>
         {/*UPDATED: Use currentOrders which is the paginated slice */}
@@ -489,7 +686,7 @@ function DeliveryManagement() {
             const restrictedStatuses = ["pickedup", "delivered", "cancelled", "returned"];
             const canChangeRider = !restrictedStatuses.includes(order.currentStatus?.toLowerCase());
             return (
-              <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "350px", height: "500px", overflowY: "auto" }}>
+              <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "350px", height: "570px", overflow: "hidden" }}>
               <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
                 <h5 style={{ color: "#2c3e50", fontWeight: "700" }}>Order #{order.id}</h5>
                 <p style={{
@@ -519,7 +716,7 @@ function DeliveryManagement() {
                 </p>
               </div>
               <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaClock color="#4b929d" /> Ordered at <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.orderedAt}</span></p>
-              <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaUser color="#4b929d" /> Customer: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.customerName}</span></p>
+              <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaUser color="#4b929d" /> Customer: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{(() => { const parts = order.customerName.split(' '); return parts.length > 0 && /\d/.test(parts[0]) ? parts.slice(1).join(' ') : order.customerName; })()}</span></p>
               <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaPhone color="#4b929d" /> Phone: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.phone?.replace(/^\+1-/, "63") || "N/A"}</span></p>
               <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaMapMarkerAlt color="#4b929d" /> Address: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.address}</span></p>
               <p style={{ fontWeight: "600", marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaBox color="#4b929d" /> Items ({order.items.length})</p>
@@ -539,6 +736,12 @@ function DeliveryManagement() {
                 </div>
               ))}
               <hr style={{ alignSelf: "stretch" }} />
+              {order.deliveryFee && order.deliveryFee > 0 && ( // Display delivery fee if available
+                <p style={{ fontWeight: "600", marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}>
+                  <span>Delivery Fee</span>
+                  <span style={{ marginLeft: "auto" }}>₱{order.deliveryFee.toFixed(2)}</span>
+                </p>
+              )}
               <p style={{ fontWeight: "600", marginBottom: "0", alignSelf: "flex-start", color: "black", display: "flex", justifyContent: "space-between", width: "100%" }}>
                 <span>Total</span>
                 <span style={{ marginLeft: "auto" }}>₱{order.total.toFixed(2)}</span>
@@ -557,6 +760,11 @@ function DeliveryManagement() {
                       <div>
                         <div style={{ fontWeight: "600" }}>{assignedRider.FullName}</div>
                         <div>{assignedRider.Phone}</div>
+                        {assignedRider.PlateNumber && (
+                          <div style={{ fontStyle: "italic", color: "#4b929d", fontSize: "0.9rem" }}>
+                            Plate No: {assignedRider.PlateNumber}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : null;

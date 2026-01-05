@@ -1,0 +1,198 @@
+/* Main Container */
+.rider-notifications-container {
+  padding: 20px;
+  /* Removed max-width and auto margin to fix centering issue on desktop */
+  width: 100%; 
+  padding-bottom: 80px; /* Space for mobile nav */
+}
+
+.mobile-page-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #2c3e50;
+    margin-bottom: 15px;
+    padding-left: 5px;
+    margin-top: 10px;
+}
+
+/* Date Grouping */
+.notification-date-group {
+    margin-bottom: 25px;
+}
+
+.date-group-header {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #95a5a6;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+    padding-left: 5px;
+}
+
+/* Notification Card List */
+.notification-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.notification-card {
+    background: white;
+    border-radius: 12px;
+    padding: 18px;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    border: 1px solid transparent;
+    transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+    /* Ensure full width */
+    width: 100%; 
+}
+
+.notification-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.notification-card.unread {
+    background-color: #f0f9ff; /* Very light blue tint for unread */
+    border-color: #bae6fd;
+}
+
+/* Icons */
+.notification-left {
+    flex-shrink: 0;
+}
+
+.notif-icon-bg {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+}
+
+.notif-icon-bg.info { background-color: #e0f2fe; color: #0284c7; }
+.notif-icon-bg.success { background-color: #dcfce7; color: #16a34a; }
+.notif-icon-bg.warning { background-color: #fef3c7; color: #d97706; }
+
+/* Content Text */
+.notification-center {
+    flex: 1;
+    min-width: 0; /* Prevents text overflow */
+}
+
+.notif-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center; /* Align title and time */
+    margin-bottom: 6px;
+}
+
+.notif-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #334155;
+    margin: 0;
+    line-height: 1.2;
+}
+
+.notif-time {
+    font-size: 0.8rem;
+    color: #94a3b8;
+    white-space: nowrap;
+    margin-left: 15px;
+}
+
+.notif-message {
+    font-size: 0.95rem;
+    color: #64748b;
+    margin: 0;
+    line-height: 1.5;
+}
+
+/* Unread Dot */
+.unread-dot {
+    width: 10px;
+    height: 10px;
+    background-color: #0284c7;
+    border-radius: 50%;
+    position: absolute;
+    top: 20px;
+    right: 15px;
+    /* Hide dot on desktop if time is overlapping, usually okay */
+}
+
+/* Empty State */
+.no-notifications {
+    text-align: center;
+    padding: 80px 20px;
+    color: #94a3b8;
+    background-color: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.empty-icon-container {
+    font-size: 3.5rem;
+    margin-bottom: 15px;
+    color: #cbd5e1;
+}
+
+.no-notifications h3 {
+    font-weight: 700;
+    color: #475569;
+    margin-bottom: 8px;
+}
+
+/* --- RESPONSIVE TWEAKS --- */
+
+/* Mobile (max-width: 576px) */
+@media (max-width: 576px) {
+    .rider-notifications-container {
+        padding: 10px;
+    }
+    
+    .notification-card {
+        padding: 14px;
+        gap: 12px;
+    }
+
+    .notif-icon-bg {
+        width: 36px;
+        height: 36px;
+        font-size: 1rem;
+    }
+
+    .notif-title {
+        font-size: 0.95rem;
+    }
+    
+    .notif-time {
+        font-size: 0.75rem;
+    }
+
+    .notif-message {
+        font-size: 0.85rem;
+    }
+
+    .unread-dot {
+        width: 8px;
+        height: 8px;
+        top: 15px;
+        right: 10px;
+    }
+}
+
+/* Desktop (min-width: 992px) */
+@media (min-width: 992px) {
+    /* Optional: Max width for readability on very large screens, but aligned left */
+    .notifications-content-wrapper {
+        max-width: 1600px; 
+    }
+}

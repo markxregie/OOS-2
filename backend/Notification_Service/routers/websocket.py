@@ -2,6 +2,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, st
 from fastapi.security import OAuth2PasswordBearer
 import httpx
 import logging
+import urllib.parse
 from typing import List
 
 router = APIRouter()
@@ -12,6 +13,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="http://localhost:4000/auth/token"
 # --- AUTH VALIDATOR ---
 async def validate_token_and_roles(token: str, allowed_roles: List[str]):
     USER_SERVICE_ME_URL = "http://localhost:4000/auth/users/me"
+    logger.info(f"Validating token: {token[:50]}...")  # Log first 50 chars for debugging
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(USER_SERVICE_ME_URL, headers={"Authorization": f"Bearer {token}"})
@@ -24,10 +26,12 @@ async def validate_token_and_roles(token: str, allowed_roles: List[str]):
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Auth service unavailable.")
 
     user_data = response.json()
+    logger.info(f"User data received: {user_data}")
     if user_data.get("userRole") not in allowed_roles:
+        logger.error(f"Role {user_data.get('userRole')} not in allowed roles: {allowed_roles}")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
 
-    return user_data.get("username")
+    return user_data
 
 # --- ACTIVE CONNECTIONS MANAGER ---
 class ConnectionManager:
@@ -86,14 +90,20 @@ async def websocket_endpoint(websocket: WebSocket, username: str, token: str = Q
         return
 
     try:
-        # Validate token and get authenticated username
-        authenticated_username = await validate_token_and_roles(token, ["admin", "staff", "rider", "cashier", "user"])
+        # Validate token and get user data
+        user_data = await validate_token_and_roles(token, ["admin", "staff", "rider", "cashier", "user"])
+        authenticated_username = user_data.get("username")
+        user_role = user_data.get("userRole")
     except HTTPException as e:
         await websocket.close(code=1008, reason=e.detail)
         return
 
-    # Check if the username in the URL matches the authenticated user
-    if authenticated_username != username:
+    # For riders, the username in URL is their ID, but token has actual username
+    # Skip username match check for riders since their notifications use ID as username
+    if user_role == "rider":
+        # Allow connection for riders regardless of username mismatch
+        pass
+    elif authenticated_username != username:
         await websocket.close(code=1008, reason="Username mismatch")
         return
 

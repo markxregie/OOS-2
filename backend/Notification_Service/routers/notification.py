@@ -33,7 +33,7 @@ async def validate_token_and_roles(token: str, allowed_roles: List[str]):
     if user_data.get("userRole") not in allowed_roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
 
-    return user_data.get("username")
+    return user_data
 
 # --- Pydantic Model ---
 class NotificationCreate(BaseModel):

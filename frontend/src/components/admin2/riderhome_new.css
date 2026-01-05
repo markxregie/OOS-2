@@ -1,0 +1,382 @@
+/* Override margin and padding for main and container on riderhome page */
+.riderhome-main {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+.order-cards-container {
+  margin-bottom: 30px !important;
+  padding-top: 0 !important;
+  /* Removed negative margin-right */
+  width: 100%;
+  display: flex; /* Use flexbox for alignment */
+  flex-wrap: wrap; /* Allow cards to wrap to the next line */
+  justify-content: center; /* Center cards horizontally */
+  gap: 15px; /* Add space between cards */
+}
+.riderhome-container {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+/* Dashboard Summary - Consistent with riderdashboard.css */
+.dashboard-summary-container {
+  border-radius: 12px;
+  padding: 10px;
+  margin-bottom: 15px;
+  transition: background-color 0.5s ease-in-out;
+}
+
+.rider-selector-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 15px;
+}
+
+.rider-info-display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rider-profile-pic {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #fff;
+}
+
+.rider-name-text {
+  color: #2c3e50;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.rider-select {
+  height: 35px;
+  min-width: 160px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #555;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background-color: #fff;
+  padding: 0 8px;
+}
+
+.summary-cards-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 15px;
+}
+
+/* --- SCROLLABLE CARDS ON MOBILE --- */
+@media (max-width: 991px) {
+    .summary-cards-container {
+        display: flex !important; /* Force flex */
+        overflow-x: auto !important; /* Enable scrolling */
+        flex-wrap: nowrap !important; /* No stacking */
+        padding-bottom: 15px; /* Space for scrollbar */
+        scroll-snap-type: x mandatory; /* Snap effect */
+    }
+    .summary-card {
+        min-width: 260px !important; /* Force width */
+        flex: 0 0 auto !important;
+        scroll-snap-align: start;
+    }
+}
+
+.summary-card {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background-color: #fff;
+  color: #2c3e50;
+  border-radius: 10px;
+  border: none;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s;
+}
+
+.summary-card:hover {
+  transform: translateY(-3px);
+}
+
+.card-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #7f8c8d;
+}
+
+.card-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  text-align: center;
+  color: #2c3e50;
+}
+
+/* --- ORDER CARD STYLES --- */
+
+.order-card {
+  width: 100%;
+  max-width: 500px; /* Max width for desktop readability */
+  margin-bottom: 15px;
+  /* Ensure padding inside the card handles spacing */
+  padding: 20px; 
+  box-sizing: border-box; 
+  display: flex;
+  flex-direction: column;
+}
+
+.order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap; 
+}
+
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* --- ACTION BUTTONS FIX --- */
+.order-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* Center horizontally */
+  justify-content: center;
+  gap: 10px;
+  margin-top: 15px;
+  width: 100%; /* Take full width of the card content area */
+}
+
+.order-actions .btn {
+  width: 100%; /* Fill the container width */
+  max-width: 100%; /* Prevent overflow */
+  margin: 0; /* Remove negative margins */
+}
+/* Restore button background colors that might be overridden */
+.order-actions .btn-success {
+  background-color: #198754; /* Bootstrap success green */
+}
+.order-actions .btn-primary {
+  background-color: #0d6efd; /* Bootstrap primary blue */
+}
+
+/* ----------------------------------------------------
+    RESPONSIVENESS AND MOBILE VIEW (Sidebar to Bottom Nav)
+    ---------------------------------------------------- */
+
+.rider-dashboard-container {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar-menu{
+  justify-items: left!important;
+
+}
+/* Desktop Styles (992px and up) */
+.sidebar {
+  transition: width 0.3s ease;
+}
+.sidebar.desktop-sidebar {
+  width: 15rem; /* Fixed width for desktop sidebar */
+  transition: width 0.3s ease;
+  justify-items: left!important;
+}
+
+.logo {
+  margin-top: 20px;
+  width: 100%;
+  height: 70px !important;
+  max-width: 6rem;
+}
+/* Main content positioning for desktop */
+.main-content {
+  flex-grow: 1;
+  transition: margin-left 0.3s ease;
+  margin-left: 1rem; 
+  width: calc(100% - 250px);
+  padding-bottom: 0; /* Default desktop padding */
+}
+
+/* Hide the mobile bottom nav on desktop */
+.mobile-bottom-nav {
+  display: none;
+}
+
+/* Media Query for Mobile/Tablet View (max-width: 991px) */
+@media (max-width: 991px) {
+  /* General Mobile Layout */
+  .sidebar.desktop-sidebar {
+    display: none;
+    width: 0;
+  }
+
+  .main-content {
+    margin-left: 0;
+    width: 100%;
+    padding-bottom: 60px; /* Space for the fixed bottom nav */
+    padding-left: 10px; /* Add slight padding to body */
+    padding-right: 10px;
+  }
+
+  .mobile-bottom-nav {
+    display: block;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background-color: #ffffff; 
+    border-top: 1px solid #dee2e6;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+    z-index: 1000;
+  }
+
+  .bottom-nav-menu {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    height: 100%;
+  }
+
+  .bottom-nav-menu li {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-size: 10px;
+    color: #495057;
+    padding: 5px;
+    cursor: pointer;
+    text-align: center;
+  }
+
+  .bottom-nav-menu li svg {
+    font-size: 20px;
+    margin-bottom: 2px;
+    color: #007bff;
+  }
+
+  /* Summary Cards */
+  .dashboard-summary-container .summary-cards-container {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .dashboard-summary-container .summary-card {
+    width: 100% !important;
+  }
+  
+  /* Pagination */
+  .pagination-container {
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+    padding: 10px;
+  }
+  
+  .pagination-controls {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+ 
+  /* =======================================================
+      DEFINITIVE MOBILE TABLE FIX 
+      ======================================================= */
+  .orders-table-container {
+    overflow-x: hidden; 
+    padding: 0; /* Reset padding here as main-content handles it */
+    width: 100%;
+  }
+
+  .orders-table {
+    border: none !important;
+    width: 100% !important;
+    border-collapse: separate !important;
+    border-spacing: 0 12px !important; /* Spacing between rows/cards */
+  }
+
+  /* Hide table headers on mobile */
+  .orders-table thead {
+    display: none !important; 
+  }
+
+  /* Turn rows into cards/blocks */
+  .orders-table tbody tr {
+    border: 1px solid #ddd;
+    display: block !important;
+    margin-bottom: 12px;
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    padding: 0; /* Reset row padding */
+  }
+
+  /* Turn cells into block elements */
+  .orders-table tbody td {
+    border: none !important; /* Remove individual cell borders */
+    display: block !important;
+    font-size: 0.9em;
+    text-align: right !important;
+    padding: 10px 10px 10px 50% !important; /* Create space for the label */
+    position: relative;
+    white-space: normal;
+    border-bottom: 1px dashed #eee !important; /* Separator between fields */
+  }
+  
+  /* Remove the separator line for the last field (Actions) */
+  .orders-table tbody tr td:last-child {
+    border-bottom: none !important; 
+    padding-left: 10px !important;
+    text-align: center !important;
+  }
+
+  /* Display the header name using the data-label attribute */
+  .orders-table tbody td::before {
+    content: attr(data-label);
+    position: absolute;
+    left: 10px;
+    width: 45%;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: #333; /* Darker label for better visibility */
+    text-align: left;
+    white-space: nowrap; /* Keep the label on one line */
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* --- MOBILE BUTTON FIX --- */
+  /* No negative margins, simple centering */
+  .order-actions {
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+  }
+  .order-actions .btn {
+    width: 100%; 
+  }
+  
+  .order-card {
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .order-cards-container {
+    flex-direction: column;
+    align-items: center;
+  }
+}

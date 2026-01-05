@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaTimesCircle, FaExchangeAlt, FaBars, FaHome, FaHistory, FaCog, FaCreditCard, FaUserTie, FaChevronDown, FaUndo, FaSignOutAlt } from "react-icons/fa";
+import { FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaTimesCircle, FaExchangeAlt, FaBars, FaHome, FaHistory, FaCog, FaCreditCard, FaUserTie, FaChevronDown, FaUndo, FaSignOutAlt, FaSpinner } from "react-icons/fa";
 import { Container, Card, Form, Spinner } from "react-bootstrap";
 import riderImage from "../../assets/rider.jpg";
-import "./riderdashboard.css"; // Updated CSS import
+import "./riderdashboard.css"; 
+import adminImage from "../../assets/administrator.png";
 
 function RiderDashboard() {
   const userRole = "Admin";
@@ -11,7 +12,7 @@ function RiderDashboard() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [toggle, setToggle] = useState("active");
-  const [earningsFilter, setEarningsFilter] = useState("All-Time");
+  const [earningsFilter, setEarningsFilter] = useState("Daily");
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const [riders, setRiders] = useState([]);
@@ -19,6 +20,8 @@ function RiderDashboard() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [earnings, setEarnings] = useState({ totalEarnings: 0.0 });
+  const [dailyResetTimer, setDailyResetTimer] = useState(null);
 
   const authToken = localStorage.getItem('authToken');
 
@@ -29,8 +32,28 @@ function RiderDashboard() {
   useEffect(() => {
     if (selectedRider) {
       fetchOrders(selectedRider);
+      fetchEarnings(selectedRider);
     }
   }, [selectedRider]);
+
+  useEffect(() => {
+    if (selectedRider) {
+      fetchEarnings(selectedRider);
+    }
+  }, [earningsFilter]);
+
+  // Poll earnings every 30 seconds to update in real-time
+  useEffect(() => {
+    if (selectedRider) {
+      const interval = setInterval(() => {
+        fetchEarnings(selectedRider);
+      }, 30000); // 30 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [selectedRider, earningsFilter]);
+
+
 
   const fetchRiders = async () => {
     setLoading(true);
@@ -83,6 +106,36 @@ function RiderDashboard() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchEarnings = async (riderId) => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1; // JS months are 0-indexed
+    const today = now.toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+
+    let url = '';
+    if (earningsFilter === 'Daily') {
+      url = `http://localhost:7004/delivery/rider/${riderId}/earnings/daily?target_date=${today}`;
+    } else if (earningsFilter === 'Weekly') {
+      url = `http://localhost:7004/delivery/rider/${riderId}/earnings/weekly?target_date=${today}`;
+    } else if (earningsFilter === 'Monthly') {
+      url = `http://localhost:7004/delivery/rider/${riderId}/earnings/monthly?year=${year}&month=${month}`;
+    }
+
+    if (!url) return;
+
+    try {
+      const response = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${authToken}` },
+      });
+      if (!response.ok) throw new Error(`Failed to fetch earnings: ${response.status}`);
+      const data = await response.json();
+      setEarnings(data);
+    } catch (e) {
+      console.error('Earnings fetch error:', e);
+      setEarnings({ totalEarnings: 0.0 }); // Set a default on error
     }
   };
 
@@ -151,42 +204,7 @@ function RiderDashboard() {
   const activeOrdersCount = orders.filter(order => !["delivered", "cancelled", "returned"].includes(order.currentStatus)).length;
   const completedOrdersCount = orders.filter(order => order.currentStatus === "delivered").length;
 
-  const calculateEarnings = () => {
-    const now = new Date();
-    let startDate;
 
-    if (earningsFilter === "Daily") {
-      // Filter orders from today
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
-      return orders
-        .filter(order => activeStatuses.includes(order.currentStatus) && new Date(order.orderedAt) >= startOfDay)
-        .reduce((sum, order) => sum + (order.total || 0), 0)
-        .toFixed(2);
-    } else if (earningsFilter === "Weekly") {
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    } else if (earningsFilter === "Monthly") {
-      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    }
-
-    // For All-Time, include both 'pending' and 'delivered' statuses
-    if (earningsFilter === "All-Time") {
-      const validStatuses = ["pending", "delivered"];
-      return orders
-        .filter(order => validStatuses.includes(order.currentStatus))
-        .reduce((sum, order) => sum + (order.total || 0), 0)
-        .toFixed(2);
-    }
-
-    // For Weekly and Monthly filters, include active statuses and filter by date
-    const activeStatuses = ["pending", "confirmed", "preparing", "readytopickup", "pickedup", "intransit"];
-    return orders
-      .filter(order => activeStatuses.includes(order.currentStatus) && new Date(order.orderedAt) >= startDate)
-      .reduce((sum, order) => sum + (order.total || 0), 0)
-      .toFixed(2);
-  };
-
-  const earnings = calculateEarnings();
 
   const statusIcons = {
     pending: <FaClock />,
@@ -207,10 +225,16 @@ function RiderDashboard() {
 
   if (loading) {
     return (
-      <div className="d-flex justify-content-center align-items-center" style={{ height: '100vh' }}>
-        <Spinner animation="border" role="status">
-          <span className="visually-hidden">Loading...</span>
-        </Spinner>
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        minHeight: '60vh',
+        flexDirection: 'column',
+        gap: '1rem'
+      }}>
+        <FaSpinner className="fa-spin" style={{ fontSize: '3rem', color: '#4b929d' }} />
+        <p style={{ color: '#4b929d', fontSize: '1.2rem' }}>Loading data...</p>
       </div>
     );
   }
@@ -229,14 +253,14 @@ function RiderDashboard() {
           </div>
           <div className="header-right">
                       <div className="header-date">{currentDateFormatted}</div>
-                      <div className="header-profile">
-                        <div className="profile-pic"></div>
+                     <div className="header-profile">
+                                               <img src={adminImage} alt="Admin" className="profile-pic" />
                         <div className="profile-info">
                           <div className="profile-role">Hi! I'm {userRole}</div>
                           <div className="profile-name">Admin OOS</div>
                         </div>
                         <div className="dropdown-icon" onClick={() => setDropdownOpen(!dropdownOpen)}><FaChevronDown /></div>
-                        <div className="bell-icon"><FaBell className="bell-outline" /></div>
+                        
                         {dropdownOpen && (
                           <div className="profile-dropdown" style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "white", border: "1px solid #ccc", borderRadius: "4px", boxShadow: "0 2px 8px rgba(0,0,0,0.15)", zIndex: 1000, width: "150px" }}>
                             <ul style={{ listStyle: "none", margin: 0, padding: "8px 0" }}>
@@ -249,7 +273,7 @@ function RiderDashboard() {
                                 <FaUndo /> Refresh
                               </li>
                               <li
-                                onClick={() => { localStorage.removeItem("access_token"); window.location.href = "http://localhost:4002/"; }}
+                                onClick={() => { localStorage.removeItem("access_token"); localStorage.removeItem("authToken"); localStorage.removeItem("expires_at"); localStorage.removeItem("userData"); window.location.replace("http://localhost:4002/"); }}
                                 style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#dc3545" }}
                                 onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8d7da"}
                                 onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
@@ -310,7 +334,7 @@ function RiderDashboard() {
               </Form.Select>
               <FaDollarSign size={32} color="#fd7e14" />
               <span className="card-title">Earnings</span>
-              <span className="card-value">₱{earnings}</span>
+              <span className="card-value">₱{earnings?.totalEarnings?.toFixed(2) || "0.00"}</span>
             </Card>
           </div>
         </Container>

@@ -278,6 +278,30 @@
     color: #4a9ba5;
 }
 
+.addon-list {
+    list-style-type: disc;
+    padding-left: 20px;
+    margin-top: 5px;
+    margin-bottom: 0;
+}
+
+.addon-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    color: #6c757d;
+    padding: 0.2rem 0;
+}
+
+.addon-name {
+    flex: 1;
+}
+
+.addon-price {
+    font-weight: 600;
+    color: #4a9ba5;
+}
+
 
 /*
  * RESPONSIVENESS

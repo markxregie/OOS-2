@@ -3,7 +3,7 @@ import { Container, Row, Col, Table, Badge, Nav } from 'react-bootstrap';
 import { FaChevronDown, FaBell, FaSignOutAlt, FaUndo, FaEye, FaTrashAlt, FaTag, FaEnvelope, FaUser, FaClock, FaCommentDots, FaAngleLeft, FaAngleRight, FaAngleDoubleLeft, FaAngleDoubleRight } from "react-icons/fa"; // Added new icons for modal content
 import Swal from 'sweetalert2';
 import './concerns.css'; // Assuming this file contains the necessary styles for header, etc.
-
+import adminImage from "../../assets/administrator.png";
 const Concerns = () => {
   const userRole = "Admin";
   const userName = "Lim Alcovendas";
@@ -113,8 +113,20 @@ const Concerns = () => {
         statusColor = '#28a745'; // Green for Resolved
     }
 
+    let fileDisplay = '';
+    if (concern.file_path) {
+      const filename = concern.file_path.split(/[/\\]/).pop();
+      const fileUrl = `http://127.0.0.1:7007/uploads/${filename}`;
+      const fileExtension = filename.split('.').pop().toLowerCase();
+      if (['jpg', 'jpeg', 'png', 'gif'].includes(fileExtension)) {
+        fileDisplay = `<div style="margin-top: 15px;"><strong style="color: #121616ff; display: inline-flex; align-items: center;"><FaTag style="margin-right: 8px; color: #121616ff;"/>Attached Image:</strong><br><img src="${fileUrl}" alt="Attached image" style="max-width: 100%; max-height: 300px; border: 1px solid #ccc; border-radius: 4px; margin-top: 5px;"></div>`;
+      } else {
+        fileDisplay = `<div style="margin-top: 15px;"><strong style="color: #121616ff; display: inline-flex; align-items: center;"><FaTag style="margin-right: 8px; color: #121616ff;"/>Attached File:</strong><br><a href="${fileUrl}" target="_blank" style="color: #4a9ba5; text-decoration: none;">View/Download File</a></div>`;
+      }
+    }
+
     const result = await Swal.fire({
-      title: `Concern ${id} Details`,
+      title: `Concern Details`,
       // Custom HTML structure for a cleaner look with icons and clear labels
       html: `
         <div style="text-align: left; padding: 15px; border: 1px solid #eee; border-radius: 8px; background-color: #f9f9f9; font-size: 14px; color: #333;">
@@ -123,6 +135,7 @@ const Concerns = () => {
             <p style="margin-bottom: 10px;"><strong style="color: #121616ff; display: inline-flex; align-items: center;"><FaTag style="margin-right: 8px; color: #121616ff;"/>Subject:</strong> ${concern.subject}</p>
             <div style="border-top: 1px solid #eee; margin: 15px 0;"></div>
             <p style="margin-bottom: 10px;"><strong style="color: #121616ff; display: inline-flex; align-items: flex-start;"><FaCommentDots style="margin-right: 8px; color: #121616ff; margin-top: 3px;"/>Message:</strong> <span style="display: block; padding: 10px; background-color: white; border: 1px solid #ccc; border-radius: 4px; margin-top: 5px;">${concern.message}</span></p>
+            ${fileDisplay}
             <div style="border-top: 1px solid #eee; margin: 15px 0;"></div>
             <p style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
                 <strong style="color: #121616ff; display: inline-flex; align-items: center;"><FaClock style="margin-right: 8px; color: #121616ff;"/>Date Submitted:</strong> ${concern.dateSubmitted}
@@ -236,13 +249,14 @@ const Concerns = () => {
           <div className="header-right">
             <div className="header-date">{currentDateFormatted}</div>
             <div className="header-profile">
-              <div className="profile-pic"></div>
+                          <img src={adminImage} alt="Admin" className="profile-pic" />
+              
               <div className="profile-info">
                 <div className="profile-role">Hi! I'm {userRole}</div>
                 <div className="profile-name">Admin OOS</div>
               </div>
               <div className="dropdown-icon" onClick={() => setDropdownOpen(!dropdownOpen)}><FaChevronDown /></div>
-              <div className="bell-icon"><FaBell className="bell-outline" /></div>
+              
               {dropdownOpen && (
                 <div className="profile-dropdown" style={{ position: "absolute", top: "100%", right: 0, backgroundColor: "white", border: "1px solid #ccc", borderRadius: "4px", boxShadow: "0 2px 8px rgba(0,0,0,0.15)", zIndex: 1000, width: "150px" }}>
                   <ul style={{ listStyle: "none", margin: 0, padding: "8px 0" }}>
@@ -255,7 +269,7 @@ const Concerns = () => {
                       <FaUndo /> Refresh
                     </li>
                     <li
-                      onClick={() => { localStorage.removeItem("access_token"); window.location.href = "http://localhost:4002/"; }}
+                      onClick={() => { localStorage.removeItem("access_token"); localStorage.removeItem("authToken"); localStorage.removeItem("expires_at"); localStorage.removeItem("userData"); window.location.replace("http://localhost:4002/"); }}
                       style={{ cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px", color: "#dc3545" }}
                       onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8d7da"}
                       onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}

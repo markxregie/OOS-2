@@ -5,6 +5,7 @@ export const AuthContext = createContext({
   isLoggedIn: false,
   username: null,
   userRole: null,
+  initializing: true,
   login: () => {},
   logout: () => {},
 });
@@ -36,30 +37,106 @@ export const AuthProvider = ({ children }) => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState(null);
   const [userRole, setUserRole] = useState(null);
+  const [initializing, setInitializing] = useState(true);
 
   // Check localStorage for authToken and expires_at on mount to set login state
   useEffect(() => {
-    const authToken = localStorage.getItem('authToken');
-    const expiresAt = localStorage.getItem('expires_at');
-    const userData = localStorage.getItem('userData');
-    if (authToken && isTokenValid(authToken, expiresAt)) {
-      setIsLoggedIn(true);
-      if (userData) {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const tokenFromUrl = params.get('authorization');
+
+      if (tokenFromUrl) {
+        localStorage.setItem('authToken', tokenFromUrl);
+        // Try to decode for username/role
         try {
-          const { username, userRole } = JSON.parse(userData);
-          setUsername(username);
-          setUserRole(userRole);
-        } catch (error) {
-          // Ignore parse error
+          const payload = JSON.parse(atob(tokenFromUrl.split('.')[1]));
+          const username = payload.sub;
+          const userRole = payload.role;
+          if (username) {
+            localStorage.setItem('userData', JSON.stringify({ username, userRole }));
+            setUsername(username);
+            setUserRole(userRole);
+          }
+          if (payload.exp) {
+            const expTime = new Date(payload.exp * 1000).toISOString();
+            localStorage.setItem('expires_at', expTime);
+          }
+        } catch (e) {
+          // ignore decode errors
         }
+        // Clean URL to remove token
+        const url = new URL(window.location.href);
+        url.searchParams.delete('authorization');
+        window.history.replaceState({}, '', url.toString());
       }
-    } else {
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('expires_at');
-      localStorage.removeItem('userData');
-      setIsLoggedIn(false);
-      setUsername(null);
-      setUserRole(null);
+
+      const refreshFromStorage = () => {
+        const authToken = localStorage.getItem('authToken');
+        const expiresAt = localStorage.getItem('expires_at');
+        const userData = localStorage.getItem('userData');
+        if (authToken && isTokenValid(authToken, expiresAt)) {
+          setIsLoggedIn(true);
+          if (userData) {
+            try {
+              const { username, userRole } = JSON.parse(userData);
+              setUsername(username);
+              setUserRole(userRole);
+            } catch (error) {
+              // Ignore parse error
+            }
+          } else {
+            setUsername(null);
+            setUserRole(null);
+          }
+        } else {
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('expires_at');
+          localStorage.removeItem('userData');
+          setIsLoggedIn(false);
+          setUsername(null);
+          setUserRole(null);
+        }
+      };
+
+      refreshFromStorage();
+
+      const onPageShow = () => {
+        refreshFromStorage();
+        // Clean lingering auth-related params if not logged in
+        try {
+          const url = new URL(window.location.href);
+          let changed = false;
+          if (url.searchParams.has('authorization')) {
+            url.searchParams.delete('authorization');
+            changed = true;
+          }
+          if (!isLoggedIn && url.searchParams.has('username')) {
+            url.searchParams.delete('username');
+            changed = true;
+          }
+          if (changed) {
+            window.history.replaceState({}, '', url.toString());
+          }
+        } catch {}
+      };
+      const onVisibility = () => {
+        if (document.visibilityState === 'visible') {
+          refreshFromStorage();
+        }
+      };
+      const onStorage = () => refreshFromStorage();
+
+      window.addEventListener('pageshow', onPageShow);
+      document.addEventListener('visibilitychange', onVisibility);
+      window.addEventListener('storage', onStorage);
+
+      return () => {
+        window.removeEventListener('pageshow', onPageShow);
+        document.removeEventListener('visibilitychange', onVisibility);
+        window.removeEventListener('storage', onStorage);
+      };
+    } finally {
+      setInitializing(false);
     }
   }, []);
 
@@ -115,7 +192,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ isLoggedIn, username, userRole, login, logout }}>
+    <AuthContext.Provider value={{ isLoggedIn, username, userRole, initializing, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
