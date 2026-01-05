@@ -32,16 +32,6 @@
       "problemMatcher": []
     },
     {
-      "label": "Start Concerns Service",
-      "type": "shell",
-      "command": "cd backend/concerns_service; python main.py",
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated"
-      },
-      "problemMatcher": []
-    },
-    {
       "label": "Start Track Order Service",
       "type": "shell",
       "command": "cd backend/trackorder_service; python main.py",
@@ -62,9 +52,9 @@
       "problemMatcher": []
     },
     {
-      "label": "Start Blockchain Service",
+      "label": "Start Promotion Service",
       "type": "shell",
-      "command": "cd backend/Blockchain_Service; python main.py",
+      "command": "cd backend/Promotion_service; python main.py",
       "presentation": {
         "reveal": "always",
         "panel": "dedicated"
@@ -88,10 +78,9 @@
         "Start Delivery Service",
         "Start Ordering Service",
         "Start Payment Service",
-        "Start Concerns Service",
         "Start Track Order Service",
         "Start Notification Service",
-        "Start Blockchain Service",
+        "Start Promotion Service",
         "Start Frontend"
       ],
       "dependsOrder": "parallel"

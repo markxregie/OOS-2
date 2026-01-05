@@ -149,6 +149,7 @@ const Cart = () => {
   const [isCheckingLocation, setIsCheckingLocation] = useState(false);
   const [deliverySettings, setDeliverySettings] = useState({});
   const [deliveryFee, setDeliveryFee] = useState(0);
+  const [updateTimeouts, setUpdateTimeouts] = useState({});
 
   useEffect(() => {
     const token = localStorage.getItem("authToken");
@@ -279,28 +280,69 @@ const Cart = () => {
       return;
     }
 
-    await updateQuantity(item.cart_item_id, item.quantity + 1);
+    const newQuantity = item.quantity + 1;
 
+    // Optimistic update - update selected items immediately
     setSelectedCartItems((prevSelected) =>
       prevSelected.map((selectedItem) =>
         selectedItem.cart_item_id === item.cart_item_id
-          ? { ...selectedItem, quantity: selectedItem.quantity + 1 }
+          ? { ...selectedItem, quantity: newQuantity }
           : selectedItem
       )
     );
+
+    // Debounce backend update - clear existing timeout and set new one
+    if (updateTimeouts[item.cart_item_id]) {
+      clearTimeout(updateTimeouts[item.cart_item_id]);
+    }
+
+    const timeoutId = setTimeout(() => {
+      updateQuantity(item.cart_item_id, newQuantity).catch(err => {
+        console.error("Failed to update quantity:", err);
+        toast.error("Failed to update quantity");
+      });
+      setUpdateTimeouts(prev => {
+        const newTimeouts = { ...prev };
+        delete newTimeouts[item.cart_item_id];
+        return newTimeouts;
+      });
+    }, 500); // Wait 500ms after last click
+
+    setUpdateTimeouts(prev => ({ ...prev, [item.cart_item_id]: timeoutId }));
   };
 
   const handleDecrement = async (item) => {
     if (item.quantity > 1) {
-      await updateQuantity(item.cart_item_id, item.quantity - 1);
+      const newQuantity = item.quantity - 1;
+
+      // Optimistic update - update selected items immediately
       setSelectedCartItems(prevSelected => {
         return prevSelected.map(selectedItem => {
           if (selectedItem.cart_item_id === item.cart_item_id) {
-            return { ...selectedItem, quantity: selectedItem.quantity - 1 };
+            return { ...selectedItem, quantity: newQuantity };
           }
           return selectedItem;
         });
       });
+
+      // Debounce backend update - clear existing timeout and set new one
+      if (updateTimeouts[item.cart_item_id]) {
+        clearTimeout(updateTimeouts[item.cart_item_id]);
+      }
+
+      const timeoutId = setTimeout(() => {
+        updateQuantity(item.cart_item_id, newQuantity).catch(err => {
+          console.error("Failed to update quantity:", err);
+          toast.error("Failed to update quantity");
+        });
+        setUpdateTimeouts(prev => {
+          const newTimeouts = { ...prev };
+          delete newTimeouts[item.cart_item_id];
+          return newTimeouts;
+        });
+      }, 500); // Wait 500ms after last click
+
+      setUpdateTimeouts(prev => ({ ...prev, [item.cart_item_id]: timeoutId }));
     }
   };
 
