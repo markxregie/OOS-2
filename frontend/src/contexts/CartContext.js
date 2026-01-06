@@ -94,7 +94,10 @@ export const CartProvider = ({ children }) => {
             return nameA.localeCompare(nameB);
           }) : []
         }));
-        setCartItems(processedData);
+        // Filter out ordered items
+        const orderedItemIds = JSON.parse(localStorage.getItem("orderedItemIds") || "[]");
+        const filteredData = processedData.filter(item => !orderedItemIds.includes(item.cart_item_id));
+        setCartItems(filteredData);
       } catch (err) {
         console.error("Error loading cart:", err);
       }
@@ -292,7 +295,10 @@ export const CartProvider = ({ children }) => {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      setCartItems(data);
+      // Filter out ordered items
+      const orderedItemIds = JSON.parse(localStorage.getItem("orderedItemIds") || "[]");
+      const filteredData = data.filter(item => !orderedItemIds.includes(item.cart_item_id));
+      setCartItems(filteredData);
     } catch (err) {
       console.error("Error reloading cart:", err);
     }
