@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { Row, Col, Card } from 'react-bootstrap';
 import { ArrowLeft, Shop, HouseDoorFill, CheckCircleFill, XCircleFill, ArrowRightCircleFill } from 'react-bootstrap-icons';
 import Swal from 'sweetalert2';
+import deliveryIcon from '../assets/delivery.png';
 import './TrackOrder.css';
 
 // Simple in-memory caches to avoid repeating expensive external requests
@@ -74,6 +75,69 @@ async function fetchRiderLocationFromBackend(riderId) {
     return null;
 }
 
+// Calculate bearing/heading from point A to B (degrees)
+function calcHeading(lat1, lon1, lat2, lon2) {
+        const toRad = (d) => d * Math.PI / 180;
+        const toDeg = (d) => d * 180 / Math.PI;
+        const dLon = toRad(lon2 - lon1);
+        const a = Math.sin(dLon) * Math.cos(toRad(lat2));
+        const b = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+        let brng = Math.atan2(a, b);
+        brng = toDeg(brng);
+        brng = (brng + 360) % 360;
+        return brng;
+}
+
+// Haversine distance (km)
+function getDistanceKm(lat1, lon1, lat2, lon2) {
+    if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return null;
+    const R = 6371; // Earth's radius km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+function estimateDeliveryMinutes(distanceKm, avgSpeedKmh = 25) {
+    if (distanceKm == null) return null;
+    const mins = (distanceKm / avgSpeedKmh) * 60;
+    // floor to 1-minute granularity and enforce a reasonable minimum
+    return Math.max(3, Math.round(mins));
+}
+
+// Fetch estimated delivery time from backend
+async function fetchEstimatedDeliveryTime(orderId, customerLat, customerLng) {
+    if (!orderId || customerLat == null || customerLng == null) return null;
+    
+    try {
+        const response = await fetch(
+            `http://localhost:7001/delivery/estimate-delivery-time/${orderId}?customer_lat=${customerLat}&customer_lng=${customerLng}`
+        );
+        
+        if (response.ok) {
+            const data = await response.json();
+            return data.total_estimated_minutes;
+        }
+    } catch (error) {
+        console.error('Error fetching estimated delivery time:', error);
+    }
+    
+    return null;
+}
+
+// Generate rider icon with rotation (using delivery.png)
+function makeRiderIcon(angle = 0) {
+    return {
+        url: deliveryIcon,
+        scaledSize: new window.google.maps.Size(40, 40),
+        anchor: new window.google.maps.Point(20, 20),
+        rotation: angle
+    };
+}
+
 const TrackOrder = () => {
     const { orderId } = useParams();
     const [order, setOrder] = useState(null);
@@ -85,32 +149,44 @@ const TrackOrder = () => {
     const [marker, setMarker] = useState(null);
     const [riderMarker, setRiderMarker] = useState(null);
     const [routePolyline, setRoutePolyline] = useState(null);
+    const lastRiderPosRef = useRef(null);
     const [riderIdState, setRiderIdState] = useState(null);
     const [riderLastUpdated, setRiderLastUpdated] = useState(null);
     const [scriptLoaded, setScriptLoaded] = useState(!!(window.google && window.google.maps));
+    const [estimatedDeliveryMinutes, setEstimatedDeliveryMinutes] = useState(null);
 
     // Load Google Maps API script if not already loaded
     useEffect(() => {
-      if (!scriptLoaded) {
-        const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}`;
-        script.async = true;
-        script.defer = true;
-        script.onload = () => setScriptLoaded(true);
-        script.onerror = () => console.error('Failed to load Google Maps API');
-        document.head.appendChild(script);
-      }
+        if (!scriptLoaded) {
+            const script = document.createElement('script');
+            script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}`;
+            script.async = true;
+            script.defer = true;
+            script.onload = () => setScriptLoaded(true);
+            script.onerror = () => console.error('Failed to load Google Maps API');
+            document.head.appendChild(script);
+        }
     }, [scriptLoaded]);
 
     const orderStatusSteps = ['pending', 'processing', 'waiting for pickup', 'picked up', 'delivering', 'completed'];
     const pickupStatusSteps = ['pending', 'processing', 'waiting for pickup', 'picked up', 'completed'];
 
     useEffect(() => {
+        // Track if component is mounted to prevent updates after unmount
+        let isMounted = true;
+
         const fetchOrderDetails = async () => {
+            // Skip if order is already completed - stops API calls
+            if (order && order.status === 'completed') {
+                return;
+            }
+
             const token = localStorage.getItem('authToken');
             if (!token) {
-                Swal.fire('Error', 'You must be logged in to view order details.', 'error');
-                setLoading(false);
+                if (isMounted && loading) {
+                    Swal.fire('Error', 'You must be logged in to view order details.', 'error');
+                    setLoading(false);
+                }
                 return;
             }
 
@@ -134,14 +210,18 @@ const TrackOrder = () => {
                     throw new Error('Order not found.');
                 }
 
-                const total = orderData.products.reduce((sum, p) => {
-                    const addonSum = p.addons ? p.addons.reduce((s, a) => s + (a.price || a.Price || 0), 0) : 0;
-                    return sum + (p.price + addonSum) * p.quantity;
-                }, 0) + (orderData.orderType === 'Delivery' ? 50 : 0);
+                if (!isMounted) return; // Don't update if unmounted
 
-                // Normalize status for consistency
-                const originalStatus = orderData.status.toLowerCase();
-                const status = originalStatus === 'delivered' ? 'completed' : originalStatus === 'preparing' ? 'processing' : originalStatus === 'waiting for pick up' ? 'waiting for pickup' : originalStatus === 'pickedup' ? 'picked up' : originalStatus;
+                // Normalize status for consistency to fix stepper
+                let originalStatus = (orderData.status || '').toLowerCase().trim();
+                
+                // Map backend status to stepper status
+                let status = originalStatus;
+                if (originalStatus === 'delivered') status = 'completed';
+                else if (originalStatus === 'preparing') status = 'processing';
+                else if (originalStatus === 'waiting for pick up' || originalStatus === 'ready for pickup') status = 'waiting for pickup';
+                else if (originalStatus === 'pickedup') status = 'picked up';
+                else if (originalStatus === 'intransit') status = 'delivering';
 
                 // Try to extract rider location from common field names if present
                 let riderLoc = null;
@@ -171,7 +251,7 @@ const TrackOrder = () => {
                         const riderId = detectedRiderId;
                         if (riderId) {
                             const fetched = await fetchRiderLocationFromBackend(riderId);
-                            if (fetched) {
+                            if (fetched && isMounted) {
                                 setRiderLocationState(fetched);
                                 setRiderLastUpdated(Date.now());
                             }
@@ -183,60 +263,69 @@ const TrackOrder = () => {
 
                 setOrder({
                     ...orderData,
-                    status,
-                    total
+                    status, // Use the normalized status
+                    total: orderData.total
                 });
+                
+                if (loading) {
+                    setLoading(false);
+                }
             } catch (error) {
                 console.error('Error fetching order details:', error);
                 // Avoid showing a popup on every interval failure
-                if (loading) {
+                if (isMounted && loading) {
                     Swal.fire('Error', error.message, 'error');
+                    setLoading(false);
                 }
-            } finally {
-                // Use a functional update to avoid depending on the `loading` state
-                setLoading(currentLoading => (currentLoading ? false : currentLoading));
             }
         };
 
+        // Initial fetch
         fetchOrderDetails();
+        
+        // Set up interval - function checks status internally
         const interval = setInterval(fetchOrderDetails, 5000); // Refresh every 5 seconds
 
-        return () => clearInterval(interval); // Cleanup interval on component unmount
-    }, [orderId, loading]);
+        return () => {
+            isMounted = false;
+            clearInterval(interval);
+        };
+    }, [orderId]); // Only depend on orderId - NOT on order.status
 
-    // Poll for user's pinned location from their profile based on address fields
+    // Fetch user's pinned location from their profile (ONLY ONCE on mount)
     useEffect(() => {
+        let mounted = true; // Prevent state updates after unmount
+        
         const fetchProfileLocation = async () => {
             try {
                 const token = localStorage.getItem('authToken');
-                if (token) {
+                if (token && mounted) {
                     const profileRes = await fetch('http://localhost:4000/users/profile', {
                         headers: { 'Authorization': `Bearer ${token}` },
                     });
-                    if (profileRes.ok) {
+                    if (profileRes.ok && mounted) {
                         const profileData = await profileRes.json();
                         const { region, province, city, streetName, barangay, postalCode, lat, lng } = profileData;
 
                         const geocodeAddress = () => {
-                            // First, set to stored lat/lng if available
+                            // First, set to stored lat/lng if available (priority)
                             if (lat && lng && Number.isFinite(parseFloat(lat)) && Number.isFinite(parseFloat(lng))) {
-                                setUserLocation([parseFloat(lat), parseFloat(lng)]);
-                                console.log('TrackOrder: Set to stored user profile location:', [parseFloat(lat), parseFloat(lng)]);
+                                if (mounted) {
+                                    setUserLocation([parseFloat(lat), parseFloat(lng)]);
+                                    console.log('TrackOrder: Set to stored user profile location:', [parseFloat(lat), parseFloat(lng)]);
+                                }
+                                return; // Don't geocode if we already have coordinates
                             }
 
-                            // Then, try to geocode if address fields are complete
-                            if (region && province && city && streetName && barangay) {
+                            // Only geocode if address fields are complete AND we don't have lat/lng
+                            if (region && province && city && streetName && barangay && window.google && window.google.maps) {
                                 const address = `${streetName}, ${barangay}, ${city}, ${province}, ${region}, Philippines`;
 
-                                // Geocode the address to get lat/lng
-                                const geocoder = new window.google.maps.Geocoder();
-                                geocoder.geocode({ address }, (results, status) => {
-                                    if (status === 'OK' && results[0]) {
-                                        const location = results[0].geometry.location;
-                                        const newLat = location.lat();
-                                        const newLng = location.lng();
-                                        setUserLocation([newLat, newLng]);
-                                        console.log('TrackOrder: Updated to geocoded user profile location:', [newLat, newLng]);
+                                // Use the geocodeAddress utility function that has built-in caching
+                                geocodeAddress(address).then((result) => {
+                                    if (result && mounted) {
+                                        setUserLocation([result.lat, result.lng]);
+                                        console.log('TrackOrder: Updated to geocoded user profile location:', [result.lat, result.lng]);
                                     }
                                 });
                             }
@@ -250,7 +339,9 @@ const TrackOrder = () => {
                             script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}`;
                             script.async = true;
                             script.defer = true;
-                            script.onload = geocodeAddress;
+                            script.onload = () => {
+                                if (mounted) geocodeAddress();
+                            };
                             document.head.appendChild(script);
                         }
                     }
@@ -260,10 +351,12 @@ const TrackOrder = () => {
             }
         };
 
-        fetchProfileLocation(); // Initial fetch
-        const profileInterval = setInterval(fetchProfileLocation, 10000); // Poll every 10 seconds
+        // Fetch only once on mount, not every 10 seconds
+        fetchProfileLocation();
 
-        return () => clearInterval(profileInterval);
+        return () => {
+            mounted = false; // Cleanup
+        };
     }, []);
 
     // Poll rider location from backend if we have a riderId and order is not completed
@@ -279,13 +372,34 @@ const TrackOrder = () => {
                 }
             } catch (e) { /* ignore */ }
         };
-        if (riderIdState && order && order.status !== 'completed') {
+        
+        // Only start polling if order exists and is in transit (not yet completed or cancelled)
+        if (riderIdState && order && ['picked up', 'delivering'].includes(order.status)) {
             // initial fetch
             startPolling();
             interval = setInterval(startPolling, 5000);
         }
         return () => { if (interval) clearInterval(interval); };
-    }, [riderIdState, order]);
+    }, [riderIdState, order?.status]);
+
+    // Fetch estimated delivery time from backend (only once per order)
+    useEffect(() => {
+        const fetchDeliveryEstimate = async () => {
+            // Only fetch if we don't already have an estimate for this order
+            if (order && userLocation && order.orderType === 'Delivery' && !estimatedDeliveryMinutes) {
+                const estimate = await fetchEstimatedDeliveryTime(
+                    order.id,
+                    userLocation[0],
+                    userLocation[1]
+                );
+                if (estimate) {
+                    setEstimatedDeliveryMinutes(estimate);
+                }
+            }
+        };
+
+        fetchDeliveryEstimate();
+    }, [order?.id, userLocation]);
 
     // Initialize and update Google Map
     useEffect(() => {
@@ -293,7 +407,7 @@ const TrackOrder = () => {
             return;
         }
 
-        const storeLocation = { lat: 14.5547, lng: 121.0244 }; // Default store location
+        const storeLocation = { lat: 14.5547, lng: 121.0244 }; // Default store location (fallback)
         const customerLoc = userLocation ? { lat: userLocation[0], lng: userLocation[1] } : null;
         const riderLoc = riderLocationState ? { lat: riderLocationState[0], lng: riderLocationState[1] } : null;
 
@@ -306,20 +420,40 @@ const TrackOrder = () => {
             });
             setMap(newMap);
 
-            // Add store marker
-            new window.google.maps.Marker({
-                position: storeLocation,
+            // Create an initial Rider marker (use rider location if available, otherwise place at fallback center)
+            const initialPos = riderLoc || storeLocation;
+
+            const initialRiderMarker = new window.google.maps.Marker({
+                position: initialPos,
                 map: newMap,
-                title: 'Store Location',
-                icon: {
-                    path: window.google.maps.SymbolPath.CIRCLE,
-                    scale: 8,
-                    fillColor: '#4285F4', // Blue for store
-                    fillOpacity: 1,
-                    strokeWeight: 2,
-                    strokeColor: 'white',
-                },
+                title: 'Rider',
+                icon: makeRiderIcon(0)
             });
+            setRiderMarker(initialRiderMarker);
+            lastRiderPosRef.current = [initialPos.lat, initialPos.lng];
+
+            // If we already have both locations on init, draw the route immediately
+            if (riderLoc && customerLoc) {
+                const directionsService = new window.google.maps.DirectionsService();
+                const directionsRenderer = new window.google.maps.DirectionsRenderer({
+                    map: newMap,
+                    suppressMarkers: true,
+                    polylineOptions: { strokeColor: '#1d7fa6', strokeWeight: 5 },
+                });
+
+                directionsService.route({
+                    origin: riderLoc,
+                    destination: customerLoc,
+                    travelMode: window.google.maps.TravelMode.DRIVING,
+                }, (result, status) => {
+                    if (status === window.google.maps.DirectionsStatus.OK) {
+                        directionsRenderer.setDirections(result);
+                        setRoutePolyline(directionsRenderer);
+                    } else {
+                        console.error('Directions request failed due to ' + status);
+                    }
+                });
+            }
 
             return; // Map is set, next render will handle updates
         }
@@ -342,47 +476,63 @@ const TrackOrder = () => {
         // Update or create rider marker
         if (riderLoc) {
             if (riderMarker) {
+                // compute heading from last position to current
+                const prev = lastRiderPosRef.current;
+                let angle = 0;
+                try {
+                    if (prev && prev.length === 2) {
+                        angle = calcHeading(prev[0], prev[1], riderLoc.lat, riderLoc.lng);
+                    }
+                } catch (e) {
+                    angle = 0;
+                }
+                riderMarker.setIcon(makeRiderIcon(angle));
                 riderMarker.setPosition(riderLoc);
             } else {
                 setRiderMarker(new window.google.maps.Marker({
                     position: riderLoc,
                     map: map,
-                    title: 'Rider Location',
-                    icon: {
-                        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-                            <svg width="24" height="24" viewBox="0 0 384 512" xmlns="http://www.w3.org/2000/svg">
-                                <path fill="#f44336" d="M172.268 501.67C26.97 291.031 0 269.413 0 192 0 85.961 85.961 0 192 0s192 85.961 192 192c0 77.413-26.97 99.031-172.268 309.67-9.535 13.774-29.93 13.773-39.464 0zM192 272c44.183 0 80-35.817 80-80s-35.817-80-80-80-80 35.817-80 80 35.817 80 80 80z"/>
-                            </svg>
-                        `),
-                        scaledSize: new window.google.maps.Size(30, 40),
-                        anchor: new window.google.maps.Point(15, 40),
-                    },
+                    title: 'Rider',
+                    icon: makeRiderIcon(0)
                 }));
             }
+            lastRiderPosRef.current = [riderLoc.lat, riderLoc.lng];
         }
 
         // Draw route from rider to customer if both are available
-        if (riderLoc && customerLoc && ['picked up', 'delivering'].includes(order.status)) {
-            if (routePolyline) routePolyline.setMap(null); // Clear old route
+        if (riderLoc && customerLoc && map) {
+            // Clear old route before drawing new one
+            if (routePolyline) {
+                routePolyline.setMap(null);
+            }
 
             const directionsService = new window.google.maps.DirectionsService();
             const directionsRenderer = new window.google.maps.DirectionsRenderer({
                 map: map,
                 suppressMarkers: true,
-                polylineOptions: { strokeColor: '#1d7fa6', strokeWeight: 5 },
+                polylineOptions: {
+                    strokeColor: '#1d7fa6',
+                    strokeWeight: 5,
+                },
             });
 
-            directionsService.route({
+            const request = {
                 origin: riderLoc,
                 destination: customerLoc,
-                travelMode: 'DRIVING',
-            }, (result, status) => {
-                if (status === 'OK') directionsRenderer.setDirections(result);
+                travelMode: window.google.maps.TravelMode.DRIVING,
+            };
+
+            directionsService.route(request, (result, status) => {
+                if (status === window.google.maps.DirectionsStatus.OK) {
+                    directionsRenderer.setDirections(result);
+                    setRoutePolyline(directionsRenderer);
+                } else {
+                    console.error('Directions request failed due to ' + status);
+                }
             });
-            setRoutePolyline(directionsRenderer);
         }
 
-    }, [scriptLoaded, order, userLocation, riderLocationState, map, marker, riderMarker, routePolyline]);
+    }, [scriptLoaded, order, userLocation, riderLocationState, map, marker, riderMarker]);
 
 
     if (loading) {
@@ -491,10 +641,22 @@ const TrackOrder = () => {
                                     <strong>Order Type:</strong>
                                     <span className="detail-value">{order.orderType}</span>
                                 </div>
+                                {order.orderType === 'Delivery' && estimatedDeliveryMinutes != null && (
+                                    <div className="order-detail-item">
+                                        <strong>Estimated Delivery:</strong>
+                                        <span className="detail-value">{estimatedDeliveryMinutes} min</span>
+                                    </div>
+                                )}
                                 <div className="order-detail-item">
                                     <strong>Date Placed:</strong>
                                     <span className="detail-value">{new Date(order.date).toLocaleString()}</span>
                                 </div>
+                                {order.orderType === 'Delivery' && (
+                                    <div className="order-detail-item">
+                                        <strong>Delivery Fee:</strong>
+                                        <span className="detail-value">₱{Number(order.deliveryFee || order.delivery_fee || Math.max(0, (order.total || 0) - (order.products?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0) || 0))).toFixed(2)}</span>
+                                    </div>
+                                )}
                                 <div className="order-detail-item total-amount">
                                     <strong>Total Amount:</strong>
                                     <span className="detail-value">₱{order.total.toFixed(2)}</span>
@@ -506,24 +668,24 @@ const TrackOrder = () => {
                             </Col>
                         </Row>
 
-{/* Rider Information (visible only when status is picked up or delivering) */}
-{['picked up', 'delivering'].includes(order.status) && order.rider_name && (
-  <>
-    <hr className="my-4" />
-    <h5 className="section-title">Rider Information</h5>
-    <div className="rider-info-box p-3 rounded border bg-light">
-      <div className="rider-info-item">
-        <strong>Name:</strong> <span>{order.rider_name}</span>
-      </div>
-      <div className="rider-info-item">
-        <strong>Phone:</strong> <span>{order.rider_phone || 'N/A'}</span>
-      </div>
-      <div className="rider-info-item">
-        <strong>Plate Number:</strong> <span>{order.rider_plate || 'N/A'}</span>
-      </div>
-    </div>
-  </>
-)}
+                        {/* Rider Information (visible only when status is picked up or delivering) */}
+                        {['picked up', 'delivering'].includes(order.status) && order.rider_name && (
+                            <>
+                                <hr className="my-4" />
+                                <h5 className="section-title">Rider Information</h5>
+                                <div className="rider-info-box p-3 rounded border bg-light">
+                                    <div className="rider-info-item">
+                                        <strong>Name:</strong> <span>{order.rider_name}</span>
+                                    </div>
+                                    <div className="rider-info-item">
+                                        <strong>Phone:</strong> <span>{order.rider_phone || 'N/A'}</span>
+                                    </div>
+                                    <div className="rider-info-item">
+                                        <strong>Plate Number:</strong> <span>{order.rider_plate || 'N/A'}</span>
+                                    </div>
+                                </div>
+                            </>
+                        )}
 
                     </Card.Body>
                 </Card>

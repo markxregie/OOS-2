@@ -10,6 +10,7 @@ password = 'speedmabagal69'
 driver = 'ODBC Driver 17 for SQL Server'
 
 
+
 # async function to get db connection
 async def get_db_connection():
     dsn = (

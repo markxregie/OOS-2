@@ -2,10 +2,17 @@ import asyncio
 import aioodbc
 
 # database config
+<<<<<<< HEAD
 server = 'DESKTOP-OD6PU2O'
 database = 'OOS'
 username = 'sa'
 password = 'speedmabagal69'
+=======
+server = 'DESKTOP-VQQ0NIU\SQLEXPRESS'
+database = 'OOS'
+username = 'sa'
+password = 'imsadmin'
+>>>>>>> 6ef80c46a0a2d49786c61f9283dee6416da45324
 driver = 'ODBC Driver 17 for SQL Server'
 
 async def add_file_path_column():

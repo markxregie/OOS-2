@@ -6,6 +6,7 @@ import riderImage from "../../assets/rider.jpg";
 import Swal from "sweetalert2";
 import "./deliverymanagement.css";
 import adminImage from "../../assets/administrator.png";
+import { showPreparationTimeModal } from "./modals/PreparationTimeModal";
 
 function DeliveryManagement() {
   const userRole = "Admin";
@@ -62,7 +63,7 @@ function DeliveryManagement() {
     }
 
     try {
-      const [ordersResponse, ridersResponse, pendingResponse] = await Promise.all([
+      const [ordersResponse, ridersResponse, pendingResponse, settingsResponse] = await Promise.all([
         fetch("http://localhost:7004/delivery/admin/delivery/orders", {
           headers: { Authorization: `Bearer ${authToken}` },
         }),
@@ -71,6 +72,9 @@ function DeliveryManagement() {
         }),
         fetch("http://localhost:7004/cart/admin/orders/pending", {
           headers: { Authorization: `Bearer ${authToken}` },
+        }),
+        fetch("http://localhost:7001/delivery/settings", {
+          headers: { Authorization: `Bearer ${authToken}` },
         })
       ]);
 
@@ -78,10 +82,12 @@ function DeliveryManagement() {
         throw new Error('Failed to fetch data');
       }
 
-      const [ordersData, ridersData, pendingData] = await Promise.all([
+      const [ordersData, ridersData, pendingData, settingsData] = await Promise.all([
         ordersResponse.json(),
         ridersResponse.json(),
-        pendingResponse.json()
+        pendingResponse.json(),
+        // settings may fail; handle gracefully by catching parse errors later
+        settingsResponse.ok ? settingsResponse.json() : Promise.resolve(null)
       ]);
       
       // Map assignedRider to string format to match UI expectations
@@ -93,6 +99,20 @@ function DeliveryManagement() {
       setOrders(ordersWithAssignments);
       setRiders(Array.isArray(ridersData) ? ridersData : []);
       setPendingOrdersCount(Array.isArray(pendingData) ? pendingData.length : 0);
+      // If settings returned from backend, map them into local state
+      if (settingsData) {
+        try {
+          setDeliveryFees({
+            baseFee: parseFloat(settingsData.BaseFee) || deliveryFees.baseFee,
+            baseDistance: parseFloat(settingsData.BaseDistanceKm) || deliveryFees.baseDistance,
+            surchargePerKm: parseFloat(settingsData.ExtraFeePerKm) || deliveryFees.surchargePerKm,
+            maxRadius: parseFloat(settingsData.MaxRadiusKm) || deliveryFees.maxRadius,
+            surgePricing: !!settingsData.IsSurgePricingActive,
+          });
+        } catch (err) {
+          console.warn('Failed to parse delivery settings:', err);
+        }
+      }
       lastFetchTimeRef.current = now;
     } catch (err) {
       console.error('Error fetching data:', err);
@@ -348,34 +368,40 @@ function DeliveryManagement() {
     });
 
     if (formValues) {
-      // Here you would typically send the data to your backend API
-      console.log("Saving new delivery fees:", formValues);
-      
-      // For now, we'll just update the local state
-      setDeliveryFees(formValues);
-
-      // Mock API call success
-      Swal.fire({
-        title: 'Success!',
-        text: 'Delivery fee settings have been updated.',
-        icon: 'success',
-        confirmButtonColor: '#4b929d'
-      });
-
-      // Example of what a real API call might look like:
-      /*
       try {
-        const response = await fetch('http://localhost:7004/delivery/admin/fees', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-          body: JSON.stringify(formValues)
+        const response = await fetch('http://localhost:7001/delivery/settings', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({
+            BaseFee: formValues.baseFee,
+            BaseDistanceKm: formValues.baseDistance,
+            ExtraFeePerKm: formValues.surchargePerKm,
+            MaxRadiusKm: formValues.maxRadius,
+            IsSurgePricingActive: formValues.surgePricing,
+            SurgeFlatFee: 20.00 // Assuming fixed for now
+          })
         });
         if (!response.ok) throw new Error('Failed to save settings');
-        // ... handle success
+        // Update local state
+        setDeliveryFees(formValues);
+        Swal.fire({
+          title: 'Success!',
+          text: 'Delivery fee settings have been updated.',
+          icon: 'success',
+          confirmButtonColor: '#4b929d'
+        });
       } catch (err) {
-        // ... handle error
+        console.error('Error saving settings:', err);
+        Swal.fire({
+          title: 'Error',
+          text: 'Failed to save delivery settings. Please try again.',
+          icon: 'error',
+          confirmButtonColor: '#dc3545'
+        });
       }
-      */
     }
   };
 
@@ -625,6 +651,25 @@ function DeliveryManagement() {
               <FaCog />
               Set Delivery Fees
             </button>
+          <button
+            onClick={showPreparationTimeModal}
+            className="prep-time-btn"
+            style={{
+              backgroundColor: '#4b929d',
+              color: 'white',
+              border: 'none',
+              padding: '0.375rem 0.75rem',
+              borderRadius: '0.25rem',
+              cursor: 'pointer',
+              fontWeight: '600',
+              marginLeft: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px'
+            }}>
+            <FaClock />
+            Set Prep Time
+          </button>
           </div>
         </div>
         {/*UPDATED: Use currentOrders which is the paginated slice */}
@@ -691,6 +736,12 @@ function DeliveryManagement() {
                 </div>
               ))}
               <hr style={{ alignSelf: "stretch" }} />
+              {order.deliveryFee && order.deliveryFee > 0 && ( // Display delivery fee if available
+                <p style={{ fontWeight: "600", marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}>
+                  <span>Delivery Fee</span>
+                  <span style={{ marginLeft: "auto" }}>₱{order.deliveryFee.toFixed(2)}</span>
+                </p>
+              )}
               <p style={{ fontWeight: "600", marginBottom: "0", alignSelf: "flex-start", color: "black", display: "flex", justifyContent: "space-between", width: "100%" }}>
                 <span>Total</span>
                 <span style={{ marginLeft: "auto" }}>₱{order.total.toFixed(2)}</span>

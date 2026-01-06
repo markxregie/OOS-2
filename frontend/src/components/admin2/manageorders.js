@@ -288,6 +288,15 @@ const ManageOrders = () => {
             {items.map((item, index) => (
               <li key={index} className="mb-2">
                 <span className="fw-bold">{item.quantity} x</span> {item.name}
+                {item.addons && item.addons.length > 0 && (
+                  <ul className="list-unstyled ms-3 mt-1" style={{ fontSize: '0.9em', color: '#666' }}>
+                    {item.addons.map((addon, addonIdx) => (
+                      <li key={addonIdx}>
+                        + {addon.addon_name || addon.name} (₱{addon.price ? addon.price.toFixed(2) : '0.00'})
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>
@@ -352,12 +361,24 @@ const ManageOrders = () => {
               </thead>
               <tbody>
                 {order.items.map((item, index) => (
-                  <tr key={index}>
-                    <td>{item.quantity}</td>
-                    <td>{item.name}</td>
-                    <td>{item.price ? item.price.toFixed(2) : "-"}</td>
-                    <td>{item.price ? (item.price * item.quantity).toFixed(2) : "-"}</td>
-                  </tr>
+                  <React.Fragment key={index}>
+                    <tr>
+                      <td>{item.quantity}</td>
+                      <td>{item.name}</td>
+                      <td>{item.price ? item.price.toFixed(2) : "-"}</td>
+                      <td>{item.price ? (item.price * item.quantity).toFixed(2) : "-"}</td>
+                    </tr>
+                    {item.addons && item.addons.length > 0 && item.addons.map((addon, addonIdx) => (
+                      <tr key={`${index}-addon-${addonIdx}`} style={{ backgroundColor: '#f8f9fa' }}>
+                        <td></td>
+                        <td style={{ paddingLeft: '2rem', fontSize: '0.9em', color: '#666' }}>
+                          + {addon.addon_name || addon.name}
+                        </td>
+                        <td style={{ fontSize: '0.9em' }}>{addon.price ? addon.price.toFixed(2) : "-"}</td>
+                        <td style={{ fontSize: '0.9em' }}>{addon.price ? (addon.price * item.quantity).toFixed(2) : "-"}</td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
                 ))}
               </tbody>
             </Table>

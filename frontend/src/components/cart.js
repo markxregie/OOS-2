@@ -9,6 +9,8 @@ import { CartContext } from '../contexts/CartContext';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import Swal from 'sweetalert2';
+import LocationVerifyModal from './LocationVerifyModal';
+import { checkStoreStatus } from './storeUtils';
 
 // Store location coordinates
 const STORE_LOCATION = {
@@ -16,16 +18,11 @@ const STORE_LOCATION = {
   lng: 121.08334243448036
 };
 
-// Maximum delivery radius in kilometers
-const MAX_DELIVERY_RADIUS = 3;
-
-// Convert kilometers to meters for the Circle component
-const MAX_DELIVERY_RADIUS_METERS = MAX_DELIVERY_RADIUS * 1000;
-
 // Mapbox access token (shared)
 const MAPBOX_ACCESS_TOKEN = process.env.REACT_APP_MAPBOX_ACCESS_TOKEN;
 mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
-// Try to disable telemetry (may be blocked by extensions) to reduce events.mapbox.com noise
+
+// Try to disable telemetry
 try {
   if (typeof mapboxgl.setTelemetryEnabled === 'function') mapboxgl.setTelemetryEnabled(false);
 } catch (err) {
@@ -38,120 +35,105 @@ const getImageUrl = (imagePath) => {
   return `http://localhost:8001${imagePath}`;
 };
 
-// Modal component definition
-const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderTypeMain, handleCheckoutClick, setOrderTypeMain }) => {
-    // Helper to calculate total (copied from main component)
+// Modal component definition (Order Summary for Mobile)
+const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderTypeMain, handleCheckoutClick, setOrderTypeMain, deliveryFee, isStoreOpen }) => {
   const calculateTotal = (item) => {
     const basePrice = item.price || 0;
-        const addonsTotal = (item.addons || []).reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0);
-        return (basePrice + addonsTotal) * item.quantity;
-    };
+    const addonsTotal = (item.addons || []).reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0);
+    return (basePrice + addonsTotal) * item.quantity;
+  };
 
-    const subtotal = selectedCartItems.reduce((acc, item) => {
-        const basePrice = item.price || 0;
-        const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || addon.Price || 0), 0);
-        return acc + (basePrice + addonsTotal) * item.quantity;
-    }, 0);
+  const subtotal = selectedCartItems.reduce((acc, item) => {
+    const basePrice = item.price || 0;
+    const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || addon.Price || 0), 0);
+    return acc + (basePrice + addonsTotal) * item.quantity;
+  }, 0);
 
-    const deliveryFee = orderTypeMain === 'Delivery' ? 50 : 0;
-    const finalTotal = subtotal + deliveryFee;
+  const finalTotal = subtotal + (orderTypeMain === 'Delivery' ? deliveryFee : 0);
 
-    if (!show) return null;
+  if (!show) return null;
 
-    return (
-        <div className="modal-custom-backdrop" onClick={onClose}>
-            <div className="modal-custom-content" onClick={e => e.stopPropagation()}>
-                <div className="d-flex justify-content-between align-items-center modal-header-custom">
-                    <h5 className="fw-bold m-0">Order Details ({selectedCartItems.length} items)</h5>
-                    <button type="button" className="btn-close" onClick={onClose}></button>
-                </div>
-                
-                <div className="p-3">
-                    <div className="d-flex justify-content-center mb-3">
-                        <div className="btn-group-toggle" role="group" aria-label="Order Type Toggle">
-                            {/* BUTTONS ARE NOW CLICKABLE AND UPDATE STATE */}
-                            <button
-                                type="button"
-                                className={`${orderTypeMain === 'Pick Up' ? 'btn-active-custom' : ''}`}
-                                onClick={() => setOrderTypeMain('Pick Up')}
-                            >
-                                <i className="bi bi-bag-fill"></i> Pick Up
-                            </button>
-                            <button
-                                type="button"
-                                className={`${orderTypeMain === 'Delivery' ? 'btn-active-custom' : ''}`}
-                                onClick={() => setOrderTypeMain('Delivery')}
-                            >
-                                <i className="bi bi-truck"></i> Delivery
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="order-summary-mobile">
-                        <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white' }}>
-                            <thead>
-                                <tr>
-                                    <th style={{ textAlign: 'left', padding: '8px' }}>Product</th>
-                                    <th style={{ textAlign: 'center', padding: '8px' }}>Qty</th>
-                                    <th style={{ textAlign: 'right', padding: '8px' }}>Price</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {selectedCartItems.map((item, i) => (
-                                    <tr key={i}>
-                                        <td style={{ textAlign: 'left', padding: '8px', fontSize: '0.9rem' }}>
-                                            <div className="fw-semibold">{item.product_name}</div>
-                                            {/* ADD-ONS INCLUDED */}
-                                            {item.addons && item.addons.length > 0 && (
-                                                <ul className="cart-addons mb-0 ps-3">
-                                                    {item.addons.map((addon, idx) => (
-                                                        <li key={idx} style={{ fontSize: "0.8em", color: addon.status === 'Unavailable' ? '#999' : '#666', fontStyle: addon.status === 'Unavailable' ? 'italic' : 'normal' }}>
-                                                            + {addon.addon_name || addon.AddOnName || addon.name} (₱{addon.price || addon.Price || 0})
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            )}
-                                        </td>
-                                        <td style={{ textAlign: 'center', padding: '8px', fontSize: '0.9rem' }}>{item.quantity}</td>
-                                        <td style={{ textAlign: 'right', padding: '8px', fontSize: '0.9rem' }}>₱{(item.price || 0).toFixed(2)}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                            <tfoot>
-                                <tr className="subtotal-row">
-                                    <td colSpan="2" style={{ padding: '8px', fontWeight: 'bold' }}>Subtotal</td>
-                                    <td style={{ textAlign: 'right', padding: '8px', fontWeight: 'bold' }}>₱{subtotal.toFixed(2)}</td>
-                                </tr>
-                                {orderTypeMain === 'Delivery' && (
-                                    <tr className="delivery-fee-row subtotal-row">
-                                        <td colSpan="2" style={{ padding: '8px', fontWeight: 'bold' }}>Delivery Fee</td>
-                                        <td style={{ textAlign: 'right', padding: '8px', fontWeight: 'bold' }}>₱{deliveryFee.toFixed(2)}</td>
-                                    </tr>
-                                )}
-                                <tr className="total-row modal-total-row">
-                                    <td colSpan="2" style={{ padding: '8px', fontWeight: 'bold' }}>Total</td>
-                                    <td style={{ textAlign: 'right', padding: '8px', fontWeight: 'bold' }}>₱{finalTotal.toFixed(2)}</td>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
-                    
-                    <div className="d-flex justify-content-center mt-4">
-                        <button
-                            type="button"
-                            className="btn btn-block w-100"
-                            style={{ backgroundColor: '#4B929D', color: 'white', padding: '10px' }}
-                            onClick={handleCheckoutClick}
-                            disabled={selectedCartItems.length === 0}
-                        >
-                            <i className="bi bi-cart-check me-2"></i>
-                            Checkout (₱{finalTotal.toFixed(2)})
-                        </button>
-                    </div>
-                </div>
-            </div>
+  return (
+    <div className="modal-custom-backdrop" onClick={onClose}>
+      <div className="modal-custom-content" onClick={e => e.stopPropagation()}>
+        <div className="d-flex justify-content-between align-items-center modal-header-custom p-3 border-bottom">
+          <h5 className="fw-bold m-0 text-dark">Order Summary</h5>
+          <button type="button" className="btn-close" onClick={onClose}></button>
         </div>
-    );
+        
+        <div className="p-3">
+          <div className="d-flex justify-content-center mb-4">
+            <div className="btn-group w-100" role="group" aria-label="Order Type Toggle">
+              <button
+                type="button"
+                className={`btn ${orderTypeMain === 'Pick Up' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                onClick={() => setOrderTypeMain('Pick Up')}
+                style={{ borderRadius: '8px 0 0 8px' }}
+              >
+                <i className="bi bi-bag-fill me-2"></i> Pick Up
+              </button>
+              <button
+                type="button"
+                className={`btn ${orderTypeMain === 'Delivery' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                onClick={() => setOrderTypeMain('Delivery')}
+                style={{ borderRadius: '0 8px 8px 0' }}
+              >
+                <i className="bi bi-truck me-2"></i> Delivery
+              </button>
+            </div>
+          </div>
+
+          <div className="order-summary-mobile" style={{ maxHeight: '40vh', overflowY: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px' }}>
+              <tbody>
+                {selectedCartItems.map((item, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                    <td style={{ padding: '8px 0' }}>
+                      <div className="fw-semibold text-dark">{item.product_name}</div>
+                      {item.addons && item.addons.length > 0 && (
+                        <small className="text-muted d-block">
+                          {item.addons.map(a => `+ ${a.addon_name || a.name}`).join(', ')}
+                        </small>
+                      )}
+                    </td>
+                    <td style={{ textAlign: 'center', padding: '8px', color: '#666' }}>x{item.quantity}</td>
+                    <td style={{ textAlign: 'right', padding: '8px', fontWeight: '600' }}>₱{calculateTotal(item).toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="border-top pt-3 mt-2">
+            <div className="d-flex justify-content-between mb-2">
+              <span className="text-muted">Subtotal</span>
+              <span className="fw-bold">₱{subtotal.toFixed(2)}</span>
+            </div>
+            {orderTypeMain === 'Delivery' && (
+               <div className="d-flex justify-content-between mb-2 text-success">
+                <span>Delivery Fee</span>
+                <span>+ ₱{deliveryFee.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="d-flex justify-content-between mt-3 pt-2 border-top">
+              <span className="h5 fw-bold text-dark">Total</span>
+              <span className="h5 fw-bold" style={{ color: '#4B929D' }}>₱{finalTotal.toFixed(2)}</span>
+            </div>
+          </div>
+          
+          <button
+            type="button"
+            className="btn w-100 mt-4 py-2 fw-bold"
+            style={{ backgroundColor: '#4B929D', color: 'white', borderRadius: '10px' }}
+            onClick={isStoreOpen ? handleCheckoutClick : null}
+            disabled={selectedCartItems.length === 0 || !isStoreOpen}
+          >
+            {isStoreOpen ? 'Checkout Now' : 'Store Closed'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 
@@ -166,8 +148,10 @@ const Cart = () => {
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
   const [isCheckingLocation, setIsCheckingLocation] = useState(false);
-
-  // Note: using top-level STORE_LOCATION and MAX_DELIVERY_RADIUS constants
+  const [deliverySettings, setDeliverySettings] = useState({});
+  const [deliveryFee, setDeliveryFee] = useState(0);
+  const [updateTimeouts, setUpdateTimeouts] = useState({});
+  const isStoreOpen = checkStoreStatus();
 
   useEffect(() => {
     const token = localStorage.getItem("authToken");
@@ -178,23 +162,21 @@ const Cart = () => {
         const headers = { Authorization: `Bearer ${token}` };
         const results = {};
 
-        // Fetch merchandise data from IMS for merchandise items
+        // Fetch merchandise data
         const merchandiseResponse = await fetch('http://localhost:8002/merchandise/menu', {
           headers
         });
-        
+
         if (!merchandiseResponse.ok) {
           throw new Error('Failed to fetch merchandise data');
         }
-        
+
         const merchandiseData = await merchandiseResponse.json();
 
-        // Process each cart item
         for (const item of cartItems) {
           if (!item.product_id) continue;
 
           if (item.product_type === "Merchandise") {
-            // For merchandise items, get quantity from IMS
             const merchandise = merchandiseData.find(m => m.MerchandiseName === item.product_name);
             if (merchandise) {
               results[item.product_id] = {
@@ -203,7 +185,6 @@ const Cart = () => {
               };
             }
           } else {
-            // For non-merchandise items, use existing endpoint
             try {
               const res = await fetch(
                 `${PRODUCTS_BASE_URL}/is_products/products/${item.product_id}/max-quantity`,
@@ -218,20 +199,40 @@ const Cart = () => {
             }
           }
         }
-        
         setMaxQuantities(results);
       } catch (error) {
         console.error('Error fetching quantities:', error);
         toast.error('Error fetching product quantities');
       }
     };
-
     fetchMaxQuantities();
   }, [cartItems]);
 
-  console.log("🧾 Current cartItems:", cartItems);
+  // Fetch delivery settings
+  useEffect(() => {
+    const fetchDeliverySettings = async () => {
+      try {
+        const token = localStorage.getItem("authToken");
+        if (!token) return;
+        const response = await fetch('http://localhost:7001/delivery/settings', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const settings = await response.json();
+          setDeliverySettings(settings);
+        } else {
+          console.error('Failed to fetch delivery settings');
+        }
+      } catch (error) {
+        console.error('Error fetching delivery settings:', error);
+      }
+    };
+    fetchDeliverySettings();
+  }, []);
+
 
   const [selectedCartItems, setSelectedCartItems] = useState([]);
+<<<<<<< HEAD
 
   // Effect to clear selectedCartItems when cartItems change (e.g., after checkout removes items)
   useEffect(() => {
@@ -239,11 +240,13 @@ const Cart = () => {
   }, [cartItems]);
   
   // Existing state variables...
+=======
+>>>>>>> 6ef80c46a0a2d49786c61f9283dee6416da45324
   const [receiptFile, setReceiptFile] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [paymentMethodMain, setPaymentMethodMain] = useState('E-Wallet');
-  const [orderTypeMain, setOrderTypeMain] = useState('Pick Up'); // Mutable state for Order Type
+  const [orderTypeMain, setOrderTypeMain] = useState('Pick Up'); 
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -275,8 +278,6 @@ const Cart = () => {
 
   const handleIncrement = async (item) => {
     const isMerchandise = item.product_type === "Merchandise";
-
-    // Get max quantity from maxQuantities state for both merchandise and regular products
     const maxQty = maxQuantities[item.product_id]?.maxQuantity ?? (isMerchandise ? 0 : 999);
     const status = maxQuantities[item.product_id]?.status;
 
@@ -291,29 +292,69 @@ const Cart = () => {
       return;
     }
 
-    await updateQuantity(item.cart_item_id, item.quantity + 1);
+    const newQuantity = item.quantity + 1;
 
+    // Optimistic update - update selected items immediately
     setSelectedCartItems((prevSelected) =>
       prevSelected.map((selectedItem) =>
         selectedItem.cart_item_id === item.cart_item_id
-          ? { ...selectedItem, quantity: selectedItem.quantity + 1 }
+          ? { ...selectedItem, quantity: newQuantity }
           : selectedItem
       )
     );
+
+    // Debounce backend update - clear existing timeout and set new one
+    if (updateTimeouts[item.cart_item_id]) {
+      clearTimeout(updateTimeouts[item.cart_item_id]);
+    }
+
+    const timeoutId = setTimeout(() => {
+      updateQuantity(item.cart_item_id, newQuantity).catch(err => {
+        console.error("Failed to update quantity:", err);
+        toast.error("Failed to update quantity");
+      });
+      setUpdateTimeouts(prev => {
+        const newTimeouts = { ...prev };
+        delete newTimeouts[item.cart_item_id];
+        return newTimeouts;
+      });
+    }, 500); // Wait 500ms after last click
+
+    setUpdateTimeouts(prev => ({ ...prev, [item.cart_item_id]: timeoutId }));
   };
 
   const handleDecrement = async (item) => {
     if (item.quantity > 1) {
-      await updateQuantity(item.cart_item_id, item.quantity - 1);
+      const newQuantity = item.quantity - 1;
 
+      // Optimistic update - update selected items immediately
       setSelectedCartItems(prevSelected => {
         return prevSelected.map(selectedItem => {
           if (selectedItem.cart_item_id === item.cart_item_id) {
-            return { ...selectedItem, quantity: selectedItem.quantity - 1 };
+            return { ...selectedItem, quantity: newQuantity };
           }
           return selectedItem;
         });
       });
+
+      // Debounce backend update - clear existing timeout and set new one
+      if (updateTimeouts[item.cart_item_id]) {
+        clearTimeout(updateTimeouts[item.cart_item_id]);
+      }
+
+      const timeoutId = setTimeout(() => {
+        updateQuantity(item.cart_item_id, newQuantity).catch(err => {
+          console.error("Failed to update quantity:", err);
+          toast.error("Failed to update quantity");
+        });
+        setUpdateTimeouts(prev => {
+          const newTimeouts = { ...prev };
+          delete newTimeouts[item.cart_item_id];
+          return newTimeouts;
+        });
+      }, 500); // Wait 500ms after last click
+
+      setUpdateTimeouts(prev => ({ ...prev, [item.cart_item_id]: timeoutId }));
     }
   };
 
@@ -329,9 +370,8 @@ const Cart = () => {
     return (basePrice + addonsTotal) * item.quantity;
   };
 
-  // Haversine formula to calculate distance between two lat/lng points
   const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
-    const R = 6371; // Radius of the earth in km
+    const R = 6371; 
     const dLat = (lat2 - lat1) * (Math.PI / 180);
     const dLon = (lon2 - lon1) * (Math.PI / 180);
     const a =
@@ -339,21 +379,51 @@ const Cart = () => {
       Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
       Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const d = R * c; // Distance in km
+    const d = R * c; 
     return d;
   };
 
+  // --- REVISED LOCATION ALERT WITH CLEAR COST BREAKDOWN ---
   const showLocationCheckAlert = () => {
+    // 1. Calculate Subtotal first (from selected items)
+    const itemsSubtotal = selectedCartItems.reduce((acc, item) => {
+        const basePrice = item.price || 0;
+        const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || 0), 0);
+        return acc + (basePrice + addonsTotal) * item.quantity;
+    }, 0);
+
     Swal.fire({
-      title: 'Checking Delivery Location...',
-      html: '<div id="map-container-placeholder" style="height: 400px; width: 100%;"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Getting your location...</p></div>',
-      showConfirmButton: false,
+      title: 'Verifying Location',
+      // Customized styling for the container
+      customClass: {
+          popup: 'location-verify-modal',
+          title: 'location-verify-title',
+          content: 'location-verify-content',
+          confirmButton: 'location-verify-confirm',
+          cancelButton: 'location-verify-cancel'
+      },
+      html: `
+        <div style="border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 15px;">
+            <div id="map-container" style="height: 300px; width: 100%;"></div>
+        </div>
+        <div id="swal-map-msg" style="font-size: 1rem; color: #555;">
+             <div class="spinner-border text-primary spinner-border-sm me-2" role="status"></div>
+             Locating you...
+        </div>
+      `,
+      showConfirmButton: true, 
+      showCancelButton: true,  
+      confirmButtonText: 'Loading...', 
+      cancelButtonText: 'Cancel',      
       allowOutsideClick: false,
       didOpen: () => {
         Swal.showLoading();
         navigator.geolocation.getCurrentPosition(
           (position) => {
             const { latitude, longitude } = position.coords;
+            Swal.getConfirmButton().disabled = true;
+            Swal.getCancelButton().disabled = true;
+
             const userLat = latitude;
             const userLng = longitude;
 
@@ -364,32 +434,40 @@ const Cart = () => {
               STORE_LOCATION.lng
             );
 
-            const isWithinRange = distance <= MAX_DELIVERY_RADIUS;
+            const maxRadiusKm = deliverySettings.MaxRadiusKm || 8.0;
+            const isWithinRange = distance <= maxRadiusKm;
 
-            // Update Swal content with the map container and a message element
-            Swal.update({
-              title: isWithinRange ? 'Location Verified!' : 'Outside Delivery Range',
-              html: `
-                <div id="map-container" style="height: 400px; width: 100%;"></div>
-                <p id="swal-map-msg" class="mt-2">${isWithinRange ? 'You are within our delivery area. Proceeding to checkout...' : `Sorry, your location is outside our ${MAX_DELIVERY_RADIUS}km delivery radius.`}</p>
-              `,
-              showConfirmButton: !isWithinRange,
-              confirmButtonText: 'Close',
-              confirmButtonColor: '#dc3545',
-              showCancelButton: false,
-              allowOutsideClick: !isWithinRange,
-            });
+            // Calculate delivery fee
+            let calculatedFee = 0;
+            if (deliverySettings.BaseFee && deliverySettings.BaseDistanceKm && deliverySettings.ExtraFeePerKm) {
+              calculatedFee = deliverySettings.BaseFee;
+              if (distance > deliverySettings.BaseDistanceKm) {
+                const extraDistance = distance - deliverySettings.BaseDistanceKm;
+                calculatedFee += extraDistance * deliverySettings.ExtraFeePerKm;
+              }
+              if (deliverySettings.IsSurgePricingActive) {
+                calculatedFee += deliverySettings.SurgeFlatFee || 20; 
+              }
+            } else {
+              calculatedFee = 50; 
+            }
+            setDeliveryFee(calculatedFee);
 
-            // Helper to create an approximate circular polygon as GeoJSON around store
-            const createGeoJSONCircle = (center, radiusInMeters, points = 64) => {
+            // Calculate Grand Total
+            const grandTotal = itemsSubtotal + calculatedFee;
+
+            Swal.getTitle().innerText = 'Location Verified';
+            Swal.hideLoading(); 
+
+            // Create Map (GeoJSON) logic remains the same...
+            const createGeoJSONCircle = (center, radiusInMeters, points = 64) => { 
               const coords = [];
-              const [cx, cy] = center; // lng, lat
+              const [cx, cy] = center;
               for (let i = 0; i < points; i++) {
                 const theta = (i / points) * (2 * Math.PI);
                 const dx = radiusInMeters * Math.cos(theta);
                 const dy = radiusInMeters * Math.sin(theta);
-                // Convert meters to degrees approximation
-                const lng = cx + (dx / (111320 * Math.cos(cy * Math.PI / 180)));
+                const lng = cx + (dx / (111320 * Math.cos(cy * (Math.PI / 180))));
                 const lat = cy + (dy / 110540);
                 coords.push([lng, lat]);
               }
@@ -397,52 +475,63 @@ const Cart = () => {
               return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [coords] } };
             };
 
-            // Validate coordinates before creating map (prevent NaN LngLat)
+            const maxRadiusMeters = (deliverySettings.MaxRadiusKm || 8.0) * 1000;
+            const baseRadiusMeters = (deliverySettings.BaseDistanceKm || 3.0) * 1000;
+
             if (![STORE_LOCATION.lng, STORE_LOCATION.lat, userLng, userLat].every(v => Number.isFinite(v))) {
               const msgEl = document.getElementById('swal-map-msg');
               if (msgEl) msgEl.innerText = 'Could not determine coordinates. Please try again.';
-              console.error('Invalid coordinates', { store: STORE_LOCATION, userLat, userLng });
               return;
             }
 
-            // Check if access token is set
             if (!mapboxgl.accessToken) {
               const msgEl = document.getElementById('swal-map-msg');
-              if (msgEl) msgEl.innerText = 'Map configuration error. Please try again later.';
-              console.error('Mapbox access token not set');
+              if (msgEl) msgEl.innerText = 'Map configuration error.';
               return;
             }
 
-            // Initialize Mapbox GL map
-            const map = new mapboxgl.Map({
-              container: 'map-container',
-              style: 'mapbox://styles/mapbox/streets-v11',
-              center: [STORE_LOCATION.lng, STORE_LOCATION.lat],
-              zoom: 13
-            });
-            map.addControl(new mapboxgl.NavigationControl());
+            let map; 
+            try {
+              map = new mapboxgl.Map({
+                container: 'map-container', 
+                style: 'mapbox://styles/mapbox/streets-v11',
+                center: [STORE_LOCATION.lng, STORE_LOCATION.lat],
+                zoom: 13
+              });
+              map.addControl(new mapboxgl.NavigationControl());
+            } catch (mapInitError) {
+              const msgEl = document.getElementById('swal-map-msg');
+              if (msgEl) msgEl.innerText = 'Failed to initialize map.';
+              return;
+            }
 
             map.on('load', async () => {
               try {
-                // Add markers
                 new mapboxgl.Marker({ color: 'red' }).setLngLat([STORE_LOCATION.lng, STORE_LOCATION.lat]).setPopup(new mapboxgl.Popup().setText('Store Location')).addTo(map);
                 new mapboxgl.Marker({ color: 'blue' }).setLngLat([userLng, userLat]).setPopup(new mapboxgl.Popup().setText('Your Location')).addTo(map);
 
-                // Add delivery radius polygon
-                const circleFeature = createGeoJSONCircle([STORE_LOCATION.lng, STORE_LOCATION.lat], MAX_DELIVERY_RADIUS * 1000);
-                if (!map.getSource('delivery-radius')) {
-                  map.addSource('delivery-radius', { type: 'geojson', data: circleFeature });
-                  map.addLayer({ id: 'delivery-radius-fill', type: 'fill', source: 'delivery-radius', paint: { 'fill-color': isWithinRange ? '#2ecc71' : '#e74c3c', 'fill-opacity': 0.15 } });
+                // Base distance circle (green)
+                const baseCircleFeature = createGeoJSONCircle([STORE_LOCATION.lng, STORE_LOCATION.lat], baseRadiusMeters);
+                if (!map.getSource('base-radius')) {
+                  map.addSource('base-radius', { type: 'geojson', data: baseCircleFeature });
+                  map.addLayer({ id: 'base-radius-fill', type: 'fill', source: 'base-radius', paint: { 'fill-color': '#2ecc71', 'fill-opacity': 0.2 } });
+                  map.addLayer({ id: 'base-radius-line', type: 'line', source: 'base-radius', paint: { 'line-color': '#27ae60', 'line-width': 2, 'line-dasharray': [2, 2] } });
                 }
 
-                // Fit bounds to include both points
+                // Max distance circle (red)
+                const maxCircleFeature = createGeoJSONCircle([STORE_LOCATION.lng, STORE_LOCATION.lat], maxRadiusMeters);
+                if (!map.getSource('max-radius')) {
+                  map.addSource('max-radius', { type: 'geojson', data: maxCircleFeature });
+                  map.addLayer({ id: 'max-radius-fill', type: 'fill', source: 'max-radius', paint: { 'fill-color': '#e74c3c', 'fill-opacity': 0.15 } });
+                  map.addLayer({ id: 'max-radius-line', type: 'line', source: 'max-radius', paint: { 'line-color': '#c0392b', 'line-width': 2, 'line-dasharray': [4, 4] } });
+                }
+
                 const bounds = new mapboxgl.LngLatBounds();
                 bounds.extend([STORE_LOCATION.lng, STORE_LOCATION.lat]);
                 bounds.extend([userLng, userLat]);
                 map.fitBounds(bounds, { padding: 40, maxZoom: 15 });
                 setTimeout(() => map.resize(), 200);
 
-                // Fetch and draw driving route
                 const dirRes = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${STORE_LOCATION.lng},${STORE_LOCATION.lat};${userLng},${userLat}?geometries=geojson&access_token=${MAPBOX_ACCESS_TOKEN}`);
                 if (dirRes.ok) {
                   const dirData = await dirRes.json();
@@ -456,41 +545,90 @@ const Cart = () => {
                     }
 
                     const distanceKm = (dirData.routes[0].distance / 1000).toFixed(2);
-                    const msgEl = document.getElementById('swal-map-msg');
-                    if (msgEl) msgEl.innerText = isWithinRange ? `You are within our delivery area (${distanceKm} km). Proceeding to checkout...` : `Sorry, your location is outside our ${MAX_DELIVERY_RADIUS}km delivery radius (${distanceKm} km).`;
+                    const maxRadiusKm = deliverySettings.MaxRadiusKm || 8.0;
+                    const exceedsMaxRadius = distance > maxRadiusKm;
 
-                    if (isWithinRange) {
-                      setTimeout(() => {
-                        Swal.close();
-                        navigate('/checkout', { state: { cartItems: selectedCartItems, orderType: orderTypeMain, paymentMethod: paymentMethodMain } });
-                      }, 2500);
+                    // --- UPDATED HTML FOR CLARITY ---
+                    const msgElWithWarning = document.getElementById('swal-map-msg');
+                    if (msgElWithWarning) {
+                      msgElWithWarning.innerHTML = `
+                        <div style="text-align: left; background: #fff; padding: 10px 0;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.95rem;">
+                                <span class="text-muted">Distance:</span>
+                                <strong>${distanceKm} km</strong>
+                            </div>
+                            <hr style="margin: 5px 0; border-color: #eee;">
+                            
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.95rem;">
+                                <span class="text-muted">Order Subtotal:</span>
+                                <span>₱${itemsSubtotal.toFixed(2)}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.95rem; color: #d35400;">
+                                <span>+ Delivery Fee:</span>
+                                <strong>₱${calculatedFee.toFixed(2)}</strong>
+                            </div>
+                            <hr style="margin: 5px 0; border-color: #ddd;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 1.2rem;">
+                                <strong>Total to Pay:</strong>
+                                <strong style="color: #4B929D;">₱${grandTotal.toFixed(2)}</strong>
+                            </div>
+                        </div>
+                        
+                        ${exceedsMaxRadius ? `
+                            <div class="alert alert-warning d-flex align-items-center mt-3 mb-0" role="alert" style="font-size: 0.85em; text-align: left; border-left: 4px solid #ffc107;">
+                                <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+                                <div>
+                                    <strong>Extended Range Warning</strong><br/>
+                                    This delivery distance exceeds our maximum radius of ${maxRadiusKm}km radius. Food quality may be affected due to extended travel time.
+                                </div>
+                            </div>` : ''
+                        }
+                      `;
                     }
+                    Swal.showValidationMessage('');
+                    Swal.getActions().style.display = 'flex';
+
+                    Swal.getConfirmButton().disabled = false;
+                    Swal.getCancelButton().disabled = false;
+                    Swal.getConfirmButton().innerText = 'Yes, Proceed to Checkout';
+                    Swal.getConfirmButton().style.backgroundColor = '#4b929d';
+                    Swal.getCancelButton().innerText = 'Cancel';
+                    Swal.getCancelButton().style.backgroundColor = '#6c757d';
+
+                    const confirmButton = Swal.getConfirmButton();
+                    confirmButton.onclick = () => {
+                      Swal.close();
+                      navigate('/checkout', { state: { cartItems: selectedCartItems, orderType: orderTypeMain, paymentMethod: paymentMethodMain, deliveryFee: calculatedFee } });
+                    };
+
+                    const cancelButton = Swal.getCancelButton();
+                    cancelButton.onclick = () => {
+                      Swal.close();
+                    };
                   }
                 }
               } catch (err) {
                 console.error('Mapbox render error', err);
               }
             });
-            // Note: map will be removed automatically when the container is removed; no explicit cleanup here
           },
           (error) => {
             let title = 'Location Access Denied';
             let text = 'We need your location to check for delivery eligibility. Please allow location access and try again.';
-
-            // Check if the error is due to a persistent "denied" state
             if (error.code === error.PERMISSION_DENIED) {
                 title = 'Location Permission Blocked';
                 text = `
-                    It looks like you've previously blocked location access for this site. 
-                    <br/><br/> 
-                    To proceed with delivery, please go to your browser's site settings and change the location permission to "Allow" or "Ask".
+                    <div class="text-start">
+                        It looks like you've previously blocked location access for this site. 
+                        <br/><br/> 
+                        To proceed with delivery, please go to your browser's site settings and change the location permission to <strong>"Allow"</strong> or <strong>"Ask"</strong>.
+                    </div>
                 `;
             }
-
             Swal.fire({
                 icon: 'error',
                 title: title,
-                html: text, // Use html to render the line breaks
+                html: text,
                 confirmButtonColor: '#dc3545'
             });
           }
@@ -502,15 +640,24 @@ const Cart = () => {
 
   const handleCheckoutClick = async (e) => {
     e.preventDefault();
+    if (!checkStoreStatus()) {
+      toast.error("Store is closed. Cannot proceed to checkout.");
+      return;
+    }
     if (selectedCartItems.length === 0) {
       toast.error("Please select items to checkout.");
       return;
     }
+<<<<<<< HEAD
 
     // Clear selected items after checkout to prevent them from staying selected
     setSelectedCartItems([]);
 
     // This logic now applies to both mobile and desktop checkout flows
+=======
+    const token = localStorage.getItem("authToken");
+  
+>>>>>>> 6ef80c46a0a2d49786c61f9283dee6416da45324
     if (orderTypeMain === 'Delivery') {
       if (!window.isSecureContext) {
         Swal.fire({
@@ -520,12 +667,11 @@ const Cart = () => {
         });
         return;
       }
-      setShowOrderModal(false);
-      showLocationCheckAlert();
+      setShowOrderModal(false); // Close the summary modal
+      setIsCheckingLocation(true); // Show the location verification modal
     } else {
-      // For Pick Up or other types, proceed directly
       setShowOrderModal(false);
-      navigate('/checkout', { state: { cartItems: selectedCartItems, orderType: orderTypeMain, paymentMethod: paymentMethodMain } });
+      navigate('/checkout', { state: { cartItems: selectedCartItems, orderType: orderTypeMain, paymentMethod: paymentMethodMain, deliveryFee: 0 } });
     }
   };
   
@@ -595,10 +741,10 @@ const Cart = () => {
     const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || addon.Price || 0), 0);
     return acc + (basePrice + addonsTotal) * item.quantity;
   }, 0);
-  const totalForButton = (subtotalForButton + (orderTypeMain === 'Delivery' ? 50 : 0)).toFixed(2);
-
+  const totalForButton = (subtotalForButton + (orderTypeMain === 'Delivery' ? deliveryFee : 0)).toFixed(2);
 
   return (
+    <>
     <section className="container-fluid py-3 px-2 px-md-5 mt-5 pt-5" style={{ backgroundColor: '#eaf4f6', minHeight: '100vh' }}>
       {isCheckingLocation && (
         <div className="location-loader-overlay">
@@ -895,7 +1041,7 @@ const Cart = () => {
                       <td style={{ padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>Delivery Fee</td>
                       <td></td>
                       <td style={{ textAlign: 'right', padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>
-                        ₱50.00
+                        ₱{deliveryFee.toFixed(2)}
                       </td>
                     </tr>
                   )}
@@ -929,11 +1075,12 @@ const Cart = () => {
                         <button
                           type="button"
                           className="btn"
-                          style={{ minWidth: '200px', backgroundColor: '#4B929D', color: 'white' }}
-                          onClick={handleCheckoutClick}
+                          style={{ minWidth: '200px', backgroundColor: isStoreOpen ? '#4B929D' : '#6c757d', color: 'white' }}
+                          onClick={isStoreOpen ? handleCheckoutClick : null}
+                          disabled={!isStoreOpen}
                         >
                           <i className="bi bi-cart-check me-2"></i>
-                          Checkout
+                          {isStoreOpen ? 'Checkout' : 'Store Closed'}
                         </button>
                       </div>
                     </td>
@@ -965,9 +1112,22 @@ const Cart = () => {
         selectedCartItems={selectedCartItems}
         orderTypeMain={orderTypeMain}
         handleCheckoutClick={handleCheckoutClick}
-        setOrderTypeMain={setOrderTypeMain} // Passed the state setter
+        setOrderTypeMain={setOrderTypeMain} 
+        deliveryFee={deliveryFee} // Pass deliveryFee
+        isStoreOpen={isStoreOpen}
       />
     </section>
+    {isCheckingLocation && (
+      <LocationVerifyModal
+        show={isCheckingLocation}
+        onClose={() => setIsCheckingLocation(false)}
+        deliverySettings={deliverySettings}
+        selectedCartItems={selectedCartItems}
+        orderTypeMain={orderTypeMain}
+        paymentMethodMain={paymentMethodMain}
+      />
+    )}
+    </>
   );
 };
 

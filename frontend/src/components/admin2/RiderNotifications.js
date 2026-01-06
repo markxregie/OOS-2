@@ -103,24 +103,6 @@ const RiderNotifications = () => {
     fetchEarnings();
   }, [riderId, authToken, earningsFilter]);
 
-  const calculateEarnings = (filter) => {
-    const now = new Date();
-    let startDate;
-    if (filter === 'Daily') {
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    } else if (filter === 'Weekly') {
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    } else if (filter === 'Monthly') {
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    }
-    const completedOrders = orders.filter(order => {
-      const orderDate = new Date(order.orderedAt);
-      return ["delivered", "completed"].includes(order.currentStatus) && orderDate >= startDate;
-    });
-    const total = completedOrders.length * 50; // Assuming fixed delivery fee of ₱50 per completed order
-    return total.toFixed(2);
-  };
-
   // --- FETCH NOTIFICATIONS ---
   const fetchNotifications = async () => {
     if (!riderId || !authToken) return;
@@ -275,7 +257,7 @@ const RiderNotifications = () => {
                 orders={orders}
                 earningsFilter={earningsFilter}
                 setEarningsFilter={setEarningsFilter}
-                calculateEarnings={calculateEarnings}
+                earnings={earnings}
                 pageTitle="Notifications"
             />
         )}

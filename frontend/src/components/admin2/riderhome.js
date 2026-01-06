@@ -406,24 +406,6 @@ import Swal from 'sweetalert2';
         return true;
       });
 
-    const calculateEarnings = (filter) => {
-      const now = new Date();
-      let startDate;
-      if (filter === 'Daily') {
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      } else if (filter === 'Weekly') {
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      } else if (filter === 'Monthly') {
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-      }
-      const completedOrders = orders.filter(order => {
-        const orderDate = new Date(order.orderedAt);
-        return ["delivered", "completed"].includes(order.currentStatus) && orderDate >= startDate;
-      });
-      const total = completedOrders.length * 50; // Assuming fixed delivery fee of ₱50 per completed order
-      return total.toFixed(2);
-    };
-
     const updateOrderStatus = async (orderId, newStatus) => {
       try {
         // Find the order to get the reference number
@@ -641,7 +623,6 @@ import Swal from 'sweetalert2';
 
           // remove previous map if any
           if (riderMap) {
-            riderMap.setMap(null);
             setRiderMap(null);
           }
           if (riderMarker) {
@@ -739,7 +720,6 @@ import Swal from 'sweetalert2';
       // cleanup when modal closes
       return () => {
         if (riderMap) {
-          riderMap.setMap(null);
           setRiderMap(null);
         }
         if (riderMarker) {
@@ -808,7 +788,7 @@ import Swal from 'sweetalert2';
             orders={orders}
             earningsFilter={earningsFilter}
             setEarningsFilter={setEarningsFilter}
-            calculateEarnings={calculateEarnings}
+            earnings={earnings}
           />
 
           <div className="toggle-buttons-container">
@@ -884,7 +864,7 @@ import Swal from 'sweetalert2';
                                 ))}
                                 <li className="item-row" style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '5px' }}>
                                     <span>Delivery Fee</span>
-                                    <span>₱50.00</span>
+                                    <span>₱{Number(order.deliveryFee || order.delivery_fee || Math.max(0, (order.total || 0) - (order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0) || 0))).toFixed(2)}</span>
                                     </li>                                    
                                 </ul>
                             </>
@@ -907,7 +887,7 @@ import Swal from 'sweetalert2';
                                     ))}
                                     <li className="item-row" style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '5px' }}>
                                         <span>Delivery Fee</span>
-                                        <span>₱50.00</span>
+                                        <span>₱{Number(order.deliveryFee || order.delivery_fee || Math.max(0, (order.total || 0) - (order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0) || 0))).toFixed(2)}</span>
                                     </li>
                                     </ul>
                                 )}
