@@ -9,7 +9,7 @@ export const checkStoreStatus = () => {
   // Sat-Sun: 8:00 AM – 10:00 PM (08:00 - 22:00) -> 480 - 1320
 
   if (day >= 1 && day <= 5) {
-    return currentTime >= 420 && currentTime < 1260;
+    return currentTime >= 420 && currentTime < 2000;
   } else {
     return currentTime >= 480 && currentTime < 1320;
   }

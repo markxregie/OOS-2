@@ -151,6 +151,7 @@ const Cart = () => {
   const [deliverySettings, setDeliverySettings] = useState({});
   const [deliveryFee, setDeliveryFee] = useState(0);
   const [updateTimeouts, setUpdateTimeouts] = useState({});
+  const [localQuantities, setLocalQuantities] = useState({});
   const isStoreOpen = checkStoreStatus();
 
   useEffect(() => {
@@ -250,6 +251,37 @@ const Cart = () => {
 
   const [errors, setErrors] = useState({});
 
+  // Sync local quantities with cart items
+  useEffect(() => {
+    const quantities = {};
+    cartItems.forEach(item => {
+      quantities[item.cart_item_id] = item.quantity;
+    });
+    setLocalQuantities(quantities);
+  }, [cartItems]);
+
+  // Calculate total quantity of a product across all cart items (including variations with addons)
+  const getTotalProductQuantity = (productId, excludeCartItemId = null) => {
+    return cartItems.reduce((total, item) => {
+      if (item.product_id === productId && item.cart_item_id !== excludeCartItemId) {
+        const qty = localQuantities[item.cart_item_id] ?? item.quantity;
+        const parsedQty = typeof qty === 'string' ? parseInt(qty, 10) || 0 : qty;
+        return total + parsedQty;
+      }
+      return total;
+    }, 0);
+  };
+
+  // Get remaining available quantity for a product
+  const getRemainingQuantity = (item) => {
+    const isMerchandise = item.product_type === "Merchandise";
+    const maxQty = maxQuantities[item.product_id]?.maxQuantity ?? (isMerchandise ? 0 : 999);
+    const totalInCart = getTotalProductQuantity(item.product_id, item.cart_item_id);
+    const currentItemQty = localQuantities[item.cart_item_id] ?? item.quantity;
+    const parsedCurrent = typeof currentItemQty === 'string' ? parseInt(currentItemQty, 10) || 0 : currentItemQty;
+    return maxQty - totalInCart;
+  };
+
   const handleCheckboxChange = (item, checked) => {
     if (checked) {
       setSelectedCartItems(prev => [...prev, item]);
@@ -277,8 +309,18 @@ const Cart = () => {
       return;
     }
 
-    if (item.quantity + 1 > maxQty) {
-      toast.error(`Max quantity is ${maxQty}`);
+    // Check total quantity across all variations of this product
+    const totalInCart = getTotalProductQuantity(item.product_id, item.cart_item_id);
+    const currentQty = localQuantities[item.cart_item_id] ?? item.quantity;
+    const newTotal = totalInCart + currentQty + 1;
+
+    if (newTotal > maxQty) {
+      const remaining = maxQty - totalInCart - currentQty;
+      if (remaining > 0) {
+        toast.error(`Only ${remaining} more available. You have other variations of this product in your cart.`);
+      } else {
+        toast.error(`Maximum quantity reached across all variations of this product.`);
+      }
       return;
     }
 
@@ -345,6 +387,79 @@ const Cart = () => {
       }, 500); // Wait 500ms after last click
 
       setUpdateTimeouts(prev => ({ ...prev, [item.cart_item_id]: timeoutId }));
+    }
+  };
+
+  const handleQuantityInput = (item, value) => {
+    // Allow empty input for user to type
+    if (value === '') {
+      setLocalQuantities(prev => ({ ...prev, [item.cart_item_id]: '' }));
+      return;
+    }
+
+    const numValue = parseInt(value, 10);
+    if (isNaN(numValue)) return;
+
+    // Update local state immediately for instant feedback
+    setLocalQuantities(prev => ({ ...prev, [item.cart_item_id]: value }));
+  };
+
+  const handleQuantityBlur = async (item) => {
+    const value = localQuantities[item.cart_item_id];
+    
+    // If empty or invalid, reset to 1
+    if (value === '' || parseInt(value, 10) < 1) {
+      setLocalQuantities(prev => ({ ...prev, [item.cart_item_id]: 1 }));
+      if (item.quantity !== 1) {
+        await updateQuantity(item.cart_item_id, 1);
+      }
+      return;
+    }
+
+    const numValue = parseInt(value, 10);
+    const isMerchandise = item.product_type === "Merchandise";
+    const maxQty = maxQuantities[item.product_id]?.maxQuantity ?? (isMerchandise ? 0 : 999);
+    const status = maxQuantities[item.product_id]?.status;
+    const isUnavailable = maxQty === 0 || status === "Not Available";
+
+    if (isUnavailable) {
+      toast.error("Item is unavailable.");
+      setLocalQuantities(prev => ({ ...prev, [item.cart_item_id]: item.quantity }));
+      return;
+    }
+
+    // Check total quantity across all variations of this product
+    const totalInCart = getTotalProductQuantity(item.product_id, item.cart_item_id);
+    const newTotal = totalInCart + numValue;
+
+    let finalQuantity = numValue;
+    if (newTotal > maxQty) {
+      const remaining = maxQty - totalInCart;
+      if (remaining > 0) {
+        toast.error(`Only ${remaining} available. You have ${totalInCart} of this product across other cart items (max: ${maxQty}).`);
+        finalQuantity = remaining;
+      } else {
+        toast.error(`Maximum quantity (${maxQty}) already reached across all variations of this product.`);
+        finalQuantity = item.quantity; // Keep original
+      }
+      setLocalQuantities(prev => ({ ...prev, [item.cart_item_id]: finalQuantity }));
+    }
+
+    // Only update backend if quantity actually changed
+    if (finalQuantity !== item.quantity) {
+      try {
+        await updateQuantity(item.cart_item_id, finalQuantity);
+      } catch (err) {
+        console.error("Failed to update quantity:", err);
+        toast.error("Failed to update quantity");
+        setLocalQuantities(prev => ({ ...prev, [item.cart_item_id]: item.quantity }));
+      }
+    }
+  };
+
+  const handleQuantityKeyPress = (e, item) => {
+    if (e.key === 'Enter') {
+      e.target.blur(); // Trigger onBlur when Enter is pressed
     }
   };
 
@@ -813,7 +928,21 @@ const Cart = () => {
                       <td style={{ textAlign: 'center' }}>
                         <div className="quantity-control">
                           <button className="btn btn-sm rounded-circle" onClick={() => handleDecrement(item)}>-</button>
-                          <span className="mx-2">{item.quantity}</span>
+                          <input
+                            type="text"
+                            className="quantity-input mx-2"
+                            value={localQuantities[item.cart_item_id] ?? item.quantity}
+                            onChange={(e) => handleQuantityInput(item, e.target.value)}
+                            onBlur={() => handleQuantityBlur(item)}
+                            onKeyPress={(e) => handleQuantityKeyPress(e, item)}
+                            style={{
+                              width: '50px',
+                              textAlign: 'center',
+                              border: '1px solid #ddd',
+                              borderRadius: '5px',
+                              padding: '4px'
+                            }}
+                          />
                           <button
                             className="btn btn-sm rounded-circle"
                             onClick={() => handleIncrement(item)}
@@ -830,10 +959,15 @@ const Cart = () => {
                             const maxQty = isMerchandise ? item.MerchandiseQuantity : (maxQuantities[item.product_id]?.maxQuantity ?? 999);
                             const isUnavailable = isMerchandise && (maxQty === 0 || item.Status === "Not Available");
                             const showMax = isMerchandise || (!isMerchandise && maxQty !== 999);
+                            
                             if (showMax) {
+                              const totalInCart = getTotalProductQuantity(item.product_id, item.cart_item_id);
+                              const currentQty = localQuantities[item.cart_item_id] ?? item.quantity;
+                              const remaining = maxQty - totalInCart - (typeof currentQty === 'string' ? parseInt(currentQty, 10) || 0 : currentQty);
+                              
                               return (
                                 <div className="max-info text-warning small">
-                                  Max: {maxQty}
+                                  Max: {maxQty} {totalInCart > 0 && `(${remaining} available)`}
                                   {isUnavailable && <span className="text-danger ms-1"> (Unavailable)</span>}
                                 </div>
                               );
@@ -912,7 +1046,21 @@ const Cart = () => {
                     {/* Quantity Control (Moved out of the main flex block) */}
                     <div className="quantity-control me-3">
                       <button className="btn btn-sm rounded-circle" onClick={() => handleDecrement(item)}>-</button>
-                      <span className="mx-2">{item.quantity}</span>
+                      <input
+                        type="text"
+                        className="quantity-input mx-2"
+                        value={localQuantities[item.cart_item_id] ?? item.quantity}
+                        onChange={(e) => handleQuantityInput(item, e.target.value)}
+                        onBlur={() => handleQuantityBlur(item)}
+                        onKeyPress={(e) => handleQuantityKeyPress(e, item)}
+                        style={{
+                          width: '50px',
+                          textAlign: 'center',
+                          border: '1px solid #ddd',
+                          borderRadius: '5px',
+                          padding: '4px'
+                        }}
+                      />
                       <button
                         className="btn btn-sm rounded-circle"
                         onClick={() => handleIncrement(item)}
@@ -930,10 +1078,15 @@ const Cart = () => {
                         const maxQty = isMerchandise ? item.MerchandiseQuantity : (maxQuantities[item.product_id]?.maxQuantity ?? 999);
                         const isUnavailable = isMerchandise && (maxQty === 0 || item.Status === "Not Available");
                         const showMax = isMerchandise || (!isMerchandise && maxQty !== 999);
+                        
                         if (showMax) {
+                          const totalInCart = getTotalProductQuantity(item.product_id, item.cart_item_id);
+                          const currentQty = localQuantities[item.cart_item_id] ?? item.quantity;
+                          const remaining = maxQty - totalInCart - (typeof currentQty === 'string' ? parseInt(currentQty, 10) || 0 : currentQty);
+                          
                           return (
                             <div className="max-info text-warning small text-center">
-                              Max: {maxQty}
+                              Max: {maxQty} {totalInCart > 0 && `(${remaining} left)`}
                               {isUnavailable && <span className="text-danger ms-1"> (Unavailable)</span>}
                             </div>
                           );
