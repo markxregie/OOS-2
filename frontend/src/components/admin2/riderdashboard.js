@@ -59,15 +59,21 @@ function RiderDashboard() {
     setLoading(true);
     setError(null);
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
       const response = await fetch('http://localhost:7001/delivery/riders', {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json',
         },
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
+      
       if (!response.ok) {
-        throw new Error('Failed to fetch riders');
+        throw new Error(`Failed to fetch riders: ${response.status}`);
       }
       const data = await response.json();
       const normalizedRiders = data.map(r => ({
@@ -80,7 +86,12 @@ function RiderDashboard() {
         setSelectedRider(normalizedRiders[0].id);
       }
     } catch (err) {
-      setError(err.message);
+      if (err.name === 'AbortError') {
+        setError('Request timeout: Delivery service is not responding');
+      } else {
+        setError(err.message);
+      }
+      console.error('Fetch riders error:', err);
     } finally {
       setLoading(false);
     }
@@ -90,20 +101,31 @@ function RiderDashboard() {
     setLoading(true);
     setError(null);
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
       const response = await fetch(`http://localhost:7004/delivery/rider/${riderId}/orders`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json',
         },
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
+      
       if (!response.ok) {
-        throw new Error('Failed to fetch orders');
+        throw new Error(`Failed to fetch orders: ${response.status}`);
       }
       const data = await response.json();
       setOrders(data);
     } catch (err) {
-      setError(err.message);
+      if (err.name === 'AbortError') {
+        setError('Request timeout: Orders service is not responding');
+      } else {
+        setError(err.message);
+      }
+      console.error('Fetch orders error:', err);
     } finally {
       setLoading(false);
     }
@@ -127,14 +149,24 @@ function RiderDashboard() {
     if (!url) return;
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${authToken}` },
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
+      
       if (!response.ok) throw new Error(`Failed to fetch earnings: ${response.status}`);
       const data = await response.json();
       setEarnings(data);
-    } catch (e) {
-      console.error('Earnings fetch error:', e);
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        console.error('Earnings fetch timeout');
+      } else {
+        console.error('Earnings fetch error:', err);
+      }
       setEarnings({ totalEarnings: 0.0 }); // Set a default on error
     }
   };

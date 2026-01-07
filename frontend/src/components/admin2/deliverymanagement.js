@@ -41,6 +41,7 @@ function DeliveryManagement() {
     surchargePerKm: 10.0,
     maxRadius: 8.0,
     surgePricing: false,
+    surgeFlatFee: 20.0,
   });
 
   // Reference for last fetch time to avoid dependency issues
@@ -62,24 +63,49 @@ function DeliveryManagement() {
       setIsLoading(true);
     }
 
+    // Helper function to fetch with timeout
+    const fetchWithTimeout = (url, options = {}, timeoutMs = 10000) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      
+      return fetch(url, { ...options, signal: controller.signal })
+        .then(response => {
+          clearTimeout(timeoutId);
+          return response;
+        })
+        .catch(error => {
+          clearTimeout(timeoutId);
+          if (error.name === 'AbortError') {
+            throw new Error(`Request timeout (${timeoutMs}ms) for ${url}`);
+          }
+          throw error;
+        });
+    };
+
     try {
       const [ordersResponse, ridersResponse, pendingResponse, settingsResponse] = await Promise.all([
-        fetch("http://localhost:7004/delivery/admin/delivery/orders", {
+        fetchWithTimeout("http://localhost:7004/delivery/admin/delivery/orders", {
           headers: { Authorization: `Bearer ${authToken}` },
         }),
-        fetch("http://localhost:7001/delivery/riders", {
+        fetchWithTimeout("http://localhost:7001/delivery/riders", {
           headers: { Authorization: `Bearer ${authToken}` },
         }),
-        fetch("http://localhost:7004/cart/admin/orders/pending", {
+        fetchWithTimeout("http://localhost:7004/cart/admin/orders/pending", {
           headers: { Authorization: `Bearer ${authToken}` },
         }),
-        fetch("http://localhost:7001/delivery/settings", {
+        fetchWithTimeout("http://localhost:7001/delivery/settings", {
           headers: { Authorization: `Bearer ${authToken}` },
         })
       ]);
 
-      if (!ordersResponse.ok || !ridersResponse.ok || !pendingResponse.ok) {
-        throw new Error('Failed to fetch data');
+      if (!ordersResponse.ok) {
+        throw new Error(`Orders fetch failed: ${ordersResponse.status}`);
+      }
+      if (!ridersResponse.ok) {
+        throw new Error(`Riders fetch failed: ${ridersResponse.status}`);
+      }
+      if (!pendingResponse.ok) {
+        throw new Error(`Pending orders fetch failed: ${pendingResponse.status}`);
       }
 
       const [ordersData, ridersData, pendingData, settingsData] = await Promise.all([
@@ -108,6 +134,7 @@ function DeliveryManagement() {
             surchargePerKm: parseFloat(settingsData.ExtraFeePerKm) || deliveryFees.surchargePerKm,
             maxRadius: parseFloat(settingsData.MaxRadiusKm) || deliveryFees.maxRadius,
             surgePricing: !!settingsData.IsSurgePricingActive,
+            surgeFlatFee: parseFloat(settingsData.SurgeFlatFee) || 20.0,
           });
         } catch (err) {
           console.warn('Failed to parse delivery settings:', err);
@@ -116,7 +143,7 @@ function DeliveryManagement() {
       lastFetchTimeRef.current = now;
     } catch (err) {
       console.error('Error fetching data:', err);
-      setError('Failed to load data. Please refresh the page.');
+      setError('Failed to load data. Please check that all backend services are running and accessible.');
     } finally {
       if (showLoading) {
         setIsLoading(false);
@@ -333,7 +360,11 @@ function DeliveryManagement() {
               <input type="checkbox" id="swal-surge-pricing" ${deliveryFees.surgePricing ? 'checked' : ''}>
               <label for="swal-surge-pricing" style="margin-left: 0.5rem;">Enable Surge Pricing</label>
             </div>
-            <small class="form-text text-muted">Enable for rainy days/rush hour (adds flat +₱20).</small>
+            <div id="surge-fee-container" style="display: ${deliveryFees.surgePricing ? 'block' : 'none'}; margin-top: 10px;">
+               <label for="swal-surge-fee">Surge Fee Amount (₱)</label>
+               <input id="swal-surge-fee" class="swal2-input" type="number" step="0.01" value="${deliveryFees.surgeFlatFee}">
+            </div>
+            <small class="form-text text-muted">Enable for rainy days/rush hour.</small>
           </div>
         </div>
       `,
@@ -342,15 +373,28 @@ function DeliveryManagement() {
       confirmButtonText: 'Save Settings',
       confirmButtonColor: '#4b929d',
       cancelButtonColor: '#6c757d',
+      didOpen: () => {
+        const checkbox = document.getElementById('swal-surge-pricing');
+        const container = document.getElementById('surge-fee-container');
+        checkbox.addEventListener('change', (e) => {
+          container.style.display = e.target.checked ? 'block' : 'none';
+        });
+      },
       preConfirm: () => {
         const baseFee = document.getElementById('swal-base-fee').value;
         const baseDistance = document.getElementById('swal-base-distance').value;
         const surchargePerKm = document.getElementById('swal-surcharge').value;
         const maxRadius = document.getElementById('swal-max-radius').value;
         const surgePricing = document.getElementById('swal-surge-pricing').checked;
+        const surgeFlatFee = document.getElementById('swal-surge-fee').value;
 
         if (!baseFee || !baseDistance || !surchargePerKm || !maxRadius) {
           Swal.showValidationMessage(`Please fill out all fields`);
+          return false;
+        }
+
+        if (surgePricing && !surgeFlatFee) {
+          Swal.showValidationMessage(`Please enter a surge fee amount`);
           return false;
         }
 
@@ -360,6 +404,7 @@ function DeliveryManagement() {
           surchargePerKm: parseFloat(surchargePerKm),
           maxRadius: parseFloat(maxRadius),
           surgePricing: surgePricing,
+          surgeFlatFee: parseFloat(surgeFlatFee) || 0
         };
       },
       customClass: {
@@ -381,7 +426,7 @@ function DeliveryManagement() {
             ExtraFeePerKm: formValues.surchargePerKm,
             MaxRadiusKm: formValues.maxRadius,
             IsSurgePricingActive: formValues.surgePricing,
-            SurgeFlatFee: 20.00 // Assuming fixed for now
+            SurgeFlatFee: formValues.surgeFlatFee
           })
         });
         if (!response.ok) throw new Error('Failed to save settings');
