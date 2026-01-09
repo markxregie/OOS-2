@@ -261,10 +261,21 @@ const TrackOrder = () => {
                     }
                 }
 
+                // Extract delivery fee from multiple possible field names
+                let deliveryFee = null;
+                if (orderData.delivery_fee) {
+                    deliveryFee = parseFloat(orderData.delivery_fee);
+                } else if (orderData.deliveryFee) {
+                    deliveryFee = parseFloat(orderData.deliveryFee);
+                } else if (orderData.delivery) {
+                    deliveryFee = parseFloat(orderData.delivery);
+                }
+
                 setOrder({
                     ...orderData,
                     status, // Use the normalized status
-                    total: orderData.total
+                    total: orderData.total,
+                    delivery_fee: deliveryFee // Ensure delivery_fee is set
                 });
                 
                 if (loading) {
@@ -654,7 +665,7 @@ const TrackOrder = () => {
                                 {order.orderType === 'Delivery' && (
                                     <div className="order-detail-item">
                                         <strong>Delivery Fee:</strong>
-                                        <span className="detail-value">₱{Number(order.deliveryFee || order.delivery_fee || Math.max(0, (order.total || 0) - (order.products?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0) || 0))).toFixed(2)}</span>
+                                        <span className="detail-value">₱{Number(order.delivery_fee || 0).toFixed(2)}</span>
                                     </div>
                                 )}
                                 <div className="order-detail-item total-amount">

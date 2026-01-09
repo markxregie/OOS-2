@@ -61,6 +61,11 @@ class CartItemResponse(BaseModel):
     product_image: Optional[str] = None
     max_quantity: int
     addons: List[dict]
+    applied_promo_id: Optional[int] = None
+    promo_type: Optional[str] = None
+    promo_value: Optional[float] = None
+    promo_discount_amount: Optional[float] = None
+    is_bogo_selected: Optional[bool] = False
 
 
 class AddCartItemRequest(BaseModel):
@@ -73,6 +78,7 @@ class AddCartItemRequest(BaseModel):
     product_image: Optional[str] = None
     max_quantity: int
     addons: Optional[List[dict]] = []
+    is_bogo_selected: Optional[bool] = False
 
 
 class UpdateCartItemRequest(BaseModel):
@@ -98,9 +104,11 @@ async def get_cart(username: str, token: str = Depends(oauth2_scheme)):
     try:
         await cursor.execute("""
             SELECT ci.CartItemID, ci.Username, ci.ProductID, ci.ProductName, ci.ProductType,
-                   ci.ProductCategory, ci.Quantity, ci.Price, ci.ProductImage, ci.MaxQuantity
+                   ci.ProductCategory, ci.Quantity, ci.Price, ci.ProductImage, ci.MaxQuantity,
+                   ci.AppliedPromoID, ci.PromoType, ci.PromoValue, ci.PromoDiscountAmount,
+                   ISNULL(ci.IsBogoSelected, 0)
             FROM cartItems ci
-            WHERE ci.Username = ?
+            WHERE ci.Username = ? AND ISNULL(ci.IsTemporary, 0) = 0
         """, (username,))
         items = await cursor.fetchall()
 
@@ -126,7 +134,12 @@ async def get_cart(username: str, token: str = Depends(oauth2_scheme)):
                 price=float(item[7]),
                 product_image=item[8],
                 max_quantity=item[9],
-                addons=addons_list
+                addons=addons_list,
+                applied_promo_id=item[10],
+                promo_type=item[11],
+                promo_value=float(item[12]) if item[12] is not None else None,
+                promo_discount_amount=float(item[13]) if item[13] is not None else None,
+                is_bogo_selected=bool(item[14])
             ))
         return cart
     except Exception as e:
@@ -141,10 +154,23 @@ async def get_cart(username: str, token: str = Depends(oauth2_scheme)):
 async def add_to_cart(request: AddCartItemRequest, token: str = Depends(oauth2_scheme)):
     user_data = await validate_token_and_roles(token, ["user", "admin", "staff"])
     username = user_data.get("username")
+    
+    logger.info(f"[BOGO FLAG ROUTER] is_bogo_selected received: {request.is_bogo_selected} for product: {request.product_name}")
 
     conn = await get_db_connection()
     cursor = await conn.cursor()
     try:
+        # Ensure IsBogoSelected column exists
+        await cursor.execute("""
+            IF NOT EXISTS (
+                SELECT * FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_NAME = 'cartItems' AND COLUMN_NAME = 'IsBogoSelected'
+            )
+            BEGIN
+                ALTER TABLE cartItems ADD IsBogoSelected BIT DEFAULT 0;
+            END
+        """)
+        await conn.commit()
         # --- Step 1: total quantity across ALL variants of this product
         await cursor.execute("""
             SELECT COALESCE(SUM(Quantity), 0)
@@ -164,9 +190,9 @@ async def add_to_cart(request: AddCartItemRequest, token: str = Depends(oauth2_s
         addon_names = sorted([a["addon_name"] for a in (request.addons or [])])
         addon_signature = ",".join(addon_names) if addon_names else ""
 
-        # --- Step 3: Find if same product+addon combo already exists
+        # --- Step 3: Find if same product+addon+bogo combo already exists
         await cursor.execute("""
-            SELECT ci.CartItemID, ci.Quantity,
+            SELECT ci.CartItemID, ci.Quantity, ISNULL(ci.IsBogoSelected, 0),
                    STUFF((SELECT ',' + ca.AddonName
                           FROM cartItemAddons ca
                           WHERE ca.CartItemID = ci.CartItemID
@@ -179,10 +205,18 @@ async def add_to_cart(request: AddCartItemRequest, token: str = Depends(oauth2_s
 
         existing = None
         for row in rows:
-            cart_item_id, qty, addons = row
-            if (addons or "") == addon_signature:
+            cart_item_id, qty, is_bogo, addons = row
+            logger.info(f"[BOGO MATCH CHECK] Existing CartItem {cart_item_id}: addons='{addons or ''}' vs '{addon_signature}', is_bogo={is_bogo} vs {request.is_bogo_selected}")
+            # Match if: same addons AND same is_bogo_selected flag
+            if (addons or "") == addon_signature and bool(is_bogo) == bool(request.is_bogo_selected):
+                logger.info(f"[BOGO MATCH] Found matching item: CartItem {cart_item_id}")
                 existing = (cart_item_id, qty)
                 break
+            else:
+                logger.info(f"[BOGO NO MATCH] Not matching - addon match: {(addons or '') == addon_signature}, bogo match: {bool(is_bogo) == bool(request.is_bogo_selected)}")
+        
+        if not existing:
+            logger.info(f"[BOGO NEW ITEM] No matching item found, will create new cart item")
 
         # --- Step 4: enforce max limit including this add
         if total_in_cart + request.quantity > request.max_quantity:
@@ -207,16 +241,17 @@ async def add_to_cart(request: AddCartItemRequest, token: str = Depends(oauth2_s
         else:
             await cursor.execute("""
                 INSERT INTO cartItems (Username, ProductID, ProductName, ProductType,
-                                       ProductCategory, Quantity, Price, ProductImage, MaxQuantity)
+                                       ProductCategory, Quantity, Price, ProductImage, MaxQuantity, IsBogoSelected)
                 OUTPUT INSERTED.CartItemID
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 username, request.product_id, request.product_name,
                 request.product_type, request.product_category,
                 request.quantity, request.price, request.product_image,
-                request.max_quantity
+                request.max_quantity, request.is_bogo_selected
             ))
             cart_item_id = (await cursor.fetchone())[0]
+            logger.info(f"[BOGO FLAG ROUTER] Stored is_bogo_selected={request.is_bogo_selected} for CartItemID={cart_item_id}")
 
             for addon in (request.addons or []):
                 await cursor.execute("""
@@ -364,4 +399,154 @@ async def add_addons_to_cart_item(cart_item_id: int, addons: List[AddonRequest],
         raise HTTPException(status_code=500, detail="Failed to add addons")
     finally:
         await cursor.close()
+        await conn.close()
+
+# ============ TEMPORARY CART ENDPOINTS FOR BUY NOW ============
+
+class TempAddCartRequest(BaseModel):
+    product_id: int
+    product_name: str
+    product_type: str
+    product_category: str
+    price: float
+    product_image: Optional[str] = None
+    quantity: int
+    addons: Optional[List[dict]] = []
+    orderNotes: Optional[str] = None
+    is_bogo_selected: Optional[bool] = False
+
+
+@router.post("/temp-add", response_model=dict)
+async def create_temp_cart_item(request: TempAddCartRequest, token: str = Depends(oauth2_scheme)):
+    """
+    Creates a temporary cart item for 'Buy Now' functionality.
+    This item will have a proper cart_item_id for promo calculations.
+    """
+    logger.info(f"🛒 [TEMP-ADD] Received request: {request}")
+    try:
+        user_data = await validate_token_and_roles(token, ["user", "admin", "staff"])
+        username = user_data.get("username")
+        logger.info(f"🛒 [TEMP-ADD] Creating temp cart for user: {username}")
+
+        conn = await get_db_connection()
+        cursor = await conn.cursor()
+
+        try:
+            # Insert temporary cart item
+            logger.info(f"🛒 [TEMP-ADD] Inserting into DB: {request.product_name}")
+            await cursor.execute("""
+                INSERT INTO cartItems (Username, ProductID, ProductName, ProductType, ProductCategory, 
+                                       Quantity, Price, ProductImage, MaxQuantity, IsBogoSelected, IsTemporary)
+                OUTPUT INSERTED.CartItemID
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                username,
+                request.product_id,
+                request.product_name,
+                request.product_type,
+                request.product_category,
+                request.quantity,
+                request.price,
+                request.product_image,
+                999,  # MaxQuantity - use high default for temporary items
+                request.is_bogo_selected,
+                1  # IsTemporary = 1 to hide from cart view
+            ))
+
+            cart_item_id = (await cursor.fetchone())[0]
+            logger.info(f"🛒 [TEMP-ADD] Created cart_item_id: {cart_item_id}")
+
+            if not cart_item_id:
+                raise Exception("Failed to retrieve cart_item_id")
+
+            # Add addons if provided
+            if request.addons:
+                logger.info(f"🛒 [TEMP-ADD] Adding {len(request.addons)} addons")
+                for addon in request.addons:
+                    await cursor.execute("""
+                        INSERT INTO cartItemAddons (CartItemID, AddonName, Price, AddonID)
+                        VALUES (?, ?, ?, ?)
+                    """, (
+                        cart_item_id,
+                        addon.get('name') or addon.get('addon_name'),
+                        addon.get('price'),
+                        addon.get('addon_id')
+                    ))
+            
+            await conn.commit()
+
+            # Return the created cart item with all details
+            cart_item = {
+                "cart_item_id": cart_item_id,
+                "username": username,
+                "product_id": request.product_id,
+                "product_name": request.product_name,
+                "product_type": request.product_type,
+                "product_category": request.product_category,
+                "quantity": request.quantity,
+                "price": request.price,
+                "product_image": request.product_image,
+                "addons": request.addons or [],
+                "orderNotes": request.orderNotes or "",
+                "is_bogo_selected": request.is_bogo_selected
+            }
+
+            logger.info(f"✅ [TEMP-ADD] Success! Cart item created: {cart_item_id}")
+            return {
+                "cart_item": cart_item,
+                "temp_cart_id": cart_item_id,
+                "message": "Temporary cart item created successfully"
+            }
+
+        finally:
+            await cursor.close()
+
+    except HTTPException:
+        logger.error(f"❌ [TEMP-ADD] HTTP Exception")
+        raise
+    except Exception as e:
+        logger.error(f"❌ [TEMP-ADD] Error: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to create temporary cart item: {str(e)}")
+    finally:
+        await conn.close()
+
+
+@router.delete("/temp-clear/{temp_cart_id}")
+async def clear_temp_cart_item(temp_cart_id: int, token: str = Depends(oauth2_scheme)):
+    """
+    Cleans up temporary cart item after 'Buy Now' order is placed.
+    Removes the item and associated addons.
+    """
+    try:
+        user_data = await validate_token_and_roles(token, ["user", "admin", "staff"])
+
+        conn = await get_db_connection()
+        cursor = await conn.cursor()
+
+        try:
+            # Delete associated addons first
+            await cursor.execute("""
+                DELETE FROM cartItemAddons WHERE CartItemID = ?
+            """, (temp_cart_id,))
+
+            # Delete the cart item
+            await cursor.execute("""
+                DELETE FROM cartItems WHERE CartItemID = ?
+            """, (temp_cart_id,))
+
+            await conn.commit()
+
+            return {"message": "Temporary cart item cleared successfully"}
+
+        finally:
+            await cursor.close()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error clearing temporary cart item {temp_cart_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to clear temporary cart item: {str(e)}")
+    finally:
         await conn.close()

@@ -649,7 +649,7 @@ const ProfilePage = () => {
             type="tel"
             id="phone"
             name="phone"
-            placeholder="09662830872"
+            placeholder="09"
             value={userData.phone}
             onChange={handleInputChange}
             maxLength={11}

@@ -495,18 +495,38 @@ import Swal from 'sweetalert2';
           confirmButtonText: 'Mark as Delivered',
           showLoaderOnConfirm: true,
           allowOutsideClick: () => !Swal.isLoading(),
-          preConfirm: () => {
+          preConfirm: async () => {
             const file = document.getElementById('delivery-photo').files[0];
             if (!file) {
               Swal.showValidationMessage('Please upload a photo.');
               return false;
             }
-            return new Promise((resolve) => {
-              setTimeout(() => {
-                console.log('File uploaded:', file.name);
-                resolve();
-              }, 1000);
-            });
+            
+            // Upload the image to backend
+            try {
+              const formData = new FormData();
+              formData.append('image', file);
+              
+              const uploadResponse = await fetch(`http://localhost:7004/cart/rider/orders/${orderId}/delivery-image`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${authToken}`,
+                },
+                body: formData
+              });
+              
+              if (!uploadResponse.ok) {
+                throw new Error('Failed to upload delivery image');
+              }
+              
+              const uploadResult = await uploadResponse.json();
+              console.log('Image uploaded successfully:', uploadResult.image_url);
+              return uploadResult.image_url;
+            } catch (error) {
+              console.error('Error uploading image:', error);
+              Swal.showValidationMessage('Failed to upload image. Please try again.');
+              return false;
+            }
           }
         }).then((result) => {
           if (result.isConfirmed) {
@@ -856,16 +876,29 @@ import Swal from 'sweetalert2';
                                     <FaBox color="#4b929d" /> {order.items?.length || 0} Items
                                 </div>
                                 <ul className="item-list" style={{ marginTop: '10px', paddingLeft: '0', listStyle: 'none' }}>
-                                {order.items?.map((item, i) => (
-                                    <li key={i} className="item-row" style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #eee', padding: '5px 0' }}>
-                                    <span>{item.quantity}x {item.name}</span>
-                                    <span>₱{item.price.toFixed(2)}</span>
-                                    </li>
-                                ))}
+                                {order.items?.map((item, i) => {
+                                  const promoName = item.promo_name || item.applied_promo || "";
+                                  const promoDiscount = item.discount || 0;
+                                  const hasPromo = promoName || promoDiscount > 0;
+
+                                  return (
+                                    <React.Fragment key={i}>
+                                      <li className="item-row" style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #eee', padding: '5px 0' }}>
+                                        <span>{item.quantity}x {item.name}</span>
+                                        <span>₱{item.price.toFixed(2)}</span>
+                                      </li>
+                                      {hasPromo && (
+                                        <li style={{ paddingLeft: '1rem', fontSize: '0.9em', color: '#28a745', fontWeight: '500', marginTop: '2px', marginBottom: '5px' }}>
+                                          🎉 {promoName} - ₱{promoDiscount.toFixed(2)} OFF
+                                        </li>
+                                      )}
+                                    </React.Fragment>
+                                  );
+                                })}
                                 <li className="item-row" style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '5px' }}>
                                     <span>Delivery Fee</span>
                                     <span>₱{Number(order.deliveryFee || order.delivery_fee || Math.max(0, (order.total || 0) - (order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0) || 0))).toFixed(2)}</span>
-                                    </li>                                    
+                                </li>
                                 </ul>
                             </>
                         ) : (
@@ -879,12 +912,25 @@ import Swal from 'sweetalert2';
                                 </div>
                                 {expandedOrders.has(order.id) && (
                                     <ul className="item-list" style={{ marginTop: '10px', paddingLeft: '0', listStyle: 'none' }}>
-                                    {order.items?.map((item, i) => (
-                                        <li key={i} className="item-row" style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #eee', padding: '5px 0' }}>
-                                        <span>{item.quantity}x {item.name}</span>
-                                        <span>₱{item.price.toFixed(2)}</span>
-                                        </li>
-                                    ))}
+                                    {order.items?.map((item, i) => {
+                                      const promoName = item.promo_name || item.applied_promo || "";
+                                      const promoDiscount = item.discount || 0;
+                                      const hasPromo = promoName || promoDiscount > 0;
+
+                                      return (
+                                        <React.Fragment key={i}>
+                                          <li className="item-row" style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #eee', padding: '5px 0' }}>
+                                            <span>{item.quantity}x {item.name}</span>
+                                            <span>₱{item.price.toFixed(2)}</span>
+                                          </li>
+                                          {hasPromo && (
+                                            <li style={{ paddingLeft: '1rem', fontSize: '0.9em', color: '#28a745', fontWeight: '500', marginTop: '2px', marginBottom: '5px' }}>
+                                              🎉 {promoName} - ₱{promoDiscount.toFixed(2)} OFF
+                                            </li>
+                                          )}
+                                        </React.Fragment>
+                                      );
+                                    })}
                                     <li className="item-row" style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '5px' }}>
                                         <span>Delivery Fee</span>
                                         <span>₱{Number(order.deliveryFee || order.delivery_fee || Math.max(0, (order.total || 0) - (order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0) || 0))).toFixed(2)}</span>

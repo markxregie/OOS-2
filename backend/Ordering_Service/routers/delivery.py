@@ -480,12 +480,24 @@ async def get_rider_orders(rider_id: int, token: str = Depends(oauth2_scheme)):
     conn = await get_db_connection()
     cursor = await conn.cursor()
     try:
+        # Ensure DeliveryImage column exists
+        try:
+            await cursor.execute("""
+                IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Orders') AND name = 'DeliveryImage')
+                BEGIN
+                    ALTER TABLE Orders ADD DeliveryImage NVARCHAR(512) NULL
+                END
+            """)
+            await conn.commit()
+        except Exception as e:
+            logger.warning(f"Failed to create DeliveryImage column: {e}")
+        
         await cursor.execute("""
             SELECT
                 o.OrderID, o.UserName, o.OrderDate, o.Status, o.PaymentMethod,
                 o.TotalAmount, di.FirstName, di.MiddleName, di.LastName,
                 di.PhoneNumber, di.Address, di.City, di.Province, di.Notes, di.Landmark,
-                o.ReferenceNumber
+                o.ReferenceNumber, o.TotalDiscount, o.DeliveryFee, o.DeliveryImage
             FROM Orders o
             LEFT JOIN DeliveryInfo di ON o.OrderID = di.OrderID
             WHERE o.AssignedRiderID = ?
@@ -500,16 +512,31 @@ async def get_rider_orders(rider_id: int, token: str = Depends(oauth2_scheme)):
             reference_number = row[15] # Get the reference number
 
             await cursor.execute("""
-                SELECT ProductName, Quantity, Price
+                SELECT ProductName, Quantity, Price, PromoName, PromoType, PromoValue, PromoDiscountAmount
                 FROM OrderItems
                 WHERE OrderID = ?
             """, (order_id,))
             items = await cursor.fetchall()
 
-            item_list = [
-                {"name": i[0], "quantity": i[1], "price": float(i[2])}
-                for i in items
-            ]
+            item_list = []
+            for i in items:
+                promo_name = i[3] if len(i) > 3 and i[3] else None
+                promo_discount = float(i[6]) if len(i) > 6 and i[6] else 0.0
+                
+                item_dict = {
+                    "name": i[0],
+                    "quantity": i[1],
+                    "price": float(i[2])
+                }
+                
+                # Add promo fields if they exist
+                if promo_name:
+                    item_dict["promo_name"] = promo_name
+                    item_dict["applied_promo"] = promo_name
+                if promo_discount > 0:
+                    item_dict["discount"] = promo_discount
+                
+                item_list.append(item_dict)
 
             # Compute customer details with fallback to user service if DeliveryInfo missing
             first_name = row[6]
@@ -549,6 +576,9 @@ async def get_rider_orders(rider_id: int, token: str = Depends(oauth2_scheme)):
                 "total": float(row[5]) if row[5] else 0,
                 "notes": row[13],
                 "items": item_list,
+                "discount": float(row[16]) if row[16] else 0,
+                "deliveryFee": float(row[17]) if row[17] else 0,
+                "deliveryImage": row[18] if len(row) > 18 and row[18] else None
             })
 
         return orders
@@ -566,13 +596,25 @@ async def get_delivery_orders(token: str = Depends(oauth2_scheme)):
     cursor = await conn.cursor()
 
     try:
+        # Ensure DeliveryImage column exists
+        try:
+            await cursor.execute("""
+                IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Orders') AND name = 'DeliveryImage')
+                BEGIN
+                    ALTER TABLE Orders ADD DeliveryImage NVARCHAR(512) NULL
+                END
+            """)
+            await conn.commit()
+        except Exception as e:
+            logger.warning(f"Failed to create DeliveryImage column: {e}")
+        
         # Step 1: Fetch all orders
         await cursor.execute("""
             SELECT
                 o.OrderID, o.UserName, o.OrderDate, o.Status, o.PaymentMethod,
                 o.TotalAmount, di.FirstName, di.MiddleName, di.LastName,
                 di.PhoneNumber, di.Address, di.City, di.Province, di.Notes, di.Landmark,
-                o.AssignedRiderID
+                o.AssignedRiderID, o.TotalDiscount, o.DeliveryFee, o.DeliveryImage
             FROM Orders o
             LEFT JOIN DeliveryInfo di ON o.OrderID = di.OrderID
             WHERE o.OrderType = 'Delivery'
@@ -589,7 +631,8 @@ async def get_delivery_orders(token: str = Depends(oauth2_scheme)):
         # Step 2: Fetch ALL items for ALL orders in ONE query
         order_ids_str = ','.join(str(oid) for oid in order_ids)
         await cursor.execute(f"""
-            SELECT OrderID, OrderItemID, ProductName, Quantity, Price
+            SELECT OrderID, OrderItemID, ProductName, Quantity, Price,
+                   PromoName, PromoType, PromoValue, PromoDiscountAmount
             FROM OrderItems
             WHERE OrderID IN ({order_ids_str})
         """)
@@ -657,12 +700,26 @@ async def get_delivery_orders(token: str = Depends(oauth2_scheme)):
             for item in items:
                 order_item_id = item[1]
                 addons_list = addons_by_item.get(order_item_id, [])
-                item_list.append({
+                
+                # Extract promo information
+                promo_name = item[5] if len(item) > 5 and item[5] else None
+                promo_discount = float(item[8]) if len(item) > 8 and item[8] else 0.0
+                
+                item_dict = {
                     "name": item[2],
                     "quantity": item[3],
                     "price": float(item[4]),
                     "addons": addons_list
-                })
+                }
+                
+                # Add promo fields if they exist
+                if promo_name:
+                    item_dict["promo_name"] = promo_name
+                    item_dict["applied_promo"] = promo_name
+                if promo_discount > 0:
+                    item_dict["discount"] = promo_discount
+                
+                item_list.append(item_dict)
 
             # Get cached rider info
             rider_info = riders_cache.get(assigned_rider_id)
@@ -687,7 +744,10 @@ async def get_delivery_orders(token: str = Depends(oauth2_scheme)):
                 "total": float(row[5]) if row[5] else 0,
                 "notes": row[13],
                 "items": item_list,
-                "assignedRider": str(assigned_rider_id) if assigned_rider_id else None
+                "assignedRider": str(assigned_rider_id) if assigned_rider_id else None,
+                "discount": float(row[16]) if row[16] else 0,
+                "deliveryFee": float(row[17]) if row[17] else 0,
+                "deliveryImage": row[18] if len(row) > 18 and row[18] else None
             })
 
         return orders

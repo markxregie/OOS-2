@@ -56,6 +56,7 @@ class CheckoutRequest(BaseModel):
     delivery_fee: float
     order_type: str
     user_data: Optional[dict] = None
+    discount: Optional[float] = 0.0  # Add discount field
 
 class CartItem(BaseModel):
     product_id: int
@@ -90,6 +91,7 @@ class ConfirmPaymentRequest(BaseModel):
     cart_items: List[CartItem]
     delivery_info: Optional[DeliveryInfo] = None
     reference_number: Optional[str] = None
+    total_discount: Optional[float] = 0.0  # Add discount field
 
 # ---- CHECKOUT ENDPOINT ----
 @router.post("/create-checkout")
@@ -148,17 +150,58 @@ async def create_checkout_session(payload: CheckoutRequest, token: str = Depends
             customer_id = None
 
     try:
-        # Calculate total amount from items and delivery fee
+        # Calculate total amount from items and delivery fee, minus discount
         subtotal = sum(item.price * item.quantity for item in payload.items)
-        total_amount = subtotal + payload.delivery_fee
-        amount_in_centavos = int(total_amount * 100)
+        discount = payload.discount or 0.0
+        
+        logger.info(f"[CHECKOUT] Subtotal: ₱{subtotal}, Delivery: ₱{payload.delivery_fee}, Discount: ₱{discount}")
 
         # Create line items for each cart item
         line_items = []
-        for item in payload.items:
-            item_amount = int(item.price * 100)  # Convert to centavos
+        
+        # Calculate exact subtotal after discount
+        subtotal_after_discount = subtotal - discount
+        
+        # Calculate discount ratio if there's a discount
+        # We'll proportionally reduce item prices since PayMongo doesn't support negative line items
+        discount_ratio = 1.0
+        if discount > 0 and subtotal > 0:
+            discount_ratio = (subtotal - discount) / subtotal
+            logger.info(f"[CHECKOUT] Applying discount ratio: {discount_ratio:.4f}")
+        
+        # Track accumulated centavos for rounding correction
+        accumulated_centavos = 0
+        
+        for idx, item in enumerate(payload.items):
+            # Apply discount ratio to item price (this is the TOTAL for the line item)
+            original_price = item.price
+            discounted_price = original_price * discount_ratio
+            
+            # PayMongo divides amount by quantity for display, so we need to:
+            # 1. Calculate per-unit discounted price
+            # 2. Round to centavos
+            # 3. Multiply by quantity
+            # This ensures PayMongo's display matches our calculation
+            
+            per_unit_price = discounted_price / item.quantity
+            
+            # For all items except the last one, use standard rounding
+            if idx < len(payload.items) - 1:
+                per_unit_centavos = round(per_unit_price * 100)
+                item_amount = per_unit_centavos * item.quantity
+                # Track the difference between ideal and rounded
+                ideal_total = discounted_price * 100
+                accumulated_centavos += ideal_total - item_amount
+            else:
+                # For the last item, adjust to ensure exact total
+                per_unit_centavos = round(per_unit_price * 100)
+                item_amount = per_unit_centavos * item.quantity + round(accumulated_centavos)
+            
             # Build item name with embedded bullet list of addons (PayMongo shows only name)
             item_name_parts = [item.name]
+            if discount > 0:
+                item_name_parts[0] = f"{item.name} 🎉"  # Add emoji to indicate discount applied
+            
             if item.addons and len(item.addons) > 0:
                 # One newline before list; PayMongo may render as space if newline unsupported
                 for addon in item.addons:
@@ -172,7 +215,8 @@ async def create_checkout_session(payload: CheckoutRequest, token: str = Depends
                         item_name_parts.append(f"• + {str(addon)}")
             # Join with newline; fallback to ' | ' if newline stripped by gateway handled client-side
             item_name = "\n".join(item_name_parts)
-            logger.info(f"[CHECKOUT] Composed item name for PayMongo: {item_name}")
+            logger.info(f"[CHECKOUT] Item {idx+1}/{len(payload.items)}: {item.name}, Original: ₱{original_price}, Discounted: ₱{discounted_price:.2f}, Centavos: {item_amount}")
+            
             line_items.append({
                 "name": item_name,
                 "amount": item_amount,
@@ -191,6 +235,11 @@ async def create_checkout_session(payload: CheckoutRequest, token: str = Depends
                 "description": "Delivery charges",
                 "quantity": 1
             })
+        
+        # Calculate final total from line items (should match our expected total)
+        total_amount = subtotal * discount_ratio + payload.delivery_fee
+        amount_in_centavos = int(total_amount * 100)
+        logger.info(f"[CHECKOUT] Final total: ₱{total_amount:.2f}")
 
         encoded_key = base64.b64encode(f"{PAYMONGO_SECRET_KEY}:".encode()).decode()
 
@@ -210,7 +259,7 @@ async def create_checkout_session(payload: CheckoutRequest, token: str = Depends
             "show_description": True,
             "show_line_items": True,
             "line_items": line_items,
-            "description": f"OOS Order - {payload.reference_number}",
+            "description": f"OOS Order - {payload.reference_number}" + (f" (Discount: ₱{discount:.2f})" if discount > 0 else ""),
             "reference_number": payload.reference_number,
             "payment_method_types": ["gcash", "paymaya", "card"],
             "success_url": f"{payload.redirect_url}?status=success",
@@ -384,28 +433,10 @@ async def confirm_payment_and_save_pos(payload: ConfirmPaymentRequest, token: st
 
     async with httpx.AsyncClient() as client:
         try:
-            # Step 1: Add cart items to OOS (Online Order Service)
-            for item in payload.cart_items:
-                cart_payload = {
-                    "username": payload.username,
-                    "product_id": item.product_id,
-                    "product_name": item.product_name,
-                    "product_type": item.product_type,
-                    "product_category": item.product_category,
-                    "quantity": item.quantity,
-                    "price": item.price,
-                    "order_type": payload.order_type,
-                    "addons": item.addons,
-                    "ordernotes": item.ordernotes
-                }
-                cart_response = await client.post(
-                    "http://localhost:7004/cart/",
-                    json=cart_payload,
-                    headers={"Authorization": f"Bearer {token}"}
-                )
-                cart_response.raise_for_status()
-
-            # Step 2: Finalize order in OOS
+            # NOTE: Items are already in the order from calculate-promos at checkout
+            # We don't need to re-add them. Just finalize and update payment details.
+            
+            # Step 1: Finalize order in OOS (items already exist from calculate-promos)
             finalize_response = await client.post(
                 f"http://localhost:7004/cart/finalize?username={payload.username}",
                 headers={"Authorization": f"Bearer {token}"}
@@ -419,7 +450,7 @@ async def confirm_payment_and_save_pos(payload: ConfirmPaymentRequest, token: st
             finalize_data = finalize_response.json()
             online_order_id = finalize_data.get("order_id")
 
-            # Step 3: Save delivery info if provided
+            # Step 2: Save delivery info if provided
             if payload.delivery_info:
                 delivery_info_payload = {
                     "FirstName": payload.delivery_info.FirstName,
@@ -440,7 +471,7 @@ async def confirm_payment_and_save_pos(payload: ConfirmPaymentRequest, token: st
                 )
                 delivery_response.raise_for_status()
 
-            # Step 4: Update order payment details in OOS
+            # Step 3: Update order payment details in OOS
             update_order_payload = {
                 "username": payload.username,
                 "payment_method": payload.payment_method,
@@ -448,7 +479,8 @@ async def confirm_payment_and_save_pos(payload: ConfirmPaymentRequest, token: st
                 "delivery_fee": payload.delivery_fee,
                 "total_amount": payload.total,
                 "delivery_notes": payload.notes or (payload.delivery_info.Notes if payload.delivery_info else ""),
-                "reference_number": payload.reference_number
+                "reference_number": payload.reference_number,
+                "total_discount": payload.total_discount or 0.0  # Include discount
             }
             update_order_response = await client.put(
                 "http://localhost:7004/cart/update-payment",
@@ -457,7 +489,7 @@ async def confirm_payment_and_save_pos(payload: ConfirmPaymentRequest, token: st
             )
             update_order_response.raise_for_status()
 
-            # Step 5: **FIXED** - Immediately save to POS as PENDING
+            # Step 4: Immediately save to POS as PENDING
             logger.info(f"=== SAVING ORDER TO POS AS PENDING ===")
             logger.info(f"Online Order ID: {online_order_id}")
             logger.info(f"Reference Number: {payload.reference_number}")
@@ -474,6 +506,7 @@ async def confirm_payment_and_save_pos(payload: ConfirmPaymentRequest, token: st
                 "order_type": payload.order_type,
                 "payment_method": payload.payment_method,
                 "subtotal": payload.subtotal,
+                "discount": payload.total_discount or 0.0,  # Include promo discount
                 "total_amount": payload.total,
                 "status": "pending",  # Save as PENDING initially
                 "reference_number": payload.reference_number,

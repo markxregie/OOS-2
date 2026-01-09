@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Container } from "react-bootstrap";
-import { FaChevronDown, FaBell, FaSignOutAlt, FaBoxOpen, FaCheckCircle, FaSpinner, FaTruck, FaFilter, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTimesCircle, FaTruckPickup, FaTruckMoving, FaUndo, FaAngleDoubleLeft, FaAngleLeft, FaAngleRight, FaAngleDoubleRight, FaCog } from "react-icons/fa";
+import { Container, Modal } from "react-bootstrap";
+import { FaChevronDown, FaBell, FaSignOutAlt, FaBoxOpen, FaCheckCircle, FaSpinner, FaTruck, FaFilter, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTimesCircle, FaTruckPickup, FaTruckMoving, FaUndo, FaAngleDoubleLeft, FaAngleLeft, FaAngleRight, FaAngleDoubleRight, FaCog, FaTimes, FaExclamationTriangle, FaGift, FaCar, FaImage } from "react-icons/fa";
 import { Card, Form } from "react-bootstrap";
 import riderImage from "../../assets/rider.jpg";
 import Swal from "sweetalert2";
@@ -26,6 +26,10 @@ function DeliveryManagement() {
   const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
   const [showChangeRiderDropdown, setShowChangeRiderDropdown] = useState({});
 
+  // Modal state for order details
+  const [showOrderModal, setShowOrderModal] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+
   const [riders, setRiders] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const ordersPerPage = 12;
@@ -41,6 +45,7 @@ function DeliveryManagement() {
     surchargePerKm: 10.0,
     maxRadius: 8.0,
     surgePricing: false,
+    surgeFlatFee: 20.0,
   });
 
   // Reference for last fetch time to avoid dependency issues
@@ -62,24 +67,49 @@ function DeliveryManagement() {
       setIsLoading(true);
     }
 
+    // Helper function to fetch with timeout
+    const fetchWithTimeout = (url, options = {}, timeoutMs = 10000) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      
+      return fetch(url, { ...options, signal: controller.signal })
+        .then(response => {
+          clearTimeout(timeoutId);
+          return response;
+        })
+        .catch(error => {
+          clearTimeout(timeoutId);
+          if (error.name === 'AbortError') {
+            throw new Error(`Request timeout (${timeoutMs}ms) for ${url}`);
+          }
+          throw error;
+        });
+    };
+
     try {
       const [ordersResponse, ridersResponse, pendingResponse, settingsResponse] = await Promise.all([
-        fetch("http://localhost:7004/delivery/admin/delivery/orders", {
+        fetchWithTimeout("http://localhost:7004/delivery/admin/delivery/orders", {
           headers: { Authorization: `Bearer ${authToken}` },
         }),
-        fetch("http://localhost:7001/delivery/riders", {
+        fetchWithTimeout("http://localhost:7001/delivery/riders", {
           headers: { Authorization: `Bearer ${authToken}` },
         }),
-        fetch("http://localhost:7004/cart/admin/orders/pending", {
+        fetchWithTimeout("http://localhost:7004/cart/admin/orders/pending", {
           headers: { Authorization: `Bearer ${authToken}` },
         }),
-        fetch("http://localhost:7001/delivery/settings", {
+        fetchWithTimeout("http://localhost:7001/delivery/settings", {
           headers: { Authorization: `Bearer ${authToken}` },
         })
       ]);
 
-      if (!ordersResponse.ok || !ridersResponse.ok || !pendingResponse.ok) {
-        throw new Error('Failed to fetch data');
+      if (!ordersResponse.ok) {
+        throw new Error(`Orders fetch failed: ${ordersResponse.status}`);
+      }
+      if (!ridersResponse.ok) {
+        throw new Error(`Riders fetch failed: ${ridersResponse.status}`);
+      }
+      if (!pendingResponse.ok) {
+        throw new Error(`Pending orders fetch failed: ${pendingResponse.status}`);
       }
 
       const [ordersData, ridersData, pendingData, settingsData] = await Promise.all([
@@ -108,6 +138,7 @@ function DeliveryManagement() {
             surchargePerKm: parseFloat(settingsData.ExtraFeePerKm) || deliveryFees.surchargePerKm,
             maxRadius: parseFloat(settingsData.MaxRadiusKm) || deliveryFees.maxRadius,
             surgePricing: !!settingsData.IsSurgePricingActive,
+            surgeFlatFee: parseFloat(settingsData.SurgeFlatFee) || 20.0,
           });
         } catch (err) {
           console.warn('Failed to parse delivery settings:', err);
@@ -116,7 +147,7 @@ function DeliveryManagement() {
       lastFetchTimeRef.current = now;
     } catch (err) {
       console.error('Error fetching data:', err);
-      setError('Failed to load data. Please refresh the page.');
+      setError('Failed to load data. Please check that all backend services are running and accessible.');
     } finally {
       if (showLoading) {
         setIsLoading(false);
@@ -237,6 +268,14 @@ function DeliveryManagement() {
 
       // Update frontend state with selected rider
       handleRiderChange(orderId, riderId);
+      
+      // Update selectedOrder state immediately to reflect changes in modal
+      if (selectedOrder && selectedOrder.id === orderId) {
+        setSelectedOrder(prev => ({
+          ...prev,
+          assignedRider: riderId
+        }));
+      }
 
       // Refresh data silently in background to sync with backend
       fetchInitialData(true, false);
@@ -333,7 +372,11 @@ function DeliveryManagement() {
               <input type="checkbox" id="swal-surge-pricing" ${deliveryFees.surgePricing ? 'checked' : ''}>
               <label for="swal-surge-pricing" style="margin-left: 0.5rem;">Enable Surge Pricing</label>
             </div>
-            <small class="form-text text-muted">Enable for rainy days/rush hour (adds flat +₱20).</small>
+            <div id="surge-fee-container" style="display: ${deliveryFees.surgePricing ? 'block' : 'none'}; margin-top: 10px;">
+               <label for="swal-surge-fee">Surge Fee Amount (₱)</label>
+               <input id="swal-surge-fee" class="swal2-input" type="number" step="0.01" value="${deliveryFees.surgeFlatFee}">
+            </div>
+            <small class="form-text text-muted">Enable for rainy days/rush hour.</small>
           </div>
         </div>
       `,
@@ -342,15 +385,28 @@ function DeliveryManagement() {
       confirmButtonText: 'Save Settings',
       confirmButtonColor: '#4b929d',
       cancelButtonColor: '#6c757d',
+      didOpen: () => {
+        const checkbox = document.getElementById('swal-surge-pricing');
+        const container = document.getElementById('surge-fee-container');
+        checkbox.addEventListener('change', (e) => {
+          container.style.display = e.target.checked ? 'block' : 'none';
+        });
+      },
       preConfirm: () => {
         const baseFee = document.getElementById('swal-base-fee').value;
         const baseDistance = document.getElementById('swal-base-distance').value;
         const surchargePerKm = document.getElementById('swal-surcharge').value;
         const maxRadius = document.getElementById('swal-max-radius').value;
         const surgePricing = document.getElementById('swal-surge-pricing').checked;
+        const surgeFlatFee = document.getElementById('swal-surge-fee').value;
 
         if (!baseFee || !baseDistance || !surchargePerKm || !maxRadius) {
           Swal.showValidationMessage(`Please fill out all fields`);
+          return false;
+        }
+
+        if (surgePricing && !surgeFlatFee) {
+          Swal.showValidationMessage(`Please enter a surge fee amount`);
           return false;
         }
 
@@ -360,6 +416,7 @@ function DeliveryManagement() {
           surchargePerKm: parseFloat(surchargePerKm),
           maxRadius: parseFloat(maxRadius),
           surgePricing: surgePricing,
+          surgeFlatFee: parseFloat(surgeFlatFee) || 0
         };
       },
       customClass: {
@@ -381,7 +438,7 @@ function DeliveryManagement() {
             ExtraFeePerKm: formValues.surchargePerKm,
             MaxRadiusKm: formValues.maxRadius,
             IsSurgePricingActive: formValues.surgePricing,
-            SurgeFlatFee: 20.00 // Assuming fixed for now
+            SurgeFlatFee: formValues.surgeFlatFee
           })
         });
         if (!response.ok) throw new Error('Failed to save settings');
@@ -672,161 +729,446 @@ function DeliveryManagement() {
           </button>
           </div>
         </div>
-        {/*UPDATED: Use currentOrders which is the paginated slice */}
+        {/* IMPROVED: Compact Order Cards with Modal Details */}
         <div style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
+          gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
           gap: "20px",
           marginTop: "20px",
           justifyContent: "flex-start",
           alignItems: "flex-start",
           width: "100%"
         }}>
-          {currentOrders.map((order, idx) => {
-            const restrictedStatuses = ["pickedup", "delivered", "cancelled", "returned"];
-            const canChangeRider = !restrictedStatuses.includes(order.currentStatus?.toLowerCase());
-            return (
-              <Card key={idx} style={{ padding: "20px", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", width: "350px", height: "570px", overflow: "hidden" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
-                <h5 style={{ color: "#2c3e50", fontWeight: "700" }}>Order #{order.id}</h5>
-                <p style={{
+          {currentOrders.map((order, idx) => (
+            <Card 
+              key={idx} 
+              onClick={() => {
+                setSelectedOrder(order);
+                setShowOrderModal(true);
+              }}
+              style={{ 
+                padding: "16px", 
+                textAlign: "left", 
+                display: "flex", 
+                flexDirection: "column", 
+                gap: "10px",
+                cursor: "pointer",
+                transition: "all 0.3s ease",
+                border: "1px solid #ddd",
+                borderRadius: "8px"
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = "0 6px 16px rgba(0, 0, 0, 0.15)";
+                e.currentTarget.style.transform = "translateY(-4px)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.1)";
+                e.currentTarget.style.transform = "translateY(0)";
+              }}
+              className="order-card-compact"
+            >
+              {/* Order Header */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <h6 style={{ color: "#2c3e50", fontWeight: "700", margin: "0" }}>Order #{order.id}</h6>
+                  {order.deliveryImage && (
+                    <FaImage color="#28a745" size={16} title="Proof of delivery available" />
+                  )}
+                </div>
+                <span style={{
                   fontWeight: "600",
-                  marginBottom: "5px",
+                  fontSize: "0.75rem",
                   color: getStatusStyle(order.currentStatus).color,
                   backgroundColor: getStatusStyle(order.currentStatus).backgroundColor,
-                  padding: "4px 8px",
+                  padding: "3px 6px",
                   borderRadius: "4px",
-                  minWidth: "110px",
-                  textAlign: "center"
+                  whiteSpace: "nowrap"
                 }}>
                   {{
                     pending: "Pending",
                     confirmed: "Confirmed",
                     preparing: "Preparing",
-                    waitingforpickup: "Waiting for Pickup",
-                    readytopickup: "Ready to Pickup",
+                    waitingforpickup: "Waiting",
+                    readytopickup: "Ready",
                     pickedup: "Picked Up",
                     intransit: "Delivering", 
                     delivering: "Delivering",
                     delivered: "Delivered",
                     completed: "Completed",
                     cancelled: "Cancelled",
-                    returned: "Cancelled/Returned"
+                    returned: "Returned"
                   }[order.currentStatus ? order.currentStatus.toLowerCase() : ""] || order.currentStatus}
-                </p>
+                </span>
               </div>
-              <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaClock color="#4b929d" /> Ordered at <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.orderedAt}</span></p>
-              <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaUser color="#4b929d" /> Customer: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{(() => { const parts = order.customerName.split(' '); return parts.length > 0 && /\d/.test(parts[0]) ? parts.slice(1).join(' ') : order.customerName; })()}</span></p>
-              <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaPhone color="#4b929d" /> Phone: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.phone?.replace(/^\+1-/, "63") || "N/A"}</span></p>
-              <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaMapMarkerAlt color="#4b929d" /> Address: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.address}</span></p>
-              <p style={{ fontWeight: "600", marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaBox color="#4b929d" /> Items ({order.items.length})</p>
-              {order.items.map((item, i) => (
-                <div key={i} style={{ marginBottom: "3px", alignSelf: "flex-start", color: "black", width: "100%" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
-                    <span>{item.quantity}x {item.name}</span>
-                    <span style={{ marginLeft: "auto" }}>₱{item.price.toFixed(2)}</span>
-                  </div>
-                  {item.addons && item.addons.length > 0 && (
-                    <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.85em", color: "#666" }}>
-                      {item.addons.map((addon, j) => (
-                        <li key={j}>+ {addon.addon_name} (₱{addon.price.toFixed(2)})</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ))}
-              <hr style={{ alignSelf: "stretch" }} />
-              {order.deliveryFee && order.deliveryFee > 0 && ( // Display delivery fee if available
-                <p style={{ fontWeight: "600", marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}>
-                  <span>Delivery Fee</span>
-                  <span style={{ marginLeft: "auto" }}>₱{order.deliveryFee.toFixed(2)}</span>
-                </p>
-              )}
-              <p style={{ fontWeight: "600", marginBottom: "0", alignSelf: "flex-start", color: "black", display: "flex", justifyContent: "space-between", width: "100%" }}>
-                <span>Total</span>
-                <span style={{ marginLeft: "auto" }}>₱{order.total.toFixed(2)}</span>
-              </p>
-              {!order.assignedRider && (
-                <p style={{ backgroundColor: "#fff3cd", padding: "8px", borderRadius: "4px", marginTop: "10px", color: "#856404", width: "100%" }}>
-                  {order.notes ? `Note: ${order.notes}` : "Note: Awaiting rider assignment"}
-                </p>
-              )}
-              {order.assignedRider && (
+
+              {/* Customer Info */}
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#555", fontSize: "0.9rem" }}>
+                <FaUser color="#4b929d" size={14} />
+                <span>{(() => { const parts = order.customerName.split(' '); return parts.length > 0 && /\d/.test(parts[0]) ? parts.slice(1).join(' ') : order.customerName; })()}</span>
+              </div>
+
+              {/* Phone & Address */}
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#555", fontSize: "0.9rem" }}>
+                <FaPhone color="#4b929d" size={14} />
+                <span>{order.phone?.replace(/^\+1-/, "63") || "N/A"}</span>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "6px", color: "#555", fontSize: "0.9rem" }}>
+                <FaMapMarkerAlt color="#4b929d" size={14} style={{ marginTop: "2px", flexShrink: 0 }} />
+                <span style={{ wordBreak: "break-word" }}>{order.address?.substring(0, 40)}...</span>
+              </div>
+
+              {/* Items Count */}
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#555", fontSize: "0.9rem" }}>
+                <FaBox color="#4b929d" size={14} />
+                <span>{order.items.length} item{order.items.length !== 1 ? 's' : ''}</span>
+              </div>
+
+              {/* Rider Assignment Status */}
+              {order.assignedRider ? (
                 (() => {
                   const assignedRider = riders.find(r => r.UserID.toString() === order.assignedRider);
                   return assignedRider ? (
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "10px", width: "100%", backgroundColor: "#f0f0f0", padding: "10px", borderRadius: "6px" }}>
-                      <img src={riderImage} alt={assignedRider.FullName} style={{ width: "50px", height: "50px", borderRadius: "50%" }} />
-                      <div>
-                        <div style={{ fontWeight: "600" }}>{assignedRider.FullName}</div>
-                        <div>{assignedRider.Phone}</div>
-                        {assignedRider.PlateNumber && (
-                          <div style={{ fontStyle: "italic", color: "#4b929d", fontSize: "0.9rem" }}>
-                            Plate No: {assignedRider.PlateNumber}
-                          </div>
-                        )}
-                      </div>
+                    <div style={{ 
+                      backgroundColor: "#d1f5d1", 
+                      padding: "8px", 
+                      borderRadius: "6px", 
+                      fontSize: "0.85rem",
+                      borderLeft: "3px solid #28a745",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px"
+                    }}>
+                      <img src={riderImage} alt={assignedRider.FullName} style={{ width: "40px", height: "40px", borderRadius: "50%", border: "2px solid #155724" }} />
+                      <div style={{ fontWeight: "600", color: "#155724", flex: 1 }}>{assignedRider.FullName}</div>
                     </div>
                   ) : null;
                 })()
+              ) : (
+                <div style={{ 
+                  backgroundColor: "#fff3cd", 
+                  padding: "8px", 
+                  borderRadius: "6px", 
+                  fontSize: "0.85rem",
+                  color: "#856404",
+                  borderLeft: "3px solid #ffc107",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px"
+                }}>
+                  <FaExclamationTriangle color="#856404" size={14} />
+                  <strong>Unassigned</strong>
+                </div>
               )}
-              <div style={{ marginTop: "10px", width: "100%" }}>
-                {!order.assignedRider && canChangeRider ? (
-                  <>
-                    <label htmlFor={`assignRider-${order.id}`} style={{ fontWeight: "600", marginBottom: "5px", display: "block" }}>Assign Rider</label>
-                    <Form.Select
-                      id={`assignRider-${order.id}`}
-                      value={order.assignedRider || ""}
-                      onChange={(e) => handleRiderSelection(order.id, e.target.value)}
-                    >
-                      <option value="">Select Rider</option>
-                      {riders.map((rider) => (
-                        <option key={rider.UserID} value={rider.UserID.toString()}>
-                          {rider.FullName}
-                        </option>
-                      ))}
-                    </Form.Select>
-                  </>
-                ) : order.assignedRider && canChangeRider ? (
-                  <>
-                    <button
-                      onClick={() => handleChangeRiderClick(order.id)}
-                      style={{
-                        backgroundColor: "#4b929d",
-                        color: "white",
-                        border: "none",
-                        padding: "8px 16px",
-                        borderRadius: "4px",
-                        cursor: "pointer",
-                        fontWeight: "600",
-                        width: "100%"
-                      }}
-                    >
-                      Change Rider
-                    </button>
-                    {showChangeRiderDropdown[order.id] && (
-                      <div style={{ marginTop: "10px", width: "100%" }}>
-                        <Form.Select
-                          id={`changeRider-${order.id}`}
-                          value={order.assignedRider || ""}
-                          onChange={(e) => handleRiderSelection(order.id, e.target.value)}
-                        >
-                          <option value="">Select Rider</option>
-                          {riders.map((rider) => (
-                            <option key={rider.UserID} value={rider.UserID.toString()}>
-                              {rider.FullName}
-                            </option>
-                          ))}
-                        </Form.Select>
-                      </div>
-                    )}
-                  </>
-                ) : null}
+
+              {/* Price Summary */}
+              <div style={{ 
+                paddingTop: "8px", 
+                borderTop: "1px solid #eee",
+                fontWeight: "600",
+                display: "flex",
+                justifyContent: "center",
+                gap: "10px"
+              }}>
+                <span>Total:</span>
+                <span style={{ color: "#4b929d", fontSize: "1.1rem" }}>₱{order.total.toFixed(2)}</span>
               </div>
-              </Card>
-            );
-          })}
+
+              {/* Click to View Details */}
+              <div style={{ 
+                textAlign: "center", 
+                fontSize: "0.8rem", 
+                color: "#4b929d",
+                marginTop: "4px",
+                fontWeight: "500",
+                fontStyle: "italic"
+              }}>
+                Click to view details & assign rider
+              </div>
+            </Card>
+          ))}
         </div>
+
+        {/* ORDER DETAILS MODAL */}
+        <Modal 
+          show={showOrderModal} 
+          onHide={() => setShowOrderModal(false)}
+          size="lg"
+          scrollable
+          centered
+          className="order-details-modal"
+        >
+          <Modal.Header closeButton style={{ backgroundColor: "#f8f9fa", borderBottom: "2px solid #4b929d" }}>
+            <Modal.Title style={{ fontWeight: "700", color: "#2c3e50" }}>
+              Order #{selectedOrder?.id}
+            </Modal.Title>
+          </Modal.Header>
+          <Modal.Body style={{ padding: "24px" }}>
+            {selectedOrder && (
+              <div className="order-modal-content">
+                {/* Status */}
+                <div style={{ marginBottom: "20px", display: "flex", alignItems: "center", gap: "12px" }}>
+                  <div style={{ fontSize: "0.85rem", color: "#666", fontWeight: "500" }}>STATUS</div>
+                  <span style={{
+                    fontWeight: "600",
+                    fontSize: "0.95rem",
+                    color: getStatusStyle(selectedOrder.currentStatus).color,
+                    backgroundColor: getStatusStyle(selectedOrder.currentStatus).backgroundColor,
+                    padding: "6px 12px",
+                    borderRadius: "4px",
+                    display: "inline-block"
+                  }}>
+                    {{
+                      pending: "Pending",
+                      confirmed: "Confirmed",
+                      preparing: "Preparing",
+                      waitingforpickup: "Waiting for Pickup",
+                      readytopickup: "Ready to Pickup",
+                      pickedup: "Picked Up",
+                      intransit: "Delivering", 
+                      delivering: "Delivering",
+                      delivered: "Delivered",
+                      completed: "Completed",
+                      cancelled: "Cancelled",
+                      returned: "Cancelled/Returned"
+                    }[selectedOrder.currentStatus ? selectedOrder.currentStatus.toLowerCase() : ""] || selectedOrder.currentStatus}
+                  </span>
+                </div>
+
+                {/* Customer Information */}
+                <div style={{ 
+                  padding: "16px", 
+                  backgroundColor: "#f0f8fa", 
+                  borderRadius: "8px", 
+                  marginBottom: "20px",
+                  border: "1px solid #d4e8ed"
+                }}>
+                  <h6 style={{ color: "#2c3e50", marginBottom: "12px", fontWeight: "600" }}>CUSTOMER INFORMATION</h6>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "10px" }}>
+                    <FaUser color="#4b929d" size={16} />
+                    <span style={{ color: "#333" }}>{(() => { const parts = selectedOrder.customerName.split(' '); return parts.length > 0 && /\d/.test(parts[0]) ? parts.slice(1).join(' ') : selectedOrder.customerName; })()}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "10px" }}>
+                    <FaPhone color="#4b929d" size={16} />
+                    <span style={{ color: "#333" }}>{selectedOrder.phone?.replace(/^\+1-/, "63") || "N/A"}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+                    <FaMapMarkerAlt color="#4b929d" size={16} style={{ marginTop: "2px", flexShrink: 0 }} />
+                    <span style={{ color: "#333" }}>{selectedOrder.address}</span>
+                  </div>
+                </div>
+
+                {/* Delivery Image Section */}
+                {selectedOrder.deliveryImage && (
+                  <div style={{ 
+                    padding: "16px", 
+                    backgroundColor: "#e7f3ff", 
+                    borderRadius: "8px", 
+                    marginBottom: "20px",
+                    border: "1px solid #b3d9ff"
+                  }}>
+                    <h6 style={{ color: "#2c3e50", marginBottom: "12px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
+                      <FaImage color="#4b929d" size={16} />
+                      PROOF OF DELIVERY
+                    </h6>
+                    <div style={{ textAlign: "center" }}>
+                      <img 
+                        src={`http://localhost:7004${selectedOrder.deliveryImage}`} 
+                        alt="Proof of Delivery" 
+                        style={{ 
+                          maxWidth: "100%", 
+                          maxHeight: "300px", 
+                          borderRadius: "8px", 
+                          cursor: "pointer",
+                          border: "2px solid #4b929d"
+                        }}
+                        onClick={() => window.open(`http://localhost:7004${selectedOrder.deliveryImage}`, '_blank')}
+                      />
+                      <p style={{ fontSize: "0.85rem", color: "#666", marginTop: "8px" }}>
+                        Click image to view full size
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Order Time */}
+                <div style={{ marginBottom: "20px", padding: "12px", backgroundColor: "#f9f9f9", borderRadius: "6px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#555" }}>
+                    <FaClock color="#4b929d" size={16} />
+                    <span>Ordered at: <strong>{selectedOrder.orderedAt}</strong></span>
+                  </div>
+                </div>
+
+                {/* Items Section */}
+                <div style={{ marginBottom: "20px" }}>
+                  <h6 style={{ color: "#2c3e50", marginBottom: "12px", fontWeight: "600" }}>ITEMS ({selectedOrder.items.length})</h6>
+                  <div style={{ 
+                    padding: "12px", 
+                    backgroundColor: "#fafafa", 
+                    borderRadius: "6px",
+                    maxHeight: "300px",
+                    overflowY: "auto"
+                  }}>
+                    {selectedOrder.items.map((item, i) => {
+                      const promoName = item.promo_name || item.applied_promo || "";
+                      const promoDiscount = item.discount || 0;
+                      const hasPromo = promoName || promoDiscount > 0;
+
+                      return (
+                        <div key={i} style={{ marginBottom: "12px", paddingBottom: "12px", borderBottom: i < selectedOrder.items.length - 1 ? "1px solid #ddd" : "none" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                            <span style={{ fontWeight: "500" }}>
+                              {item.quantity}x {item.name}
+                            </span>
+                            <span style={{ fontWeight: "600", color: "#2c3e50" }}>₱{item.price.toFixed(2)}</span>
+                          </div>
+                          {item.addons && item.addons.length > 0 && (
+                            <ul style={{ margin: "6px 0", paddingLeft: "20px", fontSize: "0.9em", color: "#666" }}>
+                              {item.addons.map((addon, j) => (
+                                <li key={j}>+ {addon.addon_name} (₱{addon.price.toFixed(2)})</li>
+                              ))}
+                            </ul>
+                          )}
+                          {hasPromo && (
+                            <div style={{ paddingLeft: "10px", fontSize: "0.9em", color: "#28a745", fontWeight: "500", marginTop: "4px", display: "flex", alignItems: "center", gap: "6px" }}>
+                              <FaGift size={14} /> {promoName} - ₱{promoDiscount.toFixed(2)} OFF
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Price Summary */}
+                <div style={{ 
+                  padding: "12px", 
+                  backgroundColor: "#f0f8fa", 
+                  borderRadius: "6px", 
+                  marginBottom: "20px",
+                  border: "1px solid #d4e8ed"
+                }}>
+                  {selectedOrder.deliveryFee && selectedOrder.deliveryFee > 0 && (
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px", color: "#555" }}>
+                      <span>Delivery Fee:</span>
+                      <span>₱{selectedOrder.deliveryFee.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div style={{ 
+                    display: "flex", 
+                    justifyContent: "space-between", 
+                    paddingTop: "8px",
+                    borderTop: "1px solid #ddd",
+                    fontWeight: "700",
+                    fontSize: "1.1rem",
+                    color: "#2c3e50"
+                  }}>
+                    <span>Total:</span>
+                    <span style={{ color: "#4b929d" }}>₱{selectedOrder.total.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* Rider Assignment Section */}
+                <div style={{ 
+                  padding: "16px", 
+                  backgroundColor: selectedOrder.assignedRider ? "#d1f5d1" : "#fff3cd", 
+                  borderRadius: "8px",
+                  borderLeft: `3px solid ${selectedOrder.assignedRider ? "#28a745" : "#ffc107"}`
+                }}>
+                  <h6 style={{ color: "#2c3e50", marginBottom: "12px", fontWeight: "600" }}>RIDER ASSIGNMENT</h6>
+                  
+                  {selectedOrder.assignedRider ? (
+                    (() => {
+                      const assignedRider = riders.find(r => r.UserID.toString() === selectedOrder.assignedRider);
+                      return assignedRider ? (
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
+                            <img src={riderImage} alt={assignedRider.FullName} style={{ width: "60px", height: "60px", borderRadius: "50%", border: "2px solid #4b929d" }} />
+                            <div>
+                              <div style={{ fontWeight: "600", fontSize: "1rem", color: "#155724" }}>{assignedRider.FullName}</div>
+                              <div style={{ color: "#333", fontSize: "0.9rem" }}>{assignedRider.Phone}</div>
+                              {assignedRider.PlateNumber && (
+                                <div style={{ color: "#4b929d", fontSize: "0.85rem", marginTop: "2px", display: "flex", alignItems: "center", gap: "6px" }}>
+                                  <FaCar size={14} /> Plate: {assignedRider.PlateNumber}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          {(() => {
+                            const restrictedStatuses = ["pickedup", "delivered", "cancelled", "returned"];
+                            const canChangeRider = !restrictedStatuses.includes(selectedOrder.currentStatus?.toLowerCase());
+                            return canChangeRider ? (
+                              <button
+                                onClick={() => handleChangeRiderClick(selectedOrder.id)}
+                                style={{
+                                  backgroundColor: "#4b929d",
+                                  color: "white",
+                                  border: "none",
+                                  padding: "8px 16px",
+                                  borderRadius: "4px",
+                                  cursor: "pointer",
+                                  fontWeight: "600",
+                                  width: "100%",
+                                  transition: "all 0.3s ease"
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#3a7a84"}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#4b929d"}
+                              >
+                                Change Rider
+                              </button>
+                            ) : null;
+                          })()}
+                          {showChangeRiderDropdown[selectedOrder.id] && (
+                            <div style={{ marginTop: "12px" }}>
+                              <Form.Select
+                                value={selectedOrder.assignedRider || ""}
+                                onChange={(e) => handleRiderSelection(selectedOrder.id, e.target.value)}
+                              >
+                                <option value="">Select Rider</option>
+                                {riders.map((rider) => (
+                                  <option key={rider.UserID} value={rider.UserID.toString()}>
+                                    {rider.FullName}
+                                  </option>
+                                ))}
+                              </Form.Select>
+                            </div>
+                          )}
+                        </div>
+                      ) : null;
+                    })()
+                  ) : (
+                    <div>
+                      {(() => {
+                        const restrictedStatuses = ["pickedup", "delivered", "cancelled", "returned"];
+                        const canChangeRider = !restrictedStatuses.includes(selectedOrder.currentStatus?.toLowerCase());
+                        return canChangeRider ? (
+                          <>
+                            <label style={{ fontWeight: "600", marginBottom: "8px", display: "block", color: "#333" }}>Select a Rider</label>
+                            <Form.Select
+                              value={selectedOrder.assignedRider || ""}
+                              onChange={(e) => handleRiderSelection(selectedOrder.id, e.target.value)}
+                            >
+                              <option value="">Choose Rider...</option>
+                              {riders.map((rider) => (
+                                <option key={rider.UserID} value={rider.UserID.toString()}>
+                                  {rider.FullName} - {rider.Phone}
+                                </option>
+                              ))}
+                            </Form.Select>
+                          </>
+                        ) : (
+                          <div style={{ color: "#856404", fontWeight: "500", display: "flex", alignItems: "center", gap: "8px" }}>
+                            <FaExclamationTriangle size={16} /> This order cannot have a rider assigned due to its current status.
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </Modal.Body>
+        </Modal>
         {/* 💡 NEW: Pagination Controls */}
         {filteredOrders.length > ordersPerPage && (
           <div className="d-flex justify-content-between align-items-center mt-3">
