@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Container, Modal } from "react-bootstrap";
-import { FaChevronDown, FaBell, FaSignOutAlt, FaBoxOpen, FaCheckCircle, FaSpinner, FaTruck, FaFilter, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTimesCircle, FaTruckPickup, FaTruckMoving, FaUndo, FaAngleDoubleLeft, FaAngleLeft, FaAngleRight, FaAngleDoubleRight, FaCog, FaTimes, FaExclamationTriangle, FaGift, FaCar } from "react-icons/fa";
+import { FaChevronDown, FaBell, FaSignOutAlt, FaBoxOpen, FaCheckCircle, FaSpinner, FaTruck, FaFilter, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTimesCircle, FaTruckPickup, FaTruckMoving, FaUndo, FaAngleDoubleLeft, FaAngleLeft, FaAngleRight, FaAngleDoubleRight, FaCog, FaTimes, FaExclamationTriangle, FaGift, FaCar, FaImage } from "react-icons/fa";
 import { Card, Form } from "react-bootstrap";
 import riderImage from "../../assets/rider.jpg";
 import Swal from "sweetalert2";
@@ -769,7 +769,12 @@ function DeliveryManagement() {
             >
               {/* Order Header */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
-                <h6 style={{ color: "#2c3e50", fontWeight: "700", margin: "0" }}>Order #{order.id}</h6>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <h6 style={{ color: "#2c3e50", fontWeight: "700", margin: "0" }}>Order #{order.id}</h6>
+                  {order.deliveryImage && (
+                    <FaImage color="#28a745" size={16} title="Proof of delivery available" />
+                  )}
+                </div>
                 <span style={{
                   fontWeight: "600",
                   fontSize: "0.75rem",
@@ -952,6 +957,39 @@ function DeliveryManagement() {
                     <span style={{ color: "#333" }}>{selectedOrder.address}</span>
                   </div>
                 </div>
+
+                {/* Delivery Image Section */}
+                {selectedOrder.deliveryImage && (
+                  <div style={{ 
+                    padding: "16px", 
+                    backgroundColor: "#e7f3ff", 
+                    borderRadius: "8px", 
+                    marginBottom: "20px",
+                    border: "1px solid #b3d9ff"
+                  }}>
+                    <h6 style={{ color: "#2c3e50", marginBottom: "12px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
+                      <FaImage color="#4b929d" size={16} />
+                      PROOF OF DELIVERY
+                    </h6>
+                    <div style={{ textAlign: "center" }}>
+                      <img 
+                        src={`http://localhost:7004${selectedOrder.deliveryImage}`} 
+                        alt="Proof of Delivery" 
+                        style={{ 
+                          maxWidth: "100%", 
+                          maxHeight: "300px", 
+                          borderRadius: "8px", 
+                          cursor: "pointer",
+                          border: "2px solid #4b929d"
+                        }}
+                        onClick={() => window.open(`http://localhost:7004${selectedOrder.deliveryImage}`, '_blank')}
+                      />
+                      <p style={{ fontSize: "0.85rem", color: "#666", marginTop: "8px" }}>
+                        Click image to view full size
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Order Time */}
                 <div style={{ marginBottom: "20px", padding: "12px", backgroundColor: "#f9f9f9", borderRadius: "6px" }}>

@@ -495,18 +495,38 @@ import Swal from 'sweetalert2';
           confirmButtonText: 'Mark as Delivered',
           showLoaderOnConfirm: true,
           allowOutsideClick: () => !Swal.isLoading(),
-          preConfirm: () => {
+          preConfirm: async () => {
             const file = document.getElementById('delivery-photo').files[0];
             if (!file) {
               Swal.showValidationMessage('Please upload a photo.');
               return false;
             }
-            return new Promise((resolve) => {
-              setTimeout(() => {
-                console.log('File uploaded:', file.name);
-                resolve();
-              }, 1000);
-            });
+            
+            // Upload the image to backend
+            try {
+              const formData = new FormData();
+              formData.append('image', file);
+              
+              const uploadResponse = await fetch(`http://localhost:7004/cart/rider/orders/${orderId}/delivery-image`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${authToken}`,
+                },
+                body: formData
+              });
+              
+              if (!uploadResponse.ok) {
+                throw new Error('Failed to upload delivery image');
+              }
+              
+              const uploadResult = await uploadResponse.json();
+              console.log('Image uploaded successfully:', uploadResult.image_url);
+              return uploadResult.image_url;
+            } catch (error) {
+              console.error('Error uploading image:', error);
+              Swal.showValidationMessage('Failed to upload image. Please try again.');
+              return false;
+            }
           }
         }).then((result) => {
           if (result.isConfirmed) {
