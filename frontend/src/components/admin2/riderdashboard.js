@@ -422,17 +422,36 @@ function RiderDashboard() {
                 <div className="order-items-section">
                   <p className="detail-item"><FaBox color="#4b929d" /> Items ({order.items?.length || 0})</p>
                   <ul className="item-list">
-                    {order.items?.map((item, i) => (
-                      <li key={i} className="item-row">
-                        <span className="detail-value">{item.quantity}x {item.name} - ₱{item.price?.toFixed(2)}</span>
-                      </li>
-                    ))}
+                    {order.items?.map((item, i) => {
+                      const promoName = item.promo_name || item.applied_promo || "";
+                      const promoDiscount = item.discount || 0;
+                      const hasPromo = promoName || promoDiscount > 0;
+
+                      return (
+                        <li key={i} className="item-row">
+                          <span className="detail-value">{item.quantity}x {item.name} - ₱{item.price?.toFixed(2)}</span>
+                          {hasPromo && (
+                            <div style={{ paddingLeft: '1rem', fontSize: '0.9em', color: '#28a745', fontWeight: '500', marginTop: '2px' }}>
+                              🎉 {promoName} - ₱{promoDiscount.toFixed(2)} OFF
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
                 <div className="order-total-section">
                   <hr className="divider"/>
-                  <span className="total-label">Total:   </span>
-                  <span className="total-value">₱{order.total?.toFixed(2) || "0.00"}</span>
+                  {order.deliveryFee && order.deliveryFee > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                      <span>Delivery Fee:</span>
+                      <span>₱{order.deliveryFee.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '1.1rem', paddingTop: '5px', borderTop: '1px solid #eee' }}>
+                    <span className="total-label">Total:</span>
+                    <span className="total-value">₱{order.total?.toFixed(2) || "0.00"}</span>
+                  </div>
                 </div>
                 <div className="order-actions">
                   {/* Dropdowns removed as requested */}

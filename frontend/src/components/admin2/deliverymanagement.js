@@ -765,21 +765,32 @@ function DeliveryManagement() {
               <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaPhone color="#4b929d" /> Phone: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.phone?.replace(/^\+1-/, "63") || "N/A"}</span></p>
               <p style={{ marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaMapMarkerAlt color="#4b929d" /> Address: <span style={{ fontWeight: "500", color: "#2c3e50" }}>{order.address}</span></p>
               <p style={{ fontWeight: "600", marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}><FaBox color="#4b929d" /> Items ({order.items.length})</p>
-              {order.items.map((item, i) => (
-                <div key={i} style={{ marginBottom: "3px", alignSelf: "flex-start", color: "black", width: "100%" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
-                    <span>{item.quantity}x {item.name}</span>
-                    <span style={{ marginLeft: "auto" }}>₱{item.price.toFixed(2)}</span>
+              {order.items.map((item, i) => {
+                const promoName = item.promo_name || item.applied_promo || "";
+                const promoDiscount = item.discount || 0;
+                const hasPromo = promoName || promoDiscount > 0;
+
+                return (
+                  <div key={i} style={{ marginBottom: "3px", alignSelf: "flex-start", color: "black", width: "100%" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
+                      <span>{item.quantity}x {item.name}</span>
+                      <span style={{ marginLeft: "auto" }}>₱{item.price.toFixed(2)}</span>
+                    </div>
+                    {item.addons && item.addons.length > 0 && (
+                      <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.85em", color: "#666" }}>
+                        {item.addons.map((addon, j) => (
+                          <li key={j}>+ {addon.addon_name} (₱{addon.price.toFixed(2)})</li>
+                        ))}
+                      </ul>
+                    )}
+                    {hasPromo && (
+                      <div style={{ paddingLeft: "10px", fontSize: "0.9em", color: "#28a745", fontWeight: "500", marginTop: "2px" }}>
+                        🎉 {promoName} - ₱{promoDiscount.toFixed(2)} OFF
+                      </div>
+                    )}
                   </div>
-                  {item.addons && item.addons.length > 0 && (
-                    <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "0.85em", color: "#666" }}>
-                      {item.addons.map((addon, j) => (
-                        <li key={j}>+ {addon.addon_name} (₱{addon.price.toFixed(2)})</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ))}
+                );
+              })}
               <hr style={{ alignSelf: "stretch" }} />
               {order.deliveryFee && order.deliveryFee > 0 && ( // Display delivery fee if available
                 <p style={{ fontWeight: "600", marginBottom: "5px", display: "flex", alignItems: "center", gap: "6px", alignSelf: "flex-start", color: "gray" }}>

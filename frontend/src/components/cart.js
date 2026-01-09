@@ -155,7 +155,8 @@ const Cart = () => {
   const [selectedCartItems, setSelectedCartItems] = useState([]);
   const [receiptFile, setReceiptFile] = useState(null);
   const [paymentMethodMain, setPaymentMethodMain] = useState('E-Wallet');
-  const [orderTypeMain, setOrderTypeMain] = useState('Pick Up'); 
+  const [orderTypeMain, setOrderTypeMain] = useState('Pick Up');
+  const [promos, setPromos] = useState([]); 
 
   // Fetch Delivery Settings
   useEffect(() => {
@@ -176,6 +177,45 @@ const Cart = () => {
     };
     fetchDeliverySettings();
   }, []);
+
+  // Fetch promotions
+  useEffect(() => {
+    const fetchPromos = async () => {
+      const token = localStorage.getItem("authToken");
+      if (!token) return;
+
+      const res = await fetch("http://localhost:7004/debug/promos", {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setPromos(data.promos || []);
+      }
+    };
+
+    fetchPromos();
+  }, []);
+
+  const getPromosForCartItem = (item) => {
+    return promos.filter(promo => {
+      if (promo.applicationType === "all_products") return true;
+
+      if (
+        promo.applicationType === "specific_products" &&
+        promo.selectedProducts.includes(item.product_name)
+      ) return true;
+
+      if (
+        promo.applicationType === "specific_categories" &&
+        promo.selectedCategories.includes(item.product_category)
+      ) return true;
+
+      return false;
+    });
+  };
 
   // Fetch Max Quantities (RESTORED)
   useEffect(() => {
@@ -465,7 +505,9 @@ const Cart = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {cartItems.map((item, i) => (
+                  {cartItems.map((item, i) => {
+                    const itemPromos = getPromosForCartItem(item);
+                    return (
                     <tr key={i} className="cart-row">
                       <td style={{ textAlign: 'center' }}>
                         <input
@@ -485,6 +527,11 @@ const Cart = () => {
                           />
                           <div>
                             <div className="fw-bold text-dark mb-1">{item.product_name}</div>
+                            {item.is_bogo_selected && (
+                              <span className="badge bg-success mb-2" style={{ fontSize: '0.7rem' }}>
+                                🎉 BOGO Activated
+                              </span>
+                            )}
                             {item.addons && item.addons.length > 0 && (
                               <ul className="cart-addons mb-0 ps-3 list-unstyled">
                                 {item.addons.map((addon, idx) => (
@@ -494,35 +541,61 @@ const Cart = () => {
                                 ))}
                               </ul>
                             )}
+                            {itemPromos.length > 0 && (
+                              <div className="cart-promo-preview mt-2">
+                                <small className="promo-hint text-success fw-bold">
+                                  🎉 {itemPromos.length} promo{itemPromos.length > 1 ? "s" : ""} available
+                                </small>
+                                <div className="promo-preview-badges mt-1">
+                                  {itemPromos.map((promo, idx) => (
+                                    <span key={idx} className="promo-badge-mini me-1">
+                                      {promo.promotionType === "fixed" && `₱${promo.promotionValue} OFF`}
+                                      {promo.promotionType === "percentage" && `${promo.promotionValue}% OFF`}
+                                      {promo.promotionType === "bogo" && `BUY ${promo.buyQuantity} GET ${promo.getQuantity}`}
+                                    </span>
+                                  ))}
+                                </div>
+                                <small className="promo-note text-muted fst-italic">
+                                  Best promo will be applied at checkout
+                                </small>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
                       <td className="text-secondary">{item.product_type || '-'}</td>
                       <td className="text-secondary">{item.product_category || '-'}</td>
                       <td style={{ textAlign: 'center' }}>
-                        <div className="quantity-control d-flex align-items-center justify-content-center bg-light rounded-pill p-1 border">
-                          <button className="btn btn-sm btn-icon rounded-circle" onClick={() => handleDecrement(item)}><i className="bi bi-dash"></i></button>
-                          <input
-                            type="text"
-                            className="quantity-input mx-1 bg-transparent border-0 text-center fw-bold"
-                            value={localQuantities[item.cart_item_id] ?? item.quantity}
-                            onChange={(e) => handleQuantityInput(item, e.target.value)}
-                            onBlur={() => handleQuantityBlur(item)}
-                            onKeyPress={(e) => handleQuantityKeyPress(e, item)}
-                            style={{ width: '40px' }}
-                          />
-                          <button
-                            className="btn btn-sm btn-icon rounded-circle"
-                            onClick={() => handleIncrement(item)}
-                            disabled={
-                              item.product_type === "Merchandise"
-                                ? item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 0)
-                                : item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 999)
-                            }
-                          >
-                            <i className="bi bi-plus"></i>
-                          </button>
-                        </div>
+                        {item.is_bogo_selected ? (
+                          <div className="text-center">
+                            <div className="fw-bold" style={{ color: '#28a745', fontSize: '1.1rem' }}>{item.quantity}</div>
+                            <small className="text-muted" style={{ fontSize: '0.7rem' }}>BOGO Fixed</small>
+                          </div>
+                        ) : (
+                          <div className="quantity-control d-flex align-items-center justify-content-center bg-light rounded-pill p-1 border">
+                            <button className="btn btn-sm btn-icon rounded-circle" onClick={() => handleDecrement(item)}><i className="bi bi-dash"></i></button>
+                            <input
+                              type="text"
+                              className="quantity-input mx-1 bg-transparent border-0 text-center fw-bold"
+                              value={localQuantities[item.cart_item_id] ?? item.quantity}
+                              onChange={(e) => handleQuantityInput(item, e.target.value)}
+                              onBlur={() => handleQuantityBlur(item)}
+                              onKeyPress={(e) => handleQuantityKeyPress(e, item)}
+                              style={{ width: '40px' }}
+                            />
+                            <button
+                              className="btn btn-sm btn-icon rounded-circle"
+                              onClick={() => handleIncrement(item)}
+                              disabled={
+                                item.product_type === "Merchandise"
+                                  ? item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 0)
+                                  : item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 999)
+                              }
+                            >
+                              <i className="bi bi-plus"></i>
+                            </button>
+                          </div>
+                        )}
                         {/* RESTORED MAX QUANTITY DISPLAY */}
                         {(() => {
                             const isMerchandise = item.MerchandiseQuantity !== undefined;
@@ -555,7 +628,8 @@ const Cart = () => {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -571,7 +645,9 @@ const Cart = () => {
                 />
                 <label className="form-check-label fw-bold text-secondary">Select All Items</label>
               </div>
-              {cartItems.map((item, i) => (
+              {cartItems.map((item, i) => {
+                const itemPromos = getPromosForCartItem(item);
+                return (
                 <div key={i} className="card mb-3 p-3 cart-item-mobile shadow-sm border-0">
                   <div className="d-flex align-items-start flex-nowrap"> 
                     <input
@@ -588,7 +664,14 @@ const Cart = () => {
                     />
                     <div className="flex-grow-1 product-details-mobile w-100">
                       <div className="d-flex justify-content-between align-items-start">
-                         <div className="fw-bold mb-1 product-name-mobile text-dark">{item.product_name}</div>
+                         <div>
+                           <div className="fw-bold mb-1 product-name-mobile text-dark">{item.product_name}</div>
+                           {item.is_bogo_selected && (
+                             <span className="badge bg-success" style={{ fontSize: '0.65rem' }}>
+                               🎉 BOGO Activated
+                             </span>
+                           )}
+                         </div>
                          <button className="btn btn-link text-danger p-0 remove-btn-mobile ms-2" onClick={() => handleRemove(i)}>
                             <i className="bi bi-trash3" style={{ fontSize: '1.1rem' }}></i>
                          </button>
@@ -608,30 +691,57 @@ const Cart = () => {
                         </ul>
                       )}
                       
-                      <div className="d-flex justify-content-between align-items-center mt-3">
-                        <div className="quantity-control d-flex align-items-center bg-light rounded-pill px-2 py-1 border">
-                          <button className="btn btn-sm btn-icon p-0" onClick={() => handleDecrement(item)} style={{ width: '24px', height: '24px' }}>-</button>
-                          <input
-                            type="text"
-                            className="quantity-input mx-1 bg-transparent border-0 text-center fw-bold"
-                            value={localQuantities[item.cart_item_id] ?? item.quantity}
-                            onChange={(e) => handleQuantityInput(item, e.target.value)}
-                            onBlur={() => handleQuantityBlur(item)}
-                            style={{ width: '30px', fontSize: '0.9rem' }}
-                          />
-                          <button 
-                            className="btn btn-sm btn-icon p-0" 
-                            onClick={() => handleIncrement(item)} 
-                            style={{ width: '24px', height: '24px' }}
-                            disabled={
-                              item.product_type === "Merchandise"
-                                ? item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 0)
-                                : item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 999)
-                            }
-                          >
-                            +
-                          </button>
+                      {itemPromos.length > 0 && (
+                        <div className="cart-promo-preview mb-2">
+                          <small className="promo-hint text-success fw-bold" style={{ fontSize: '0.75rem' }}>
+                            🎉 {itemPromos.length} promo{itemPromos.length > 1 ? "s" : ""} available
+                          </small>
+                          <div className="promo-preview-badges mt-1">
+                            {itemPromos.map((promo, idx) => (
+                              <span key={idx} className="promo-badge-mini me-1" style={{ fontSize: '0.7rem' }}>
+                                {promo.promotionType === "fixed" && `₱${promo.promotionValue} OFF`}
+                                {promo.promotionType === "percentage" && `${promo.promotionValue}% OFF`}
+                                {promo.promotionType === "bogo" && `BUY ${promo.buyQuantity} GET ${promo.getQuantity}`}
+                              </span>
+                            ))}
+                          </div>
+                          <small className="promo-note text-muted fst-italic" style={{ fontSize: '0.65rem' }}>
+                            Best promo will be applied at checkout
+                          </small>
                         </div>
+                      )}
+                      
+                      <div className="d-flex justify-content-between align-items-center mt-3">
+                        {item.is_bogo_selected ? (
+                          <div className="text-center">
+                            <div className="fw-bold" style={{ color: '#28a745', fontSize: '1rem' }}>{item.quantity}</div>
+                            <small className="text-muted" style={{ fontSize: '0.65rem' }}>BOGO Fixed</small>
+                          </div>
+                        ) : (
+                          <div className="quantity-control d-flex align-items-center bg-light rounded-pill px-2 py-1 border">
+                            <button className="btn btn-sm btn-icon p-0" onClick={() => handleDecrement(item)} style={{ width: '24px', height: '24px' }}>-</button>
+                            <input
+                              type="text"
+                              className="quantity-input mx-1 bg-transparent border-0 text-center fw-bold"
+                              value={localQuantities[item.cart_item_id] ?? item.quantity}
+                              onChange={(e) => handleQuantityInput(item, e.target.value)}
+                              onBlur={() => handleQuantityBlur(item)}
+                              style={{ width: '30px', fontSize: '0.9rem' }}
+                            />
+                            <button 
+                              className="btn btn-sm btn-icon p-0" 
+                              onClick={() => handleIncrement(item)} 
+                              style={{ width: '24px', height: '24px' }}
+                              disabled={
+                                item.product_type === "Merchandise"
+                                  ? item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 0)
+                                  : item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 999)
+                              }
+                            >
+                              +
+                            </button>
+                          </div>
+                        )}
                         <div className="text-end fw-bold total-price-mobile" style={{ color: '#4B929D', fontSize: '1.1rem' }}>
                           ₱{calculateTotal(item).toFixed(2)}
                         </div>
@@ -662,7 +772,8 @@ const Cart = () => {
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
