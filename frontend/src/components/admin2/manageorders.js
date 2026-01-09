@@ -196,7 +196,9 @@ const ManageOrders = () => {
             deliveryNotes: order.deliveryNotes,
             adminNotes: order.adminNotes || "",
             statusHistory: order.statusHistory || [],
-            items: order.items || []
+            items: order.items || [],
+            discount: order.discount || 0,
+            deliveryFee: order.deliveryFee || 0
           };
         });
 
@@ -360,30 +362,62 @@ const ManageOrders = () => {
                 </tr>
               </thead>
               <tbody>
-                {order.items.map((item, index) => (
-                  <React.Fragment key={index}>
-                    <tr>
-                      <td>{item.quantity}</td>
-                      <td>{item.name}</td>
-                      <td>{item.price ? item.price.toFixed(2) : "-"}</td>
-                      <td>{item.price ? (item.price * item.quantity).toFixed(2) : "-"}</td>
-                    </tr>
-                    {item.addons && item.addons.length > 0 && item.addons.map((addon, addonIdx) => (
-                      <tr key={`${index}-addon-${addonIdx}`} style={{ backgroundColor: '#f8f9fa' }}>
-                        <td></td>
-                        <td style={{ paddingLeft: '2rem', fontSize: '0.9em', color: '#666' }}>
-                          + {addon.addon_name || addon.name}
-                        </td>
-                        <td style={{ fontSize: '0.9em' }}>{addon.price ? addon.price.toFixed(2) : "-"}</td>
-                        <td style={{ fontSize: '0.9em' }}>{addon.price ? (addon.price * item.quantity).toFixed(2) : "-"}</td>
+                {order.items.map((item, index) => {
+                  const promoName = item.promo_name || item.applied_promo || "";
+                  const promoDiscount = item.discount || 0;
+                  const hasPromo = promoName || promoDiscount > 0;
+
+                  return (
+                    <React.Fragment key={index}>
+                      <tr>
+                        <td>{item.quantity}</td>
+                        <td>{item.name}</td>
+                        <td>{item.price ? item.price.toFixed(2) : "-"}</td>
+                        <td>{item.price ? (item.price * item.quantity).toFixed(2) : "-"}</td>
                       </tr>
-                    ))}
-                  </React.Fragment>
-                ))}
+                      {item.addons && item.addons.length > 0 && item.addons.map((addon, addonIdx) => (
+                        <tr key={`${index}-addon-${addonIdx}`} style={{ backgroundColor: '#f8f9fa' }}>
+                          <td></td>
+                          <td style={{ paddingLeft: '2rem', fontSize: '0.9em', color: '#666' }}>
+                            + {addon.addon_name || addon.name}
+                          </td>
+                          <td style={{ fontSize: '0.9em' }}>{addon.price ? addon.price.toFixed(2) : "-"}</td>
+                          <td style={{ fontSize: '0.9em' }}>{addon.price ? (addon.price * item.quantity).toFixed(2) : "-"}</td>
+                        </tr>
+                      ))}
+                      {hasPromo && (
+                        <tr style={{ backgroundColor: '#f0f9ff' }}>
+                          <td></td>
+                          <td colSpan="3" style={{ paddingLeft: '1rem', fontSize: '0.9em', color: '#28a745', fontWeight: '500' }}>
+                            🎉 {promoName} - ₱{promoDiscount.toFixed(2)} OFF
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </Table>
-            <div className="text-end fw-bold mt-2">
-              Total Amount: ₱{order.total.toFixed(2)}
+            <div className="text-end mt-3">
+              <div className="d-flex justify-content-end mb-2">
+                <span className="me-4">Subtotal:</span>
+                <span>₱{order.items.reduce((sum, item) => {
+                  const itemTotal = (item.price || 0) * (item.quantity || 0);
+                  const addonsTotal = (item.addons || []).reduce((addonSum, addon) => 
+                    addonSum + ((addon.price || 0) * (item.quantity || 0)), 0);
+                  return sum + itemTotal + addonsTotal;
+                }, 0).toFixed(2)}</span>
+              </div>
+              {order.deliveryFee > 0 && (
+                <div className="d-flex justify-content-end mb-2">
+                  <span className="me-4">Delivery Fee:</span>
+                  <span>₱{order.deliveryFee.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="d-flex justify-content-end fw-bold pt-2 border-top">
+                <span className="me-4">Total Amount:</span>
+                <span>₱{order.total.toFixed(2)}</span>
+              </div>
             </div>
           </div>
           <div className="invoice-section mb-4">

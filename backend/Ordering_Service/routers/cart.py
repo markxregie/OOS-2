@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, date, timedelta
 from database import get_db_connection
+from services.promo_engine import apply_promotions
+from services.promo_service import fetch_active_promos
 import httpx
 import asyncio
 import logging
@@ -60,6 +62,7 @@ class CartItem(BaseModel):
     product_type: Optional[str] = None
     product_category: Optional[str] = None
     order_type: str
+    is_bogo_selected: Optional[bool] = False
     addons: Optional[List[dict]] = []
 
 
@@ -100,6 +103,7 @@ class UpdatePaymentDetails(BaseModel):
     total_amount: float
     delivery_notes: Optional[str] = None
     reference_number: Optional[str] = None
+    total_discount: Optional[float] = 0.0
 
 class UpdateStatusRequest(BaseModel):
     new_status: str
@@ -133,7 +137,9 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
                 di.Province,
                 di.Landmark,
                 di.FirstName,
-                di.LastName
+                di.LastName,
+                o.TotalDiscount,
+                o.DeliveryFee
             FROM Orders o
                 LEFT JOIN DeliveryInfo di ON di.OrderID = o.OrderID
             ORDER BY o.OrderDate DESC
@@ -149,7 +155,8 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
         # Step 2: Fetch ALL items for ALL orders in ONE query
         order_ids_str = ','.join(str(oid) for oid in order_ids)
         await cursor.execute(f"""
-            SELECT OrderID, OrderItemID, ProductName, Quantity, Price, ProductCategory
+            SELECT OrderID, OrderItemID, ProductName, Quantity, Price, ProductCategory,
+                   PromoName, PromoType, PromoValue, PromoDiscountAmount
             FROM OrderItems
             WHERE OrderID IN ({order_ids_str})
         """)
@@ -225,13 +232,27 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
             for item in items:
                 order_item_id = item[1]
                 addons_list = addons_by_item.get(order_item_id, [])
-                item_list.append({
+                
+                # Extract promo information
+                promo_name = item[6] if len(item) > 6 and item[6] else None
+                promo_discount = float(item[9]) if len(item) > 9 and item[9] else 0.0
+                
+                item_dict = {
                     "name": item[2],
                     "quantity": item[3],
                     "price": float(item[4]),
                     "category": item[5],
                     "addons": addons_list
-                })
+                }
+                
+                # Add promo fields if they exist
+                if promo_name:
+                    item_dict["promo_name"] = promo_name
+                    item_dict["applied_promo"] = promo_name
+                if promo_discount > 0:
+                    item_dict["discount"] = promo_discount
+                
+                item_list.append(item_dict)
 
             delivery_address = ", ".join(filter(None, [row[12], row[13], row[14], row[15]]))
 
@@ -251,7 +272,7 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
                 "order_date": row[2].strftime("%Y-%m-%d %H:%M:%S"),
                 "order_type": normalized_order_type,
                 "payment_method": row[4],
-                "total_amount": float(row[5]),
+                "total_amount": float(row[5]) if row[5] is not None else 0.0,
                 "deliveryNotes": row[6],
                 "order_status": row[7],
                 "reference_number": row[8],
@@ -259,7 +280,9 @@ async def get_all_orders(token: str = Depends(oauth2_scheme)):
                 "emailAddress": row[10],
                 "phoneNumber": row[11],
                 "deliveryAddress": delivery_address,
-                "items": item_list
+                "items": item_list,
+                "discount": float(row[18]) if row[18] is not None else 0.0,
+                "deliveryFee": float(row[19]) if row[19] is not None else 0.0
             })
 
         return orders
@@ -326,13 +349,14 @@ async def get_all_pending_orders(token: str = Depends(oauth2_scheme)):
 
     orders = []
     for row in rows:
+        total_amount = float(row[5]) if row[5] is not None else 0.0  # Gracefully handle null totals
         orders.append({
             "order_id": row[0],
             "customer_name": row[1],
             "order_date": row[2].strftime("%Y-%m-%d %H:%M:%S"),
             "order_type": row[3],
             "payment_method": row[4],
-            "total_amount": float(row[5]),
+            "total_amount": total_amount,
             "order_status": row[6],
             "items": row[7] if row[7] else ""
         })
@@ -360,9 +384,39 @@ async def get_user_orders(token: str = Depends(oauth2_scheme)):
     conn = await get_db_connection()
     cursor = await conn.cursor()
 
+    # Ensure promo columns exist in OrderItems table
+    try:
+        await cursor.execute("""
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('OrderItems') AND name = 'PromoType')
+            BEGIN
+                ALTER TABLE OrderItems ADD PromoType NVARCHAR(50) NULL
+            END
+        """)
+        await cursor.execute("""
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('OrderItems') AND name = 'PromoValue')
+            BEGIN
+                ALTER TABLE OrderItems ADD PromoValue FLOAT NULL
+            END
+        """)
+        await cursor.execute("""
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('OrderItems') AND name = 'PromoDiscountAmount')
+            BEGIN
+                ALTER TABLE OrderItems ADD PromoDiscountAmount FLOAT NULL
+            END
+        """)
+        await cursor.execute("""
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('OrderItems') AND name = 'PromoName')
+            BEGIN
+                ALTER TABLE OrderItems ADD PromoName NVARCHAR(255) NULL
+            END
+        """)
+        await conn.commit()
+    except Exception as e:
+        logger.warning(f"Failed to create promo columns: {e}")
+
     # Step 1: Fetch all orders for user
     await cursor.execute("""
-        SELECT o.OrderID, o.OrderDate, o.OrderType, o.Status, o.DeliveryFee, o.TotalAmount
+        SELECT o.OrderID, o.OrderDate, o.OrderType, o.Status, o.DeliveryFee, o.TotalAmount, o.TotalDiscount
         FROM Orders o
         WHERE o.UserName = ?
         ORDER BY o.OrderDate DESC
@@ -377,10 +431,11 @@ async def get_user_orders(token: str = Depends(oauth2_scheme)):
 
     order_ids = [row[0] for row in order_rows]
 
-    # Step 2: Fetch ALL items for ALL orders in ONE query
+    # Step 2: Fetch ALL items for ALL orders in ONE query with promo info
     order_ids_str = ','.join(str(oid) for oid in order_ids)
     await cursor.execute(f"""
-        SELECT OrderID, OrderItemID, ProductName, Quantity, Price
+        SELECT OrderID, OrderItemID, ProductName, Quantity, Price, 
+               PromoType, PromoValue, PromoDiscountAmount, PromoName
         FROM OrderItems
         WHERE OrderID IN ({order_ids_str})
     """)
@@ -428,12 +483,44 @@ async def get_user_orders(token: str = Depends(oauth2_scheme)):
         for item in items:
             order_item_id = item[1]
             addons_list = addons_by_item.get(order_item_id, [])
-            products.append({
+            
+            # Extract promo information
+            promo_type = item[5] if len(item) > 5 else None
+            promo_value = item[6] if len(item) > 6 else None
+            promo_discount = float(item[7]) if len(item) > 7 and item[7] is not None else 0.0
+            promo_name = item[8] if len(item) > 8 and item[8] else None
+            
+            product_data = {
                 "name": item[2],
                 "quantity": item[3],
                 "price": float(item[4]),
-                "addons": addons_list
-            })
+                "addons": addons_list,
+                "discount": promo_discount
+            }
+            
+            # Add promo name if available
+            if promo_name:
+                product_data["promo_name"] = promo_name
+            elif promo_type and promo_value:
+                # Fallback: Generate promo name based on type and value
+                if promo_type == 'percentage':
+                    promo_name = f"{promo_value}% OFF"
+                elif promo_type == 'fixed':
+                    promo_name = f"₱{promo_value} OFF"
+                elif promo_type == 'bogo':
+                    promo_name = "BOGO Promo"
+                else:
+                    promo_name = "Promo Applied"
+                product_data["promo_name"] = promo_name
+            
+            if promo_type:
+                product_data["applied_promo"] = {
+                    "promotionType": promo_type,
+                    "promotionValue": promo_value,
+                    "promotionName": promo_name or "Promo Applied"
+                }
+            
+            products.append(product_data)
 
         orders.append({
             "id": order_id,
@@ -442,6 +529,7 @@ async def get_user_orders(token: str = Depends(oauth2_scheme)):
             "status": order_row[3],
             "deliveryFee": float(order_row[4]) if order_row[4] is not None else 0.0,
             "totalAmount": float(order_row[5]) if order_row[5] is not None else 0.0,
+            "discount": float(order_row[6]) if order_row[6] is not None else 0.0,
             "products": products,
         })
 
@@ -449,6 +537,336 @@ async def get_user_orders(token: str = Depends(oauth2_scheme)):
     await conn.close()
 
     return orders
+
+@router.get("/calculate-promos")
+async def calculate_promotions_for_cart(
+    username: str = Query(...), 
+    cart_item_ids: str = Query(None),  # Comma-separated cart item IDs
+    order_type: str = Query("Pick Up"),  # Order type from frontend
+    token: str = Depends(oauth2_scheme)
+):
+    """
+    Calculate and apply promotions to the user's cart items.
+    If no pending order exists, creates one from cart items first.
+    This is called at checkout to preview discounts before placing the order.
+    
+    Args:
+        cart_item_ids: Optional comma-separated list of cart item IDs to include (e.g. "123,124,125")
+    """
+    logger.info(f"[CALCULATE-PROMOS] Called for user={username}, cart_item_ids={cart_item_ids}")
+    await validate_token_and_roles(token, ["user", "admin", "staff"])
+
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+    
+    try:
+        # Ensure IsBogoSelected column exists (migration-safe)
+        try:
+            await cursor.execute("""
+                IF NOT EXISTS (SELECT * FROM sys.columns 
+                               WHERE object_id = OBJECT_ID(N'OrderItems') 
+                               AND name = 'IsBogoSelected')
+                BEGIN
+                    ALTER TABLE OrderItems ADD IsBogoSelected BIT DEFAULT 0
+                END
+            """)
+            await conn.commit()
+        except Exception as e:
+            logger.warning(f"Column IsBogoSelected migration check: {e}")
+            # Continue anyway
+        
+        # Always delete any existing pending unpaid orders to ensure fresh calculation
+        # Delete in correct order: OrderItemAddOns -> OrderItems -> Orders to avoid FK constraints
+        
+        # Step 1: Delete OrderItemAddOns
+        await cursor.execute("""
+            DELETE oia FROM OrderItemAddOns oia
+            INNER JOIN OrderItems oi ON oia.OrderItemID = oi.OrderItemID
+            INNER JOIN Orders o ON oi.OrderID = o.OrderID
+            WHERE o.UserName = ? AND o.Status = 'Pending' AND o.PaymentStatus = 'Unpaid'
+        """, (username,))
+        
+        # Step 2: Delete OrderItems
+        await cursor.execute("""
+            DELETE oi FROM OrderItems oi
+            INNER JOIN Orders o ON oi.OrderID = o.OrderID
+            WHERE o.UserName = ? AND o.Status = 'Pending' AND o.PaymentStatus = 'Unpaid'
+        """, (username,))
+        
+        # Step 3: Delete Orders
+        await cursor.execute("""
+            DELETE FROM Orders 
+            WHERE UserName = ? AND Status = 'Pending' AND PaymentStatus = 'Unpaid'
+        """, (username,))
+        await conn.commit()
+        
+        logger.info(f"Cleared any pending orders for {username}, creating fresh from cart...")
+        
+        # Get cart items from cartItems table
+        cart_item_filter = ""
+        filter_params = [username]
+        
+        if cart_item_ids:
+            # Parse comma-separated IDs
+            ids = [int(id.strip()) for id in cart_item_ids.split(',') if id.strip().isdigit()]
+            if ids:
+                placeholders = ','.join('?' * len(ids))
+                cart_item_filter = f" AND CartItemID IN ({placeholders})"
+                filter_params.extend(ids)
+                logger.info(f"Filtering to specific cart items: {ids}")
+        
+        await cursor.execute(f"""
+            SELECT ProductID, ProductName, ProductType, ProductCategory, Quantity, Price, CartItemID, ISNULL(IsBogoSelected, 0)
+            FROM cartItems
+            WHERE Username = ?{cart_item_filter}
+        """, tuple(filter_params))
+        cart_rows = await cursor.fetchall()
+        
+        logger.info(f"[CART-ITEMS] Found {len(cart_rows)} items in cart for {username}")
+        for row in cart_rows:
+            logger.info(f"  CartItem: {row[1]} - Qty: {row[4]} - Price: {row[5]}")
+
+        if not cart_rows:
+            return {
+                "items": [],
+                "subtotal_discount": 0,
+                "final_subtotal": 0
+            }
+
+        # Create new pending order
+        await cursor.execute("""
+            INSERT INTO Orders (UserName, OrderDate, Status, PaymentStatus, OrderType)
+            VALUES (?, GETDATE(), 'Pending', 'Unpaid', ?)
+        """, (username, order_type))
+        await conn.commit()
+        
+        # Get the newly created OrderID
+        await cursor.execute("SELECT @@IDENTITY")
+        order_id = (await cursor.fetchone())[0]
+        
+        logger.info(f"Created fresh pending order {order_id} for {username} with {len(cart_rows)} cart items")
+        
+        # Insert OrderItems from cartItems
+        import json
+        inserted_count = 0
+        for row in cart_rows:
+            product_id, product_name, product_type, product_category, quantity, price, cart_item_id, is_bogo_selected = row
+            
+            logger.info(f"[BOGO FLAG FROM CART] CartItem {cart_item_id}: {product_name}, IsBogoSelected={is_bogo_selected}")
+            
+            # Get addons from cartItemAddons table
+            await cursor.execute("""
+                SELECT AddonName, Price, AddonID
+                FROM cartItemAddons
+                WHERE CartItemID = ?
+            """, (cart_item_id,))
+            addon_rows = await cursor.fetchall()
+            
+            # Build addons list
+            addons_list = []
+            for addon_row in addon_rows:
+                addon_name, addon_price, addon_id = addon_row
+                addons_list.append({
+                    "addon_name": addon_name,
+                    "price": float(addon_price),
+                    "addon_id": addon_id
+                })
+            
+            # Insert order item with IsBogoSelected flag
+            await cursor.execute("""
+                INSERT INTO OrderItems 
+                (OrderID, ProductName, ProductType, ProductCategory, Quantity, Price, IsBogoSelected)
+                OUTPUT INSERTED.OrderItemID
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                order_id,
+                product_name,
+                product_type or '',
+                product_category or '',
+                quantity,
+                price,
+                is_bogo_selected
+            ))
+            order_item_id = (await cursor.fetchone())[0]
+            inserted_count += 1
+            logger.info(f"  [INSERT] OrderItem #{inserted_count}: {product_name} x{quantity} @ ₱{price}, IsBogoSelected={is_bogo_selected} -> OrderItemID={order_item_id}")
+            
+            # Insert addons into OrderItemAddOns table
+            for addon in addons_list:
+                await cursor.execute("""
+                    INSERT INTO OrderItemAddOns (OrderItemID, AddOnName, Price, AddOnID)
+                    VALUES (?, ?, ?, ?)
+                """, (
+                    order_item_id,
+                    addon["addon_name"],
+                    addon["price"],
+                    addon["addon_id"]
+                ))
+        
+        await conn.commit()
+        logger.info(f"[COMMIT] Inserted {inserted_count} items into order {order_id}")
+
+        # Now get order items for promo calculation
+        await cursor.execute("""
+            SELECT OrderItemID, ProductName, ProductCategory, Quantity, Price, ISNULL(IsBogoSelected, 0)
+            FROM OrderItems
+            WHERE OrderID = ?
+        """, (order_id,))
+        items = await cursor.fetchall()
+        
+        logger.info(f"[VERIFY] Found {len(items) if items else 0} items in OrderItems table for order {order_id}")
+        for item in items:
+            logger.info(f"  DB Item: OrderItemID={item[0]}, Name={item[1]}, Qty={item[3]}")
+
+        if not items:
+            # If using existing order with no items, it might be cleared/corrupted
+            logger.error(f"Order {order_id} has no items. This might be a stale order.")
+            raise HTTPException(status_code=400, detail="Order exists but has no items. Please clear your cart and try again.")
+
+        # Prepare cart items for promo engine
+        cart_items = []
+        for item in items:
+            order_item_id, product_name, product_category, quantity, price, is_bogo_selected = item
+            
+            logger.info(f"[PROMO DEBUG] Item: {product_name}, IsBogoSelected from DB: {is_bogo_selected}")
+            
+            # Get addons from OrderItemAddOns table
+            await cursor.execute("""
+                SELECT AddOnName, Price, AddOnID
+                FROM OrderItemAddOns
+                WHERE OrderItemID = ?
+            """, (order_item_id,))
+            addon_rows = await cursor.fetchall()
+            
+            # Calculate addon total
+            addon_total = sum(float(addon[1]) for addon in addon_rows)
+            
+            item_price = float(price) + addon_total
+            
+            cart_items.append({
+                "order_item_id": order_item_id,
+                "product_name": product_name,
+                "product_category": product_category,
+                "quantity": quantity,
+                "price": item_price,
+                "is_bogo_selected": bool(is_bogo_selected)
+            })
+            logger.info(f"[PROMO DEBUG] Added to cart_items with is_bogo_selected={bool(is_bogo_selected)}")
+
+        # Fetch active promos
+        promos = await fetch_active_promos(token)
+        
+        logger.info(f"Found {len(promos) if promos else 0} active promotions")
+        if promos:
+            for promo in promos:
+                logger.info(f"Promo: {promo.get('promotionName')} - Type: {promo.get('promotionType')} - Application: {promo.get('applicationType')}")
+        
+        logger.info(f"Cart items for promo calculation: {cart_items}")
+        
+        if not promos:
+            logger.info(f"No active promotions available for order {order_id}")
+            subtotal = sum(item["price"] * item["quantity"] for item in cart_items)
+            return {
+                "order_id": order_id,
+                "items": [
+                    {
+                        "order_item_id": item["order_item_id"],
+                        "product_name": item["product_name"],
+                        "original_total": item["price"] * item["quantity"],
+                        "discount": 0,
+                        "final_total": item["price"] * item["quantity"],
+                        "applied_promo": None
+                    }
+                    for item in cart_items
+                ],
+                "subtotal_discount": 0,
+                "final_subtotal": subtotal
+            }
+
+        # Apply promotions
+        promo_result = apply_promotions(cart_items, promos)
+        
+        logger.info(f"Promo calculation result for order {order_id}:")
+        for idx, item_result in enumerate(promo_result["items"]):
+            logger.info(f"  Item {idx+1}: {item_result['product_name']} - Discount: ₱{item_result['discount']} - Applied: {item_result.get('applied_promo', {}).get('promotionName') if item_result.get('applied_promo') else 'None'}")
+        logger.info(f"Total subtotal discount: ₱{promo_result['subtotal_discount']}")
+
+        # Ensure promo columns exist in OrderItems table
+        try:
+            await cursor.execute("""
+                IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('OrderItems') AND name = 'PromoType')
+                BEGIN
+                    ALTER TABLE OrderItems ADD PromoType NVARCHAR(50) NULL
+                END
+            """)
+            await cursor.execute("""
+                IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('OrderItems') AND name = 'PromoValue')
+                BEGIN
+                    ALTER TABLE OrderItems ADD PromoValue FLOAT NULL
+                END
+            """)
+            await cursor.execute("""
+                IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('OrderItems') AND name = 'PromoDiscountAmount')
+                BEGIN
+                    ALTER TABLE OrderItems ADD PromoDiscountAmount FLOAT NULL
+                END
+            """)
+            await cursor.execute("""
+                IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('OrderItems') AND name = 'PromoName')
+                BEGIN
+                    ALTER TABLE OrderItems ADD PromoName NVARCHAR(255) NULL
+                END
+            """)
+            await conn.commit()
+        except Exception as e:
+            logger.warning(f"Failed to create promo columns: {e}")
+
+        # Update OrderItems with promo details
+        for idx, item_result in enumerate(promo_result["items"]):
+            # Match by index position since cart_items and promo_result["items"] are in same order
+            if idx < len(cart_items):
+                order_item_id = cart_items[idx]["order_item_id"]
+                
+                if item_result["applied_promo"]:
+                    promo = item_result["applied_promo"]
+                    logger.info(f"  [UPDATE PROMO] OrderItemID={order_item_id}: {item_result['product_name']} - {promo.get('promotionName')} - Discount: ₱{item_result['discount']}")
+                    await cursor.execute("""
+                        UPDATE OrderItems
+                        SET PromoType = ?,
+                            PromoValue = ?,
+                            PromoDiscountAmount = ?,
+                            PromoName = ?
+                        WHERE OrderItemID = ?
+                    """, (
+                        promo.get("promotionType"),
+                        promo.get("promotionValue"),
+                        item_result["discount"],
+                        promo.get("promotionName"),
+                        order_item_id
+                    ))
+                else:
+                    logger.info(f"  [NO PROMO] OrderItemID={order_item_id}: {item_result['product_name']} - No promo applied")
+
+        await conn.commit()
+        
+        logger.info(
+            f"Applied promotions to order {order_id}: "
+            f"Total discount = {promo_result['subtotal_discount']}"
+        )
+
+        return {
+            "order_id": order_id,
+            **promo_result
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error calculating promotions for cart: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to calculate promotions")
+    finally:
+        await cursor.close()
+        await conn.close()
 
 @router.put("/update-payment")
 async def update_payment_details(payload: UpdatePaymentDetails, token: str = Depends(oauth2_scheme)):
@@ -472,7 +890,7 @@ async def update_payment_details(payload: UpdatePaymentDetails, token: str = Dep
 
         await cursor.execute("""
             UPDATE Orders
-            SET PaymentMethod = ?, Subtotal = ?, DeliveryFee = ?, TotalAmount = ?, DeliveryNotes = ?, ReferenceNumber = ?
+            SET PaymentMethod = ?, Subtotal = ?, DeliveryFee = ?, TotalAmount = ?, DeliveryNotes = ?, ReferenceNumber = ?, TotalDiscount = ?
             WHERE OrderID = ?
         """, (
             payload.payment_method,
@@ -481,6 +899,7 @@ async def update_payment_details(payload: UpdatePaymentDetails, token: str = Dep
             payload.total_amount,
             payload.delivery_notes or '',
             payload.reference_number,
+            payload.total_discount,
             order_id
         ))
 
@@ -595,6 +1014,7 @@ async def get_cart(username: str, token: str = Depends(oauth2_scheme)):
 async def add_to_cart(item: CartItem, token: str = Depends(oauth2_scheme)):
     await validate_token_and_roles(token, ["user", "admin", "staff"])
     logger.info(f"Adding to cart: {item.dict()}")
+    logger.info(f"[BOGO FLAG] is_bogo_selected received: {item.is_bogo_selected}")
     conn = await get_db_connection()
     cursor = await conn.cursor()
     try:
@@ -650,13 +1070,28 @@ async def add_to_cart(item: CartItem, token: str = Depends(oauth2_scheme)):
                 """, (item.quantity, order_item_id))
 
         if not merge:
+            # Try to add IsBogoSelected column if it doesn't exist (migration-safe)
+            try:
+                await cursor.execute("""
+                    IF NOT EXISTS (SELECT * FROM sys.columns 
+                                   WHERE object_id = OBJECT_ID(N'OrderItems') 
+                                   AND name = 'IsBogoSelected')
+                    BEGIN
+                        ALTER TABLE OrderItems ADD IsBogoSelected BIT DEFAULT 0
+                    END
+                """)
+                await conn.commit()
+            except Exception as e:
+                logger.warning(f"Column IsBogoSelected may already exist or error adding: {e}")
+                # Continue anyway
+            
             await cursor.execute("""
-                INSERT INTO OrderItems (OrderID, ProductName, ProductType, ProductCategory, Quantity, Price)
+                INSERT INTO OrderItems (OrderID, ProductName, ProductType, ProductCategory, Quantity, Price, IsBogoSelected)
                 OUTPUT INSERTED.OrderItemID
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (
                 order_id, item.product_name, item.product_type or '',
-                item.product_category or '', item.quantity, item.price
+                item.product_category or '', item.quantity, item.price, item.is_bogo_selected
             ))
             row = await cursor.fetchone()
             order_item_id = row[0] if row else None
