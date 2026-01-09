@@ -506,6 +506,137 @@ const MenuContent = () => {
       }
     }
 
+    // If this is a cross-product BOGO (multiple specific products), show a bundled modal
+    if (bogoPromo && !isSameProductBogo) {
+      // Find partner product objects from current `products` state
+      const partnerNames = Array.isArray(bogoPromo.selectedProducts) ? bogoPromo.selectedProducts.filter(n => n !== item.ProductName) : [];
+      const partnerProducts = [];
+      for (const name of partnerNames) {
+        let found = null;
+        for (const typeKey of Object.keys(products || {})) {
+          const subcats = products[typeKey] || {};
+          for (const subcatKey of Object.keys(subcats)) {
+            const arr = subcats[subcatKey] || [];
+            const match = arr.find(p => p.ProductName === name);
+            if (match) { found = match; break; }
+          }
+          if (found) break;
+        }
+        if (found) partnerProducts.push(found);
+      }
+
+      // Fallback to original modal if partner product details aren't available
+      if (!partnerProducts.length) {
+        // Let the rest of the function continue to show the normal modal
+      } else {
+        // Build add-ons html for primary
+        const primaryAddOnsHtml = (item.AddOns || []).map((addon, index) => `
+          <div class="form-check d-flex justify-content-between align-items-center mb-1">
+            <div>
+              <input class="form-check-input primary-addon-checkbox" type="checkbox" id="primary-addon-${index}" value="${addon.AddOnName}" data-price="${addon.Price}" ${addon.Status !== 'Available' ? 'disabled' : ''}>
+              <label class="form-check-label" for="primary-addon-${index}">${addon.AddOnName} (${addon.Status})</label>
+            </div>
+            <span class="text-muted small">₱${addon.Price.toFixed(2)}</span>
+          </div>
+        `).join('');
+
+        // Build partner sections (no sugar selectors — simplified for user)
+        const partnerSections = partnerProducts.map((pp, pIdx) => {
+          const addons = (pp.AddOns || []).map((addon, aIdx) => `
+            <div class="form-check d-flex justify-content-between align-items-center mb-1">
+              <div>
+                <input class="form-check-input partner-addon-checkbox partner-${pIdx}-addon" type="checkbox" id="partner-${pIdx}-addon-${aIdx}" value="${addon.AddOnName}" data-price="${addon.Price}" ${addon.Status !== 'Available' ? 'disabled' : ''}>
+                <label class="form-check-label" for="partner-${pIdx}-addon-${aIdx}">${addon.AddOnName} (${addon.Status})</label>
+              </div>
+              <span class="text-muted small">₱${addon.Price.toFixed(2)}</span>
+            </div>
+          `).join('');
+
+          return `
+            <div style="border:1px solid #eee; padding:10px; border-radius:8px; margin-top:12px; background:#fff;">
+              <h5 style="color:#4b929d; margin-bottom:8px;">${pp.ProductName} <small class="text-muted">(Partner)</small></h5>
+              
+              <div class="mb-2">
+               
+              </div>
+              <div>
+                <h6 class="mb-1">Add-ons</h6>
+                <div class="addons-list partner-addons" style="max-height:120px; overflow-y:auto;">${addons}</div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        const html = `
+          <div style="text-align:left; max-height:520px; overflow:auto;">
+            <h4 style="color:#4b929d; margin-bottom:8px;">${item.ProductName} (BOGO Deal)</h4>
+            <div style="border:1px solid #eee; padding:10px; border-radius:8px; background:#fff;">
+              <div>
+                <h6 class="mb-1">Add-ons</h6>
+                <div class="addons-list" style="max-height:120px; overflow-y:auto;">${primaryAddOnsHtml}</div>
+              </div>
+            </div>
+            <div style="margin-top:12px;">
+              <h5 style="color:#4b929d;">Your Free Item</h5>
+              ${partnerSections}
+            </div>
+          </div>
+        `;
+
+        Swal.fire({
+          title: 'Add BOGO Deal',
+          html,
+          width: 800,
+          showCancelButton: true,
+          confirmButtonText: 'Add Deal to Cart',
+          cancelButtonText: 'Cancel',
+          customClass: {
+            confirmButton: 'btn btn-primary',
+            cancelButton: 'btn btn-outline-secondary ms-2',
+            popup: 'custom-sweetalert-popup'
+          },
+          buttonsStyling: false,
+          preConfirm: () => {
+            // Collect primary selections (no sugar level)
+            const primaryAddOns = [];
+            Swal.getPopup().querySelectorAll('.primary-addon-checkbox:checked').forEach(cb => {
+              primaryAddOns.push({ name: cb.value, price: parseFloat(cb.dataset.price) });
+            });
+
+            // Collect partner selections (no sugar level)
+            const partners = partnerProducts.map((pp, pIdx) => {
+              const addons = [];
+              Swal.getPopup().querySelectorAll(`.partner-${pIdx}-addon:checked`).forEach(cb => {
+                addons.push({ name: cb.value, price: parseFloat(cb.dataset.price) });
+              });
+              return { product: pp, addons };
+            });
+
+            return { action: 'add-deal', primary: { product: item, addons: primaryAddOns }, partners };
+          }
+        }).then(async (result) => {
+          if (result.isConfirmed && result.value && result.value.action === 'add-deal') {
+            try {
+              // Add primary as bogo-selected
+              const p = result.value.primary;
+              await handleAddToCart(p.product, '', p.addons, p.addons.reduce((s, a) => s + (a.price || 0), 0), true, 1);
+
+              // Add partners
+              for (const partner of result.value.partners) {
+                await handleAddToCart(partner.product, '', partner.addons, partner.addons.reduce((s, a) => s + (a.price || 0), 0), true, 1);
+              }
+              toast.success('BOGO deal added to cart');
+            } catch (err) {
+              console.error('Error adding BOGO bundle to cart', err);
+              toast.error('Failed to add deal to cart');
+            }
+          }
+        });
+
+        return; // We've handled the cross-product modal flow
+      }
+    }
+
     const imageUrl = item.ProductImage
       ? item.ProductImage.startsWith('http')
         ? item.ProductImage
@@ -540,9 +671,9 @@ const MenuContent = () => {
                   text-align: center;
                   font-weight: bold;
                   box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-        🎉 ${isSameProductBogo 
+        ${isSameProductBogo 
           ? `BUY ${buyQty} GET ${getQty} FREE!` 
-          : `${bogoPromo.promotionName || 'BOGO PROMOTION'}`} 🎉
+          : `${bogoPromo.promotionName || 'BOGO PROMOTION'}`}
         <div style="font-size: 0.9em; margin-top: 5px; opacity: 0.95;">
           ${isSameProductBogo 
             ? `Quantity set to ${bogoQuantity} items` 
@@ -1032,13 +1163,27 @@ const MenuContent = () => {
                 >
                   {displayPromos.length > 0 && (
                     <div className="promo-badges-container">
-                      {displayPromos.map((promo, idx) => (
-                        <div key={idx} className="promo-badge">
-                          {promo.promotionType === "fixed" && `₱${parseFloat(promo.promotionValue)} OFF`}
-                          {promo.promotionType === "percentage" && `${parseInt(promo.promotionValue)}% OFF`}
-                          {promo.promotionType === "bogo" && "BUY 1 GET 1"}
-                        </div>
-                      ))}
+                      {displayPromos.map((promo, idx) => {
+                        let badgeContent = '';
+                        let badgeClass = 'promo-badge';
+                        
+                        if (promo.promotionType === "fixed") {
+                          badgeContent = `P${parseFloat(promo.promotionValue)} OFF`;
+                          badgeClass += ' promo-badge-fixed';
+                        } else if (promo.promotionType === "percentage") {
+                          badgeContent = `${parseInt(promo.promotionValue)}% OFF`;
+                          badgeClass += ' promo-badge-percentage';
+                        } else if (promo.promotionType === "bogo") {
+                          badgeContent = `BUY GET FREE`;
+                          badgeClass += ' promo-badge-bogo';
+                        }
+                        
+                        return (
+                          <div key={idx} className={badgeClass}>
+                            <span className="badge-text">{badgeContent}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                   <div className="item-image-placeholder">
