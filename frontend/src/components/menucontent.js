@@ -694,7 +694,7 @@ const MenuContent = () => {
       if (bogoPromo && bogoPromo.applicationType === 'specific_products' && 
           Array.isArray(bogoPromo.selectedProducts) && 
           bogoPromo.selectedProducts.length > 1) {
-        // Cross-product BOGO detected
+        // Cross-product BOGO detected: guide user to add to cart
         Swal.fire({
           icon: 'info',
           title: 'Multi-Product BOGO',
@@ -704,14 +704,24 @@ const MenuContent = () => {
               ${bogoPromo.selectedProducts.join(' + ')}
             </p>
             <p style="color: #666; margin-top: 10px;">
-              "Buy Now" works best for single-item purchases. 
+              Buy Now is for single-item purchases.
             </p>
             <p style="color: #666;">
-              <strong>Please use "Add to Cart"</strong> to take advantage of this multi-product promotion.
+              <strong>Use Add to Cart</strong> to redeem this multi-product promotion.
             </p>
           `,
-          confirmButtonText: 'Go Back to Menu',
-          confirmButtonColor: '#667eea',
+          showCancelButton: true,
+          confirmButtonText: 'Add to Cart',
+          cancelButtonText: 'Cancel',
+          buttonsStyling: false,
+          customClass: {
+            confirmButton: 'btn btn-primary',
+            cancelButton: 'btn btn-outline-secondary ms-2'
+          }
+        }).then((res) => {
+          if (res.isConfirmed) {
+            handleAddToCart(item, notes, addOns, addOnsTotal, true, 1);
+          }
         });
         return;
       }
