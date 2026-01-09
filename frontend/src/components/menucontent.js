@@ -1071,8 +1071,8 @@ const MenuContent = () => {
                     <div className="promo-badges-container">
                       {displayPromos.map((promo, idx) => (
                         <div key={idx} className="promo-badge">
-                          {promo.promotionType === "fixed" && `₱${promo.promotionValue} OFF`}
-                          {promo.promotionType === "percentage" && `${promo.promotionValue}% OFF`}
+                          {promo.promotionType === "fixed" && `₱${parseFloat(promo.promotionValue)} OFF`}
+                          {promo.promotionType === "percentage" && `${parseInt(promo.promotionValue)}% OFF`}
                           {promo.promotionType === "bogo" && "BUY 1 GET 1"}
                         </div>
                       ))}
