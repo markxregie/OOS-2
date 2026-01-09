@@ -331,6 +331,31 @@ export const CartProvider = ({ children }) => {
     }
   };
 
+  // --- Remove multiple items by IDs ---
+  const removeItemsByIds = async (cartItemIds) => {
+    if (!token || !cartItemIds || cartItemIds.length === 0) return;
+    try {
+      // Remove each item individually
+      for (const id of cartItemIds) {
+        const res = await fetch(`${CART_API_URL}/remove/${id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(`Failed to remove item ${id}`);
+      }
+      // Update local state immediately to reflect removal
+      setCartItems(prev => prev.filter(item => !cartItemIds.includes(item.cart_item_id)));
+      toast.info("Selected items removed from cart");
+      // Then reload to sync with backend
+      await reloadCart();
+    } catch (err) {
+      console.error("Error removing items:", err);
+      toast.error("Failed to remove selected items");
+      // On error, reload to revert any optimistic updates
+      await reloadCart();
+    }
+  };
+
   // --- Reload helper ---
   const reloadCart = async () => {
     if (!username || !token) return;
@@ -357,6 +382,7 @@ export const CartProvider = ({ children }) => {
         updateQuantity,
         removeFromCart,
         clearCart,
+        removeItemsByIds,
         reloadCart,
         promos,
       }}

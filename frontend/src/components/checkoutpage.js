@@ -6,13 +6,8 @@ import './checkout.css';
 const CheckoutPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
-<<<<<<< HEAD
-  const { removeFromCart, reloadCart, updateQuantity, setCartItems } = useContext(CartContext);
-  const { cartItems = [], orderType = 'Pick Up', paymentMethod = 'Cash' } = location.state || {};
-=======
-  const { clearCart } = useContext(CartContext); // Receive deliveryFee from location.state
+  const { clearCart, removeItemsByIds } = useContext(CartContext); // Receive deliveryFee from location.state
   const { cartItems = [], orderType = 'Pick Up', paymentMethod = 'Cash', deliveryFee = 0 } = location.state || {};
->>>>>>> 6ef80c46a0a2d49786c61f9283dee6416da45324
 
   const [promoData, setPromoData] = useState(null);
   const [isLoadingPromos, setIsLoadingPromos] = useState(false);
@@ -289,10 +284,9 @@ const confirmPayment = async (saved) => {
       console.log("POS Sale ID:", result.pos_sale_id);
       console.log("Status: Order saved to both OOS and POS as PENDING");
 
-      // Mark the checked-out items as ordered and remove from context
-      const orderedItemIds = cartItems.map(item => item.cart_item_id);
-      localStorage.setItem("orderedItemIds", JSON.stringify(orderedItemIds));
-      setCartItems(prev => prev.filter(item => !orderedItemIds.includes(item.cart_item_id)));
+      // Remove only the checked out items from the cart
+      const cartItemIds = cartItems.map(item => item.cart_item_id);
+      await removeItemsByIds(cartItemIds);
       localStorage.removeItem("pendingOrderData");
 
       Swal.fire({

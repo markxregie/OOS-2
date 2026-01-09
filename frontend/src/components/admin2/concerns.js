@@ -125,6 +125,11 @@ const Concerns = () => {
       }
     }
 
+    let resolutionDisplay = '';
+    if (concern.status === 'Resolved' && concern.resolution_summary) {
+      resolutionDisplay = `<div style="border-top: 1px solid #eee; margin: 15px 0;"></div><p style="margin-bottom: 10px;"><strong style="color: #121616ff; display: inline-flex; align-items: flex-start;"><FaCommentDots style="margin-right: 8px; color: #121616ff; margin-top: 3px;"/>Resolution Summary:</strong> <span style="display: block; padding: 10px; background-color: white; border: 1px solid #ccc; border-radius: 4px; margin-top: 5px;">${concern.resolution_summary}</span></p>`;
+    }
+
     const result = await Swal.fire({
       title: `Concern Details`,
       // Custom HTML structure for a cleaner look with icons and clear labels
@@ -141,6 +146,8 @@ const Concerns = () => {
                 <strong style="color: #121616ff; display: inline-flex; align-items: center;"><FaClock style="margin-right: 8px; color: #121616ff;"/>Date Submitted:</strong> ${concern.dateSubmitted}
             </p>
              <p style="margin-bottom: 0;"><strong style="color: #121616ff; display: inline-flex; align-items: center;"><FaTag style="margin-right: 8px; color: #121616ff;"/>Status:</strong> <span style="background-color: ${statusColor}; color: white; padding: 4px 10px; border-radius: 12px; font-weight: bold; font-size: 0.9em;">${concern.status}</span></p>
+             ${resolutionDisplay}
+             ${concern.status !== 'Resolved' ? '<div style="border-top: 1px solid #eee; margin: 15px 0;"></div><div style="margin-top: 15px;"><label for="resolution-summary" style="display: block; margin-bottom: 5px; font-weight: bold; color: #121616ff;">Resolution Summary:</label><textarea id="resolution-summary" placeholder="Enter how the issue was resolved..." style="width: 100%; height: 80px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; resize: vertical;"></textarea></div>' : ''}
         </div>
       `,
       showCancelButton: true,
@@ -164,16 +171,26 @@ const Concerns = () => {
     });
 
     if (result.isConfirmed && concern.status !== 'Resolved') {
+      const resolutionSummary = document.getElementById('resolution-summary').value.trim();
+      if (!resolutionSummary) {
+        Swal.fire({
+          title: 'Required!',
+          text: 'Please enter a resolution summary.',
+          icon: 'warning',
+          confirmButtonColor: '#4a9ba5'
+        });
+        return;
+      }
       try {
         const response = await fetch(`http://127.0.0.1:7007/concerns/${id}/status`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ status: 'Resolved' }),
+          body: JSON.stringify({ status: 'Resolved', resolution_summary: resolutionSummary }),
         });
         if (response.ok) {
-          setConcernsData(prev => prev.map(c => c.id === id ? { ...c, status: 'Resolved' } : c));
+          setConcernsData(prev => prev.map(c => c.id === id ? { ...c, status: 'Resolved', resolution_summary: resolutionSummary } : c));
           Swal.fire({
             title: 'Resolved!',
             text: 'The concern has been marked as resolved.',

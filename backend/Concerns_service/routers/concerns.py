@@ -26,9 +26,11 @@ class ConcernResponse(BaseModel):
     file_path: Optional[str] = None
     status: str
     submitted_at: str
+    resolution_summary: Optional[str] = None
 
 class StatusUpdate(BaseModel):
     status: str
+    resolution_summary: Optional[str] = None
 
 @router.post("/concerns", status_code=status.HTTP_201_CREATED)
 async def submit_concern(
@@ -83,7 +85,7 @@ async def get_concerns():
     cursor = await conn.cursor()
     try:
         await cursor.execute("""
-            SELECT id, name, email, subject, message, file_path, status, submitted_at
+            SELECT id, name, email, subject, message, file_path, status, submitted_at, resolution_summary
             FROM Concerns
             ORDER BY submitted_at DESC
         """)
@@ -98,7 +100,8 @@ async def get_concerns():
                 message=row[4],
                 file_path=row[5],
                 status=row[6] or 'Pending',
-                submitted_at=row[7].strftime("%Y-%m-%d %H:%M:%S") if row[7] else None
+                submitted_at=row[7].strftime("%Y-%m-%d %H:%M:%S") if row[7] else None,
+                resolution_summary=row[8]
             ))
     except Exception as e:
         logger.error(f"Error fetching concerns: {e}")
@@ -111,16 +114,24 @@ async def get_concerns():
 @router.patch("/concerns/{concern_id}/status", status_code=status.HTTP_200_OK)
 async def update_concern_status(concern_id: int, status_update: StatusUpdate):
     status = status_update.status
+    resolution_summary = status_update.resolution_summary
     if status not in ["Pending", "In Progress", "Resolved"]:
         raise HTTPException(status_code=400, detail="Invalid status")
     conn = await get_db_connection()
     cursor = await conn.cursor()
     try:
-        await cursor.execute("""
-            UPDATE Concerns
-            SET status = ?
-            WHERE id = ?
-        """, (status, concern_id))
+        if resolution_summary is not None:
+            await cursor.execute("""
+                UPDATE Concerns
+                SET status = ?, resolution_summary = ?
+                WHERE id = ?
+            """, (status, resolution_summary, concern_id))
+        else:
+            await cursor.execute("""
+                UPDATE Concerns
+                SET status = ?
+                WHERE id = ?
+            """, (status, concern_id))
         await conn.commit()
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Concern not found")
