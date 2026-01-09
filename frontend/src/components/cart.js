@@ -293,10 +293,59 @@ const Cart = () => {
   };
 
   const handleCheckboxChange = (item, checked) => {
+    // Helper to ensure no duplicates when adding
+    const addIfMissing = (list, it) => {
+      if (!list.find(li => li.cart_item_id === it.cart_item_id)) return [...list, it];
+      return list;
+    };
+
     if (checked) {
-      setSelectedCartItems(prev => [...prev, item]);
+      // Add the clicked item
+      setSelectedCartItems(prev => {
+        let next = addIfMissing(prev, item);
+
+        // If this item has a cross-product BOGO promo, auto-select its partner(s)
+        try {
+          const promosForItem = getPromosForCartItem(item) || [];
+          const bogo = promosForItem.find(p => p.promotionType === 'bogo' && p.applicationType === 'specific_products' && Array.isArray(p.selectedProducts) && p.selectedProducts.length > 1);
+          if (bogo) {
+            const partnerNames = bogo.selectedProducts.filter(n => n !== item.product_name);
+            for (const name of partnerNames) {
+              const partner = cartItems.find(ci => ci.product_name === name);
+              if (partner) next = addIfMissing(next, partner);
+            }
+            // Show toast feedback when auto-selected
+            toast.info('Partner item auto-selected to activate your BOGO deal!');
+          }
+        } catch (err) {
+          console.error('Error auto-selecting BOGO partners', err);
+        }
+
+        return next;
+      });
     } else {
-      setSelectedCartItems(prev => prev.filter(ci => ci.cart_item_id !== item.cart_item_id));
+      // Remove the clicked item
+      setSelectedCartItems(prev => {
+        let next = prev.filter(ci => ci.cart_item_id !== item.cart_item_id);
+
+        // If this item has a cross-product BOGO promo, also remove its partner(s)
+        try {
+          const promosForItem = getPromosForCartItem(item) || [];
+          const bogo = promosForItem.find(p => p.promotionType === 'bogo' && p.applicationType === 'specific_products' && Array.isArray(p.selectedProducts) && p.selectedProducts.length > 1);
+          if (bogo) {
+            const partnerNames = bogo.selectedProducts.filter(n => n !== item.product_name);
+            for (const name of partnerNames) {
+              const partner = cartItems.find(ci => ci.product_name === name);
+              if (partner) next = next.filter(ci => ci.cart_item_id !== partner.cart_item_id);
+            }
+            toast.info('BOGO partner items deselected');
+          }
+        } catch (err) {
+          console.error('Error auto-deselecting BOGO partners', err);
+        }
+
+        return next;
+      });
     }
   };
 
