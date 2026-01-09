@@ -441,10 +441,23 @@
 /* Order Cards */
 .order-cards-container {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 25px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
 }
 
+.order-card-compact.rider-order-card {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background-color: #fff;
+}
+
+.order-card-compact.rider-order-card:hover {
+  box-shadow: 0 6px 16px rgba(75, 146, 157, 0.2);
+  transform: translateY(-4px);
+  border-color: #4b929d;
+}
+
+/* Keep old order-card styles for backward compatibility */
 .order-card {
   padding: 20px;
   text-align: left;

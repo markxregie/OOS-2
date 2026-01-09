@@ -349,13 +349,14 @@ async def get_all_pending_orders(token: str = Depends(oauth2_scheme)):
 
     orders = []
     for row in rows:
+        total_amount = float(row[5]) if row[5] is not None else 0.0  # Gracefully handle null totals
         orders.append({
             "order_id": row[0],
             "customer_name": row[1],
             "order_date": row[2].strftime("%Y-%m-%d %H:%M:%S"),
             "order_type": row[3],
             "payment_method": row[4],
-            "total_amount": float(row[5]),
+            "total_amount": total_amount,
             "order_status": row[6],
             "items": row[7] if row[7] else ""
         })

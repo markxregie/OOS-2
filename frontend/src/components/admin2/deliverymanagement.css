@@ -81,3 +81,99 @@
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
+
+/* COMPACT ORDER CARDS */
+.order-card-compact {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.order-card-compact:hover {
+  box-shadow: 0 6px 16px rgba(75, 146, 157, 0.2);
+  transform: translateY(-4px);
+  border-color: #4b929d;
+}
+
+/* ORDER DETAILS MODAL */
+.order-details-modal .modal-content {
+  border-radius: 8px;
+  border: 1px solid #d4e8ed;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.order-details-modal .modal-header {
+  background: linear-gradient(135deg, #f8f9fa 0%, #f0f8fa 100%);
+  border-bottom: 2px solid #4b929d !important;
+  padding: 20px 24px;
+}
+
+.order-details-modal .modal-title {
+  font-weight: 700;
+  color: #2c3e50;
+  font-size: 1.35rem;
+}
+
+.order-details-modal .btn-close {
+  width: 24px;
+  height: 24px;
+  opacity: 0.7;
+}
+
+.order-details-modal .btn-close:hover {
+  opacity: 1;
+}
+
+/* Modal content styling */
+.order-modal-content {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+    "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+    sans-serif;
+}
+
+.order-modal-content h6 {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 0.85rem;
+}
+
+/* Scrollable items section */
+.order-modal-content > div:nth-child(4) {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* Custom scrollbar for items */
+.order-modal-content > div:nth-child(4) > div::-webkit-scrollbar {
+  width: 6px;
+}
+
+.order-modal-content > div:nth-child(4) > div::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.order-modal-content > div:nth-child(4) > div::-webkit-scrollbar-thumb {
+  background: #4b929d;
+  border-radius: 3px;
+}
+
+.order-modal-content > div:nth-child(4) > div::-webkit-scrollbar-thumb:hover {
+  background: #3a7a84;
+}
+
+/* Responsive grid for cards */
+@media (max-width: 1400px) {
+  .order-card-compact {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .order-card-compact {
+    min-width: 250px;
+  }
+
+  .order-details-modal .modal-lg {
+    max-width: 95vw !important;
+  }
+}
