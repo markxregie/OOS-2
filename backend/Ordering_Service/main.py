@@ -1,9 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import asyncio
 import sys
 import os
+from pathlib import Path
 
 sys.path.append(os.path.dirname(__file__))
 from routers import cart, delivery, debug
@@ -73,6 +75,13 @@ app.include_router(cart.router, prefix="/cart", tags=["Orders"])
 app.include_router(delivery.router, prefix="/delivery")
 app.include_router(cart_router.router)
 app.include_router(debug.router)
+
+# Create uploads directory if it doesn't exist
+uploads_dir = Path("uploads")
+uploads_dir.mkdir(exist_ok=True)
+
+# Mount static files for delivery images
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Health check
 @app.get("/")
