@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FaBell, FaBoxOpen, FaCheckCircle, FaDollarSign, FaClock, FaUser, FaPhone, FaMapMarkerAlt, FaBox, FaTruckPickup, FaTruckMoving, FaTimesCircle, FaExchangeAlt, FaBars, FaHome, FaHistory, FaCog, FaCreditCard, FaUserTie, FaChevronDown, FaUndo, FaSignOutAlt, FaSpinner } from "react-icons/fa";
-import { Container, Card, Form, Spinner } from "react-bootstrap";
+import { Container, Card, Form, Modal } from "react-bootstrap";
 import riderImage from "../../assets/rider.jpg";
 import "./riderdashboard.css"; 
 import adminImage from "../../assets/administrator.png";
@@ -22,6 +22,8 @@ function RiderDashboard() {
   const [error, setError] = useState(null);
   const [earnings, setEarnings] = useState({ totalEarnings: 0.0 });
   const [dailyResetTimer, setDailyResetTimer] = useState(null);
+  const [showOrderModal, setShowOrderModal] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
 
   const authToken = localStorage.getItem('authToken');
 
@@ -406,60 +408,247 @@ function RiderDashboard() {
             </div>
           ) : (
             filteredOrders.map((order) => (
-              <Card key={order.id} className="order-card">
-                <div className="order-header">
-                  <h5 className="order-id">Order #{order.id}</h5>
-                  <div className="status-tag" style={{ color: getStatusStyle(order.currentStatus).color, backgroundColor: getStatusStyle(order.currentStatus).backgroundColor }}>
+              <Card 
+                key={order.id} 
+                className="order-card-compact rider-order-card"
+                onClick={() => {
+                  setSelectedOrder(order);
+                  setShowOrderModal(true);
+                }}
+                style={{
+                  padding: "16px",
+                  textAlign: "left",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px",
+                  cursor: "pointer",
+                  transition: "all 0.3s ease",
+                  border: "1px solid #ddd",
+                  borderRadius: "8px"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.boxShadow = "0 6px 16px rgba(0, 0, 0, 0.15)";
+                  e.currentTarget.style.transform = "translateY(-4px)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.1)";
+                  e.currentTarget.style.transform = "translateY(0)";
+                }}
+              >
+                {/* Order Header */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
+                  <h6 style={{ color: "#2c3e50", fontWeight: "700", margin: "0" }}>Order #{order.id}</h6>
+                  <span style={{
+                    fontWeight: "600",
+                    fontSize: "0.75rem",
+                    color: getStatusStyle(order.currentStatus).color,
+                    backgroundColor: getStatusStyle(order.currentStatus).backgroundColor,
+                    padding: "3px 6px",
+                    borderRadius: "4px",
+                    whiteSpace: "nowrap",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px"
+                  }}>
                     {statusIcons[order.currentStatus]} {getStatusStyle(order.currentStatus).text}
-                  </div>
+                  </span>
                 </div>
-                <div className="order-details">
-                  <p className="detail-item"><FaClock color="#4b929d" /> Ordered at: <span className="detail-value">{order.orderedAt}</span></p>
-                  <p className="detail-item"><FaUser color="#4b929d" /> Customer: <span className="detail-value">{order.customerName}</span></p>
-                  <p className="detail-item"><FaPhone color="#4b929d" /> Phone: <span className="detail-value">{order.phone}</span></p>
-                  <p className="detail-item"><FaMapMarkerAlt color="#4b929d" /> Address: <span className="detail-value">{order.address}</span></p>
-                </div>
-                <div className="order-items-section">
-                  <p className="detail-item"><FaBox color="#4b929d" /> Items ({order.items?.length || 0})</p>
-                  <ul className="item-list">
-                    {order.items?.map((item, i) => {
-                      const promoName = item.promo_name || item.applied_promo || "";
-                      const promoDiscount = item.discount || 0;
-                      const hasPromo = promoName || promoDiscount > 0;
 
-                      return (
-                        <li key={i} className="item-row">
-                          <span className="detail-value">{item.quantity}x {item.name} - ₱{item.price?.toFixed(2)}</span>
-                          {hasPromo && (
-                            <div style={{ paddingLeft: '1rem', fontSize: '0.9em', color: '#28a745', fontWeight: '500', marginTop: '2px' }}>
-                              🎉 {promoName} - ₱{promoDiscount.toFixed(2)} OFF
-                            </div>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
+                {/* Customer Info */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#555", fontSize: "0.9rem" }}>
+                  <FaUser color="#4b929d" size={14} />
+                  <span>{order.customerName}</span>
                 </div>
-                <div className="order-total-section">
-                  <hr className="divider"/>
-                  {order.deliveryFee && order.deliveryFee > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                      <span>Delivery Fee:</span>
-                      <span>₱{order.deliveryFee.toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '1.1rem', paddingTop: '5px', borderTop: '1px solid #eee' }}>
-                    <span className="total-label">Total:</span>
-                    <span className="total-value">₱{order.total?.toFixed(2) || "0.00"}</span>
-                  </div>
+
+                {/* Phone & Address */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#555", fontSize: "0.9rem" }}>
+                  <FaPhone color="#4b929d" size={14} />
+                  <span>{order.phone}</span>
                 </div>
-                <div className="order-actions">
-                  {/* Dropdowns removed as requested */}
+
+                <div style={{ display: "flex", alignItems: "flex-start", gap: "6px", color: "#555", fontSize: "0.9rem" }}>
+                  <FaMapMarkerAlt color="#4b929d" size={14} style={{ marginTop: "2px", flexShrink: 0 }} />
+                  <span style={{ wordBreak: "break-word" }}>{order.address?.substring(0, 45)}...</span>
+                </div>
+
+                {/* Items Count */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#555", fontSize: "0.9rem" }}>
+                  <FaBox color="#4b929d" size={14} />
+                  <span>{order.items?.length || 0} item{order.items?.length !== 1 ? 's' : ''}</span>
+                </div>
+
+                {/* Ordered Time */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#555", fontSize: "0.85rem" }}>
+                  <FaClock color="#4b929d" size={14} />
+                  <span>{order.orderedAt}</span>
+                </div>
+
+                {/* Price Summary */}
+                <div style={{
+                  paddingTop: "8px",
+                  borderTop: "1px solid #eee",
+                  fontWeight: "600",
+                  display: "flex",
+                  justifyContent: "space-between"
+                }}>
+                  <span>Total:</span>
+                  <span style={{ color: "#4b929d", fontSize: "1.1rem" }}>₱{order.total?.toFixed(2) || "0.00"}</span>
+                </div>
+
+                {/* Click to View Details */}
+                <div style={{
+                  textAlign: "center",
+                  fontSize: "0.8rem",
+                  color: "#4b929d",
+                  marginTop: "4px",
+                  fontWeight: "500",
+                  fontStyle: "italic"
+                }}>
+                  Click to view full details
                 </div>
               </Card>
             ))
           )}
         </div>
+
+        {/* ORDER DETAILS MODAL */}
+        <Modal 
+          show={showOrderModal} 
+          onHide={() => setShowOrderModal(false)}
+          size="lg"
+          scrollable
+          centered
+          className="order-details-modal"
+        >
+          <Modal.Header closeButton style={{ backgroundColor: "#f8f9fa", borderBottom: "2px solid #4b929d" }}>
+            <Modal.Title style={{ fontWeight: "700", color: "#2c3e50" }}>
+              Order #{selectedOrder?.id}
+            </Modal.Title>
+          </Modal.Header>
+          <Modal.Body style={{ padding: "24px" }}>
+            {selectedOrder && (
+              <div className="order-modal-content">
+                {/* Status */}
+                <div style={{ marginBottom: "20px" }}>
+                  <div style={{ fontSize: "0.85rem", color: "#666", fontWeight: "500", marginBottom: "4px" }}>STATUS</div>
+                  <span style={{
+                    fontWeight: "600",
+                    fontSize: "0.95rem",
+                    color: getStatusStyle(selectedOrder.currentStatus).color,
+                    backgroundColor: getStatusStyle(selectedOrder.currentStatus).backgroundColor,
+                    padding: "6px 12px",
+                    borderRadius: "4px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}>
+                    {statusIcons[selectedOrder.currentStatus]} {getStatusStyle(selectedOrder.currentStatus).text}
+                  </span>
+                </div>
+
+                {/* Customer Information */}
+                <div style={{ 
+                  padding: "16px", 
+                  backgroundColor: "#f0f8fa", 
+                  borderRadius: "8px", 
+                  marginBottom: "20px",
+                  border: "1px solid #d4e8ed"
+                }}>
+                  <h6 style={{ color: "#2c3e50", marginBottom: "12px", fontWeight: "600" }}>CUSTOMER INFORMATION</h6>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "10px" }}>
+                    <FaUser color="#4b929d" size={16} />
+                    <span style={{ color: "#333" }}>{selectedOrder.customerName}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "10px" }}>
+                    <FaPhone color="#4b929d" size={16} />
+                    <span style={{ color: "#333" }}>{selectedOrder.phone || "N/A"}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+                    <FaMapMarkerAlt color="#4b929d" size={16} style={{ marginTop: "2px", flexShrink: 0 }} />
+                    <span style={{ color: "#333" }}>{selectedOrder.address}</span>
+                  </div>
+                </div>
+
+                {/* Order Time */}
+                <div style={{ marginBottom: "20px", padding: "12px", backgroundColor: "#f9f9f9", borderRadius: "6px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#555" }}>
+                    <FaClock color="#4b929d" size={16} />
+                    <span>Ordered at: <strong>{selectedOrder.orderedAt}</strong></span>
+                  </div>
+                </div>
+
+                {/* Items Section */}
+                <div style={{ marginBottom: "20px" }}>
+                  <h6 style={{ color: "#2c3e50", marginBottom: "12px", fontWeight: "600" }}>ITEMS ({selectedOrder.items?.length || 0})</h6>
+                  <div style={{ 
+                    padding: "12px", 
+                    backgroundColor: "#fafafa", 
+                    borderRadius: "6px",
+                    maxHeight: "300px",
+                    overflowY: "auto"
+                  }}>
+                    {selectedOrder.items?.map((item, i) => {
+                      const promoName = item.promo_name || item.applied_promo || "";
+                      const promoDiscount = item.discount || 0;
+                      const hasPromo = promoName || promoDiscount > 0;
+
+                      return (
+                        <div key={i} style={{ marginBottom: "12px", paddingBottom: "12px", borderBottom: i < (selectedOrder.items?.length || 0) - 1 ? "1px solid #ddd" : "none" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                            <span style={{ fontWeight: "500" }}>
+                              {item.quantity}x {item.name}
+                            </span>
+                            <span style={{ fontWeight: "600", color: "#2c3e50" }}>₱{item.price?.toFixed(2)}</span>
+                          </div>
+                          {item.addons && item.addons.length > 0 && (
+                            <ul style={{ margin: "6px 0", paddingLeft: "20px", fontSize: "0.9em", color: "#666" }}>
+                              {item.addons.map((addon, j) => (
+                                <li key={j}>+ {addon.addon_name} (₱{addon.price.toFixed(2)})</li>
+                              ))}
+                            </ul>
+                          )}
+                          {hasPromo && (
+                            <div style={{ paddingLeft: "10px", fontSize: "0.9em", color: "#28a745", fontWeight: "500", marginTop: "4px" }}>
+                              🎉 {promoName} - ₱{promoDiscount.toFixed(2)} OFF
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Price Summary */}
+                <div style={{ 
+                  padding: "12px", 
+                  backgroundColor: "#f0f8fa", 
+                  borderRadius: "6px", 
+                  marginBottom: "20px",
+                  border: "1px solid #d4e8ed"
+                }}>
+                  {selectedOrder.deliveryFee && selectedOrder.deliveryFee > 0 && (
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px", color: "#555" }}>
+                      <span>Delivery Fee:</span>
+                      <span>₱{selectedOrder.deliveryFee.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div style={{ 
+                    display: "flex", 
+                    justifyContent: "space-between", 
+                    paddingTop: "8px",
+                    borderTop: "1px solid #ddd",
+                    fontWeight: "700",
+                    fontSize: "1.1rem",
+                    color: "#2c3e50"
+                  }}>
+                    <span>Total:</span>
+                    <span style={{ color: "#4b929d" }}>₱{selectedOrder.total?.toFixed(2) || "0.00"}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </Modal.Body>
+        </Modal>
       </div>
     </div>
   );

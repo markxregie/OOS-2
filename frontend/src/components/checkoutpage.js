@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { CartContext } from '../contexts/CartContext';
 import Swal from 'sweetalert2';
@@ -7,7 +7,9 @@ const CheckoutPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { clearCart } = useContext(CartContext); // Receive deliveryFee from location.state
-  const { cartItems = [], orderType = 'Pick Up', paymentMethod = 'Cash', deliveryFee = 0 } = location.state || {};
+  const { cartItems = [], orderType = 'Pick Up', paymentMethod = 'Cash', deliveryFee = 0, isTemporaryCart = false, tempCartId = null } = location.state || {};
+
+  const orderCompletedRef = useRef(false); // Track if order was completed
 
   const [promoData, setPromoData] = useState(null);
   const [isLoadingPromos, setIsLoadingPromos] = useState(false);
@@ -27,9 +29,30 @@ const CheckoutPage = () => {
     streetName: '',
     city: '',
     barangay: '',
-    postalCode: '',
     landmark: '',
   });
+
+  // Cleanup temporary cart item when user navigates away without completing order
+  useEffect(() => {
+    // Cleanup function that runs when component unmounts
+    return () => {
+      if (isTemporaryCart && tempCartId && !orderCompletedRef.current) {
+        const cleanupTempCart = async () => {
+          try {
+            const token = localStorage.getItem('authToken');
+            await fetch(`http://localhost:7000/usercart/temp-clear/${tempCartId}`, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            console.log('🗑️ Temporary cart item cleaned up on page exit');
+          } catch (err) {
+            console.error('Error cleaning up temporary cart on exit:', err);
+          }
+        };
+        cleanupTempCart();
+      }
+    };
+  }, [isTemporaryCart, tempCartId]);
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -177,17 +200,22 @@ const CheckoutPage = () => {
   }, []);
 
   const calculateTotal = () => {
-    const subtotal = promoData 
+    // Always calculate the manual subtotal as fallback
+    const manualSubtotal = cartItems.reduce((acc, item) => {
+      const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
+      return acc + (item.price + addonSum) * item.quantity;
+    }, 0);
+    
+    // Use promoData only if it exists and has a valid final_subtotal
+    const subtotal = (promoData && promoData.final_subtotal > 0) 
       ? promoData.final_subtotal 
-      : cartItems.reduce((acc, item) => {
-          const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
-          return acc + (item.price + addonSum) * item.quantity;
-        }, 0);
+      : manualSubtotal;
     
     const currentDeliveryFee = orderType === 'Delivery' ? deliveryFee : 0;
     
     console.log('=== CALCULATE TOTAL DEBUG ===');
     console.log('promoData:', promoData);
+    console.log('Manual subtotal:', manualSubtotal);
     console.log('Subtotal used:', subtotal);
     console.log('Delivery fee:', currentDeliveryFee);
     console.log('Final total:', subtotal + currentDeliveryFee);
@@ -284,9 +312,25 @@ const confirmPayment = async (saved) => {
       console.log("POS Sale ID:", result.pos_sale_id);
       console.log("Status: Order saved to both OOS and POS as PENDING");
 
+      // Mark order as completed to prevent cleanup on unmount
+      orderCompletedRef.current = true;
+
       // Clear the cart immediately after successful order
       await clearCart();
       localStorage.removeItem("pendingOrderData");
+
+      // Clean up temporary cart if it was used
+      if (isTemporaryCart && tempCartId) {
+        try {
+          const token = localStorage.getItem('authToken');
+          await fetch(`http://localhost:7004/usercart/temp-clear/${tempCartId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+        } catch (err) {
+          console.error('Error cleaning up temporary cart:', err);
+        }
+      }
 
       Swal.fire({
         icon: 'success',

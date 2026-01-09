@@ -787,13 +787,25 @@ const MenuContent = () => {
   const showSweetAlertBuyNow = (item, notes, addOns, addOnsTotal, isBogoItem = false, bogoQuantity = 1) => {
     if (!item) return;
 
+    const initialQuantity = isBogoItem ? bogoQuantity : 1;
+    const basePrice = (item.ProductPrice ?? 0) + addOnsTotal;
+
     // Use current state for delivery/payment methods as initial values
     Swal.fire({
       title: 'Complete your purchase',
       html: `
         <div style="text-align: left;">
           <h5 class="mb-2">Item: ${item.ProductName}</h5>
-          <h5 class="mb-3">Total Payable: ₱${((item.ProductPrice ?? 0) + addOnsTotal).toFixed(2)}</h5>
+          <div class="mb-3">
+            <label class="form-label">Quantity</label>
+            <div class="input-group" style="max-width: 150px;">
+              <button class="btn btn-outline-secondary" type="button" id="decreaseQty">-</button>
+              <input type="number" class="form-control text-center" id="quantityInput" value="${initialQuantity}" min="1" ${isBogoItem ? 'readonly' : ''}>
+              <button class="btn btn-outline-secondary" type="button" id="increaseQty">+</button>
+            </div>
+            ${isBogoItem ? '<small class="text-muted">Quantity fixed for BOGO promotion</small>' : ''}
+          </div>
+          <h5 class="mb-3">Total Payable: <span id="totalPayable">₱${(basePrice * initialQuantity).toFixed(2)}</span></h5>
           <div class="mb-3">
             <label class="form-label">Delivery Method</label>
             <div class="btn-group w-100" role="group">
@@ -844,26 +856,58 @@ const MenuContent = () => {
       focusConfirm: false,
       customClass: {
         confirmButton: 'btn btn-primary',
-        // 🚀 ADDED 'ms-2' (margin-start: 2) to push it away from the Confirm/Buy Now button
         cancelButton: 'btn btn-outline-secondary ms-2', 
         popup: 'custom-sweetalert-popup',
-        // htmlContainer is intentionally omitted here to preserve default spacing
       },
       buttonsStyling: false,
+      didOpen: () => {
+        const quantityInput = document.getElementById('quantityInput');
+        const totalPayableEl = document.getElementById('totalPayable');
+        const decreaseBtn = document.getElementById('decreaseQty');
+        const increaseBtn = document.getElementById('increaseQty');
+
+        const updateTotal = () => {
+          const qty = parseInt(quantityInput.value) || 1;
+          totalPayableEl.textContent = `₱${(basePrice * qty).toFixed(2)}`;
+        };
+
+        if (!isBogoItem) {
+          decreaseBtn.addEventListener('click', () => {
+            let currentQty = parseInt(quantityInput.value) || 1;
+            if (currentQty > 1) {
+              quantityInput.value = currentQty - 1;
+              updateTotal();
+            }
+          });
+
+          increaseBtn.addEventListener('click', () => {
+            let currentQty = parseInt(quantityInput.value) || 1;
+            quantityInput.value = currentQty + 1;
+            updateTotal();
+          });
+
+          quantityInput.addEventListener('input', updateTotal);
+        } else {
+          decreaseBtn.disabled = true;
+          increaseBtn.disabled = true;
+        }
+      },
       preConfirm: () => {
         const selectedDelivery = document.querySelector('input[name="deliveryMethodSwal"]:checked').value;
-        const selectedPayment = document.querySelector('input[name="paymentMethodSwal"]:checked')?.value || 'E-Wallet'; // Default to E-Wallet if not found
-        return { delivery: selectedDelivery, payment: selectedPayment };
+        const selectedPayment = document.querySelector('input[name="paymentMethodSwal"]:checked')?.value || 'E-Wallet';
+        const quantity = parseInt(document.getElementById('quantityInput').value) || initialQuantity;
+        return { delivery: selectedDelivery, payment: selectedPayment, quantity };
       }
     }).then((result) => {
       if (result.isConfirmed) {
+        const finalQuantity = result.value.quantity;
         if (result.value.delivery === 'Delivery') {
           // Store item details and trigger location check
           setItemForLocationCheck(item);
           setNotesForLocationCheck(notes);
           setAddOnsForLocationCheck(addOns);
           setIsBogoForLocationCheck(isBogoItem);
-          setBogoQuantityForLocationCheck(bogoQuantity);
+          setBogoQuantityForLocationCheck(finalQuantity);
           setDeliveryMethod('Delivery'); // Update delivery method state
           setPaymentMethod(result.value.payment); // Update payment method state
           setIsCheckingLocation(true);
@@ -871,38 +915,89 @@ const MenuContent = () => {
           // For Pick-up, proceed directly to checkout
           setDeliveryMethod(result.value.delivery);
           setPaymentMethod(result.value.payment);
-          handleConfirmBuyNow(item, notes, addOns, addOnsTotal, result.value.delivery, result.value.payment, isBogoItem, bogoQuantity);
+          handleConfirmBuyNow(item, notes, addOns, addOnsTotal, result.value.delivery, result.value.payment, isBogoItem, finalQuantity);
         }
       }
     });
   };
 
   // Updated handler to accept add-ons details
-  const handleConfirmBuyNow = (item, notes, addOns, addOnsTotal, delivery, payment, isBogoItem = false, bogoQuantity = 1) => {
+  const handleConfirmBuyNow = async (item, notes, addOns, addOnsTotal, delivery, payment, isBogoItem = false, bogoQuantity = 1) => {
     if (item) {
-      // No need for an 'if (item)' check here, as the function is only called when item exists.
       // Check availability for Buy Now as well
       if (item.Status !== 'Available' || (item.ProductTypeName === 'Merchandise' && item.MerchandiseQuantity <= 0)) {
         toast.error(`${item.ProductName} is currently unavailable.`);
         return;
       }
 
-      const singleItemForCheckout = createSingleItemArray(item, notes, addOns, addOnsTotal, isBogoItem, bogoQuantity);
+      const token = localStorage.getItem("authToken");
+      if (!token) {
+        toast.error("You must be logged in to use Buy Now.");
+        return;
+      }
 
-      navigate('/checkout', {
-        state: {
-          cartItems: singleItemForCheckout,
-          orderType: delivery,
-          paymentMethod: payment,
+      try {
+        // Show loading state
+        Swal.fire({
+          title: 'Processing...',
+          text: 'Creating temporary cart item...',
+          allowOutsideClick: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        // Create temporary server-side cart item
+        const tempCartResponse = await fetch('http://localhost:7004/usercart/temp-add', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            product_id: item.ProductID,
+            product_name: item.ProductName,
+            product_type: item.ProductTypeName,
+            product_category: item.ProductCategory,
+            price: item.ProductPrice,
+            product_image: item.ProductImage,
+            quantity: bogoQuantity,
+            addons: addOns,
+            orderNotes: notes,
+            is_bogo_selected: isBogoItem
+          })
+        });
+
+        if (!tempCartResponse.ok) {
+          throw new Error('Failed to create temporary cart item');
         }
-      });
 
-      // Reset temporary states
-      setOrderNotes('');
-      setSelectedAddOns([]);
-      setAddOnsTotal(0);
-      setDeliveryMethod('Pick-up');
-      setPaymentMethod('E-Wallet');
+        const tempCartData = await tempCartResponse.json();
+        Swal.close();
+
+        // Navigate to checkout with temporary cart item that has a proper cart_item_id
+        navigate('/checkout', {
+          state: {
+            cartItems: [tempCartData.cart_item],  // Now has cart_item_id from server
+            orderType: delivery,
+            paymentMethod: payment,
+            deliveryFee: 0,  // For Pick-up, delivery fee is 0; for Delivery, LocationVerifyModal will handle it
+            isTemporaryCart: true,  // Mark as temporary so checkout can clean up after
+            tempCartId: tempCartData.cart_item_id  // Track temporary cart for cleanup
+          }
+        });
+
+        // Reset temporary states
+        setOrderNotes('');
+        setSelectedAddOns([]);
+        setAddOnsTotal(0);
+        setDeliveryMethod('Pick-up');
+        setPaymentMethod('E-Wallet');
+      } catch (error) {
+        console.error('Error creating temporary cart item:', error);
+        Swal.close();
+        toast.error('Failed to process Buy Now. Please try again.');
+      }
     }
   };
   const currentItems = (products[selectedCategory] && products[selectedCategory][selectedSubcategory]) || [];
