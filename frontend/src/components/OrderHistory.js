@@ -84,11 +84,12 @@ const OrderHistory = () => {
 
         data.forEach(order => {
           const deliveryFee = order.deliveryFee;
+          const discount = order.discount || 0;
           const total = order.totalAmount !== undefined ? order.totalAmount : (
             order.products.reduce((sum, p) => {
               const addonSum = p.addons ? p.addons.reduce((s, a) => s + (a.price || a.Price || 0), 0) : 0;
               return sum + (p.price + addonSum) * p.quantity;
-            }, 0) + deliveryFee
+            }, 0) + deliveryFee - discount
           );
 
           // --- 3. Map images to products in the order ---
@@ -108,6 +109,7 @@ const OrderHistory = () => {
             date: order.date,
             total,
             deliveryFee,
+            discount,
           };
           
           if (isCompleted) {
@@ -164,6 +166,7 @@ const OrderHistory = () => {
       return sum + (p.price + addonSum) * p.quantity;
     }, 0);
     const deliveryFee = order.deliveryFee;
+    const discount = order.discount || 0;
 
     const invoiceHtml = `
       <div class="receipt-container" style="font-family: 'Courier New', Courier, monospace; text-align: left; max-width: 450px; margin: auto; font-size: 1.05em;">
@@ -181,6 +184,10 @@ const OrderHistory = () => {
         ${order.products.map(p => {
           const addonsTotal = p.addons ? p.addons.reduce((s, a) => s + (a.price || a.Price || 0), 0) : 0;
           const itemTotal = (p.price + addonsTotal) * p.quantity;
+          const hasPromo = p.applied_promo || p.promo_name || p.discount > 0;
+          const promoName = p.applied_promo?.promotionName || p.promo_name || 'Promo Applied';
+          const promoDiscount = p.discount || 0;
+          
           return `
             <div class="receipt-item" style="margin-bottom: 15px;">
               <div style="display: flex; justify-content: space-between;">
@@ -196,6 +203,10 @@ const OrderHistory = () => {
                     <div style="display: flex; justify-content: space-between; padding-left: 10px;"><span>+ ${ao.addon_name || ao.AddOnName || ao.name}</span><span>₱${(ao.price || ao.Price || 0).toFixed(2)}</span></div>
                   `).join('')}
                 </div>
+              ` : ""}
+              ${hasPromo ? `
+                <div style="padding-left: 15px; font-size: 0.85em; color: #28a745; font-style: italic; margin-top: 3px;">
+                  <span>🎉 ${promoName} - ₱${promoDiscount.toFixed(2)} OFF</span>
               ` : ""}
             </div>
           `;

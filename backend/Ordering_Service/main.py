@@ -6,7 +6,7 @@ import sys
 import os
 
 sys.path.append(os.path.dirname(__file__))
-from routers import cart, delivery
+from routers import cart, delivery, debug
 from database import get_db_connection
 from routers import cart_router 
 # Import the auto-cancel function from cart router
@@ -23,9 +23,10 @@ async def lifespan(app: FastAPI):
     global _auto_cancel_task
     
     # Startup: Start the auto-cancel background task
-    print("Starting OOS auto-cancel background task...")
+    print("🚀 [SERVER RESTART DETECTED] Starting OOS auto-cancel background task...")
+    print("🚀 [SERVER RESTART DETECTED] BOGO flag logging should now be active!")
     _auto_cancel_task = asyncio.create_task(auto_cancel_expired_oos_orders())
-    print(" OOS auto-cancel task started")
+    print("✅ OOS auto-cancel task started")
     
     yield  # Application runs here
     
@@ -71,6 +72,7 @@ app.add_middleware(
 app.include_router(cart.router, prefix="/cart", tags=["Orders"])
 app.include_router(delivery.router, prefix="/delivery")
 app.include_router(cart_router.router)
+app.include_router(debug.router)
 
 # Health check
 @app.get("/")

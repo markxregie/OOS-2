@@ -14,6 +14,12 @@ const CheckoutPage = () => {
   const { cartItems = [], orderType = 'Pick Up', paymentMethod = 'Cash', deliveryFee = 0 } = location.state || {};
 >>>>>>> 6ef80c46a0a2d49786c61f9283dee6416da45324
 
+  const [promoData, setPromoData] = useState(null);
+  const [isLoadingPromos, setIsLoadingPromos] = useState(false);
+  const [availablePromos, setAvailablePromos] = useState([]);
+  const [promoCalculated, setPromoCalculated] = useState(false); // Track if promos were calculated
+  const [lastCartHash, setLastCartHash] = useState(''); // Track cart changes
+
   const [userData, setUserData] = useState({
     username: '',
     firstName: '',
@@ -71,6 +77,85 @@ const CheckoutPage = () => {
     fetchUserProfile();
   }, []);
 
+  // Fetch available promotions
+  useEffect(() => {
+    const fetchPromos = async () => {
+      const token = localStorage.getItem('authToken');
+      if (!token) return;
+
+      try {
+        const response = await fetch('http://localhost:7004/debug/promos', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setAvailablePromos(data.promos || []);
+        }
+      } catch (error) {
+        console.error('Error fetching promos:', error);
+      }
+    };
+
+    fetchPromos();
+  }, []);
+
+  // Fetch and calculate promotions - ONLY ONCE per cart state
+  useEffect(() => {
+    const calculatePromos = async () => {
+      const token = localStorage.getItem('authToken');
+      const username = userData.username || localStorage.getItem('username');
+      
+      // Create a hash of cart items to detect changes
+      const cartHash = JSON.stringify(cartItems.map(i => ({ id: i.cart_item_id, qty: i.quantity })));
+      
+      // Reset if cart changed
+      if (cartHash !== lastCartHash) {
+        setPromoCalculated(false);
+        setLastCartHash(cartHash);
+        return; // Let the next render handle the calculation
+      }
+      
+      if (!token || !username || cartItems.length === 0 || promoCalculated || isLoadingPromos) {
+        return; // Skip if already calculating or calculated
+      }
+
+      setIsLoadingPromos(true);
+      try {
+        // Pass cart item IDs and orderType to backend
+        const cartItemIds = cartItems.map(item => item.cart_item_id).join(',');
+        const response = await fetch(`http://localhost:7004/cart/calculate-promos?username=${username}&cart_item_ids=${cartItemIds}&order_type=${encodeURIComponent(orderType)}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setPromoData(data);
+          setPromoCalculated(true); // Mark as calculated
+          console.log('Promos calculated:', data);
+          console.log('Items with discounts:', data.items);
+          console.log('Subtotal discount:', data.subtotal_discount);
+          console.log('Final subtotal:', data.final_subtotal);
+        } else {
+          console.error('Failed to calculate promos');
+        }
+      } catch (error) {
+        console.error('Error calculating promos:', error);
+      } finally {
+        setIsLoadingPromos(false);
+      }
+    };
+
+    if (userData.username && cartItems.length > 0) {
+      calculatePromos();
+    }
+  }, [userData.username, cartItems, promoCalculated, isLoadingPromos, lastCartHash]);
+
   // Controlled inputs for delivery info to update userData state
   const handleInputChange = (field, value) => {
     setUserData(prev => ({
@@ -97,13 +182,22 @@ const CheckoutPage = () => {
   }, []);
 
   const calculateTotal = () => {
-    const subtotal = cartItems.reduce((acc, item) => {
-      const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
-      return acc + (item.price + addonSum) * item.quantity;
-    }, 0);
-    // Use the passed deliveryFee instead of hardcoded 50
+    const subtotal = promoData 
+      ? promoData.final_subtotal 
+      : cartItems.reduce((acc, item) => {
+          const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
+          return acc + (item.price + addonSum) * item.quantity;
+        }, 0);
+    
     const currentDeliveryFee = orderType === 'Delivery' ? deliveryFee : 0;
-    return subtotal + deliveryFee;
+    
+    console.log('=== CALCULATE TOTAL DEBUG ===');
+    console.log('promoData:', promoData);
+    console.log('Subtotal used:', subtotal);
+    console.log('Delivery fee:', currentDeliveryFee);
+    console.log('Final total:', subtotal + currentDeliveryFee);
+    
+    return subtotal + currentDeliveryFee;
   };
 
   // Replace the confirmPayment function in your CheckoutPage.js
@@ -124,13 +218,13 @@ const confirmPayment = async (saved) => {
 
   const { cartItems, orderType, paymentMethod, userData: savedUserData, deliveryNotes, reference_number } = saved;
   // Destructure deliveryFee from saved data
-  const { deliveryFee: savedDeliveryFee } = saved;
+  const { deliveryFee: savedDeliveryFee, total_discount = 0 } = saved;
   const subtotal = cartItems.reduce((acc, item) => {
     const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
     return acc + (item.price + addonSum) * item.quantity;
   }, 0);
   const currentDeliveryFee = orderType === "Delivery" ? savedDeliveryFee : 0;
-  const total = subtotal + currentDeliveryFee;
+  const total = subtotal + currentDeliveryFee - total_discount;  // Subtract discount from total
   const cartPayload = cartItems.map(item => ({
     product_id: item.product_id,
     product_name: item.product_name,
@@ -183,6 +277,7 @@ const confirmPayment = async (saved) => {
         cart_items: cartPayload,
         delivery_info: deliveryInfoPayload,
         reference_number,
+        total_discount,
       }),
     });
 
@@ -260,10 +355,14 @@ const confirmPayment = async (saved) => {
   if (!token) return;
 
   const deliveryNotes = document.getElementById("deliveryNotes")?.value || "";
-  const subtotal = cartItems.reduce((acc, item) => {
-    const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
-    return acc + (item.price + addonSum) * item.quantity;
-  }, 0);
+  const subtotal = promoData 
+    ? promoData.final_subtotal 
+    : cartItems.reduce((acc, item) => {
+        const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
+        return acc + (item.price + addonSum) * item.quantity;
+      }, 0);
+  
+  const totalDiscount = promoData ? promoData.subtotal_discount : 0;
   // Use the passed deliveryFee here
   const currentDeliveryFee = orderType === "Delivery" ? deliveryFee : 0;
   const total = subtotal + deliveryFee;
@@ -297,6 +396,7 @@ const confirmPayment = async (saved) => {
       deliveryNotes,
       reference_number,
       deliveryFee: currentDeliveryFee, // Pass deliveryFee here
+      total_discount: totalDiscount,
     };
 
     await confirmPayment(savedData);
@@ -310,6 +410,7 @@ const confirmPayment = async (saved) => {
       deliveryNotes,
       reference_number, // Missing comma here
       deliveryFee: currentDeliveryFee, // Pass deliveryFee here
+      total_discount: totalDiscount,
     }));
 
     // Use the passed deliveryFee here
@@ -339,7 +440,8 @@ const confirmPayment = async (saved) => {
           items: itemsForCheckout,
           delivery_fee: paymongoDeliveryFee, // Use paymongoDeliveryFee here
           order_type: orderType,
-          user_data: currentUserData
+          user_data: currentUserData,
+          discount: totalDiscount  // Pass the promo discount
         }),
       });
       const data = await response.json();
@@ -448,6 +550,53 @@ const confirmPayment = async (saved) => {
 
         {/* --- TOTALS SECTION (COMMON FOR BOTH) --- */}
         <div className="checkout-totals-section">
+          {isLoadingPromos && (
+            <div className="total-row text-muted">
+              <span>Calculating promotions...</span>
+            </div>
+          )}
+          
+          {/* Show original subtotal if there are promos */}
+          {promoData && promoData.subtotal_discount > 0 && (
+            <div className="total-row">
+              <span>Subtotal (before discount):</span>
+              <span>₱{cartItems.reduce((acc, item) => {
+                const addonSum = item.addons ? item.addons.reduce((sum, ao) => sum + (ao.price || ao.Price || 0), 0) : 0;
+                return acc + (item.price + addonSum) * item.quantity;
+              }, 0).toFixed(2)}</span>
+            </div>
+          )}
+          
+          {/* Show item-level discounts if available */}
+          {promoData && promoData.items && promoData.items.some(item => item.discount > 0) && (
+            <div className="total-row text-success" style={{ fontSize: '0.9em', fontStyle: 'italic' }}>
+              <span>📋 Items with discounts:</span>
+              <span></span>
+            </div>
+          )}
+          {promoData && promoData.items && promoData.items.filter(item => item.discount > 0).map((item, idx) => (
+            <div key={idx} className="total-row text-success" style={{ fontSize: '0.85em', paddingLeft: '20px' }}>
+              <span>{item.product_name}</span>
+              <span>- ₱{item.discount.toFixed(2)}</span>
+            </div>
+          ))}
+          
+          {/* Total promo discount */}
+          {promoData && promoData.subtotal_discount > 0 && (
+            <div className="total-row text-success">
+              <span><strong>🎉 Total Promo Discount:</strong></span>
+              <span><strong>- ₱{promoData.subtotal_discount.toFixed(2)}</strong></span>
+            </div>
+          )}
+          
+          {/* Subtotal after discount */}
+          {promoData && promoData.subtotal_discount > 0 && (
+            <div className="total-row">
+              <span>Subtotal (after discount):</span>
+              <span>₱{promoData.final_subtotal.toFixed(2)}</span>
+            </div>
+          )}
+          
           <div className="total-row">
             <span>Delivery Fee:</span> {/* Use the dynamically passed deliveryFee */}
             <span>₱{orderType === 'Delivery' ? deliveryFee.toFixed(2) : '0.00'}</span>
@@ -457,6 +606,76 @@ const confirmPayment = async (saved) => {
             <strong>₱{calculateTotal().toFixed(2)}</strong>
           </div>
         </div>
+
+        {/* Available Promotions Section */}
+        {availablePromos.length > 0 && (
+          <div className="mt-3 p-3 rounded" style={{ backgroundColor: '#f8f9fa', border: '1px solid #e9ecef' }}>
+            <h6 style={{ color: '#4B929D', marginBottom: '10px' }}>🎁 Available Promotions</h6>
+            {availablePromos.map((promo, idx) => {
+              const isApplied = promoData?.items?.some(item => 
+                item.applied_promo?.promotionName === promo.promotionName && item.discount > 0
+              );
+              
+              let requirement = '';
+              if (promo.minQuantity && promo.minQuantity > 1) {
+                requirement += `Min. ${promo.minQuantity} items`;
+              }
+              if (promo.applicationType === 'specific_products' && promo.selectedProducts?.length > 0) {
+                requirement += (requirement ? ' • ' : '') + `Products: ${promo.selectedProducts.join(', ')}`;
+              }
+              if (promo.applicationType === 'specific_categories' && promo.selectedCategories?.length > 0) {
+                requirement += (requirement ? ' • ' : '') + `Categories: ${promo.selectedCategories.join(', ')}`;
+              }
+              
+              let discount = '';
+              if (promo.promotionType === 'percentage') {
+                discount = `${promo.promotionValue}% OFF`;
+              } else if (promo.promotionType === 'fixed') {
+                discount = `₱${promo.promotionValue} OFF`;
+              } else if (promo.promotionType === 'bogo') {
+                discount = `Buy ${promo.buyQuantity} Get ${promo.getQuantity} ${promo.bogoDiscountValue}% OFF`;
+              }
+
+              return (
+                <div 
+                  key={idx} 
+                  className="p-2 mb-2 rounded"
+                  style={{ 
+                    backgroundColor: isApplied ? '#d4edda' : 'white',
+                    border: isApplied ? '1px solid #c3e6cb' : '1px solid #dee2e6',
+                    fontSize: '0.9em'
+                  }}
+                >
+                  <div className="d-flex justify-content-between align-items-start">
+                    <div>
+                      <strong style={{ color: isApplied ? '#155724' : '#4B929D' }}>
+                        {isApplied && '✓ '}{promo.promotionName}
+                      </strong>
+                      <div style={{ color: '#6c757d', fontSize: '0.9em' }}>
+                        {promo.description}
+                      </div>
+                      {requirement && (
+                        <div style={{ color: '#6c757d', fontSize: '0.85em', fontStyle: 'italic', marginTop: '3px' }}>
+                          {requirement}
+                        </div>
+                      )}
+                    </div>
+                    <span 
+                      className="badge" 
+                      style={{ 
+                        backgroundColor: isApplied ? '#28a745' : '#4B929D',
+                        color: 'white',
+                        padding: '5px 10px'
+                      }}
+                    >
+                      {discount}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         <div className="mt-4 p-3 bg-white rounded">
           <h2 className="mb-4 checkout-header">Delivery Information</h2>

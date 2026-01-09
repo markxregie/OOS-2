@@ -18,11 +18,10 @@ const STORE_LOCATION = {
   lng: 121.08334243448036
 };
 
-// Mapbox access token (shared)
+// Mapbox access token
 const MAPBOX_ACCESS_TOKEN = process.env.REACT_APP_MAPBOX_ACCESS_TOKEN;
 mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
 
-// Try to disable telemetry
 try {
   if (typeof mapboxgl.setTelemetryEnabled === 'function') mapboxgl.setTelemetryEnabled(false);
 } catch (err) {
@@ -35,7 +34,7 @@ const getImageUrl = (imagePath) => {
   return `http://localhost:8001${imagePath}`;
 };
 
-// Modal component definition (Order Summary for Mobile)
+// --- Mobile Order Summary Modal ---
 const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderTypeMain, handleCheckoutClick, setOrderTypeMain, deliveryFee, isStoreOpen }) => {
   const calculateTotal = (item) => {
     const basePrice = item.price || 0;
@@ -63,41 +62,43 @@ const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderT
         
         <div className="p-3">
           <div className="d-flex justify-content-center mb-4">
-            <div className="btn-group w-100" role="group" aria-label="Order Type Toggle">
+            <div className="btn-group w-100 shadow-sm" role="group">
               <button
                 type="button"
-                className={`btn ${orderTypeMain === 'Pick Up' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                className={`btn ${orderTypeMain === 'Pick Up' ? 'btn-primary' : 'btn-light'}`}
                 onClick={() => setOrderTypeMain('Pick Up')}
-                style={{ borderRadius: '8px 0 0 8px' }}
+                style={{ borderRadius: '8px 0 0 8px', border: '1px solid #dee2e6' }}
               >
                 <i className="bi bi-bag-fill me-2"></i> Pick Up
               </button>
               <button
                 type="button"
-                className={`btn ${orderTypeMain === 'Delivery' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                className={`btn ${orderTypeMain === 'Delivery' ? 'btn-primary' : 'btn-light'}`}
                 onClick={() => setOrderTypeMain('Delivery')}
-                style={{ borderRadius: '0 8px 8px 0' }}
+                style={{ borderRadius: '0 8px 8px 0', border: '1px solid #dee2e6' }}
               >
                 <i className="bi bi-truck me-2"></i> Delivery
               </button>
             </div>
           </div>
 
-          <div className="order-summary-mobile" style={{ maxHeight: '40vh', overflowY: 'auto' }}>
+          <div className="order-summary-mobile custom-scrollbar" style={{ maxHeight: '40vh', overflowY: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px' }}>
               <tbody>
                 {selectedCartItems.map((item, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid #f0f0f0' }}>
                     <td style={{ padding: '8px 0' }}>
-                      <div className="fw-semibold text-dark">{item.product_name}</div>
+                      <div className="fw-bold text-dark">{item.product_name}</div>
                       {item.addons && item.addons.length > 0 && (
-                        <small className="text-muted d-block">
-                          {item.addons.map(a => `+ ${a.addon_name || a.name}`).join(', ')}
-                        </small>
+                        <div className="small text-muted fst-italic mt-1">
+                          {item.addons.map((a, idx) => (
+                            <div key={idx}>+ {a.addon_name || a.name} (₱{a.price || a.Price})</div>
+                          ))}
+                        </div>
                       )}
                     </td>
-                    <td style={{ textAlign: 'center', padding: '8px', color: '#666' }}>x{item.quantity}</td>
-                    <td style={{ textAlign: 'right', padding: '8px', fontWeight: '600' }}>₱{calculateTotal(item).toFixed(2)}</td>
+                    <td style={{ textAlign: 'center', padding: '8px', color: '#666', verticalAlign: 'top' }}>x{item.quantity}</td>
+                    <td style={{ textAlign: 'right', padding: '8px', fontWeight: '600', verticalAlign: 'top' }}>₱{calculateTotal(item).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -123,8 +124,8 @@ const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderT
           
           <button
             type="button"
-            className="btn w-100 mt-4 py-2 fw-bold"
-            style={{ backgroundColor: '#4B929D', color: 'white', borderRadius: '10px' }}
+            className="btn w-100 mt-4 py-3 fw-bold shadow-sm checkout-btn-hover"
+            style={{ backgroundColor: '#4B929D', color: 'white', borderRadius: '12px', border: 'none' }}
             onClick={isStoreOpen ? handleCheckoutClick : null}
             disabled={selectedCartItems.length === 0 || !isStoreOpen}
           >
@@ -139,20 +140,84 @@ const OrderDetailsModal = ({ show, onClose, cartItems, selectedCartItems, orderT
 
 const Cart = () => {
   const navigate = useNavigate();
-
   const PRODUCTS_BASE_URL = "http://127.0.0.1:8001";
-
-  const { cartItems, setCartItems, updateQuantity, removeFromCart, clearCart } = useContext(CartContext);
+  const { cartItems, updateQuantity, removeFromCart, clearCart } = useContext(CartContext);
 
   const [maxQuantities, setMaxQuantities] = useState({});
   const [showOrderModal, setShowOrderModal] = useState(false);
-  const [userLocation, setUserLocation] = useState(null);
   const [isCheckingLocation, setIsCheckingLocation] = useState(false);
   const [deliverySettings, setDeliverySettings] = useState({});
   const [deliveryFee, setDeliveryFee] = useState(0);
   const [updateTimeouts, setUpdateTimeouts] = useState({});
+  const [localQuantities, setLocalQuantities] = useState({});
   const isStoreOpen = checkStoreStatus();
 
+  const [selectedCartItems, setSelectedCartItems] = useState([]);
+  const [receiptFile, setReceiptFile] = useState(null);
+  const [paymentMethodMain, setPaymentMethodMain] = useState('E-Wallet');
+  const [orderTypeMain, setOrderTypeMain] = useState('Pick Up');
+  const [promos, setPromos] = useState([]); 
+
+  // Fetch Delivery Settings
+  useEffect(() => {
+    const fetchDeliverySettings = async () => {
+      try {
+        const token = localStorage.getItem("authToken");
+        if (!token) return;
+        const response = await fetch('http://localhost:7001/delivery/settings', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const settings = await response.json();
+          setDeliverySettings(settings);
+        }
+      } catch (error) {
+        console.error('Error fetching delivery settings:', error);
+      }
+    };
+    fetchDeliverySettings();
+  }, []);
+
+  // Fetch promotions
+  useEffect(() => {
+    const fetchPromos = async () => {
+      const token = localStorage.getItem("authToken");
+      if (!token) return;
+
+      const res = await fetch("http://localhost:7004/debug/promos", {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setPromos(data.promos || []);
+      }
+    };
+
+    fetchPromos();
+  }, []);
+
+  const getPromosForCartItem = (item) => {
+    return promos.filter(promo => {
+      if (promo.applicationType === "all_products") return true;
+
+      if (
+        promo.applicationType === "specific_products" &&
+        promo.selectedProducts.includes(item.product_name)
+      ) return true;
+
+      if (
+        promo.applicationType === "specific_categories" &&
+        promo.selectedCategories.includes(item.product_category)
+      ) return true;
+
+      return false;
+    });
+  };
+
+  // Fetch Max Quantities (RESTORED)
   useEffect(() => {
     const token = localStorage.getItem("authToken");
     if (!token || cartItems.length === 0) return;
@@ -161,21 +226,14 @@ const Cart = () => {
       try {
         const headers = { Authorization: `Bearer ${token}` };
         const results = {};
-
-        // Fetch merchandise data
-        const merchandiseResponse = await fetch('http://localhost:8002/merchandise/menu', {
-          headers
-        });
-
-        if (!merchandiseResponse.ok) {
-          throw new Error('Failed to fetch merchandise data');
+        const merchandiseResponse = await fetch('http://localhost:8002/merchandise/menu', { headers });
+        let merchandiseData = [];
+        if (merchandiseResponse.ok) {
+           merchandiseData = await merchandiseResponse.json();
         }
-
-        const merchandiseData = await merchandiseResponse.json();
 
         for (const item of cartItems) {
           if (!item.product_id) continue;
-
           if (item.product_type === "Merchandise") {
             const merchandise = merchandiseData.find(m => m.MerchandiseName === item.product_name);
             if (merchandise) {
@@ -202,63 +260,37 @@ const Cart = () => {
         setMaxQuantities(results);
       } catch (error) {
         console.error('Error fetching quantities:', error);
-        toast.error('Error fetching product quantities');
       }
     };
     fetchMaxQuantities();
   }, [cartItems]);
 
-  // Fetch delivery settings
+  // Sync Local Quantities
   useEffect(() => {
-    const fetchDeliverySettings = async () => {
-      try {
-        const token = localStorage.getItem("authToken");
-        if (!token) return;
-        const response = await fetch('http://localhost:7001/delivery/settings', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (response.ok) {
-          const settings = await response.json();
-          setDeliverySettings(settings);
-        } else {
-          console.error('Failed to fetch delivery settings');
-        }
-      } catch (error) {
-        console.error('Error fetching delivery settings:', error);
-      }
-    };
-    fetchDeliverySettings();
-  }, []);
-
-
-  const [selectedCartItems, setSelectedCartItems] = useState([]);
-<<<<<<< HEAD
-
-  // Effect to clear selectedCartItems when cartItems change (e.g., after checkout removes items)
-  useEffect(() => {
-    setSelectedCartItems(prev => prev.filter(item => cartItems.some(ci => ci.cart_item_id === item.cart_item_id)));
+    const quantities = {};
+    cartItems.forEach(item => {
+      quantities[item.cart_item_id] = item.quantity;
+    });
+    setLocalQuantities(quantities);
   }, [cartItems]);
-  
-  // Existing state variables...
-=======
->>>>>>> 6ef80c46a0a2d49786c61f9283dee6416da45324
-  const [receiptFile, setReceiptFile] = useState(null);
-  const [dragActive, setDragActive] = useState(false);
-  const [showPreviewModal, setShowPreviewModal] = useState(false);
-  const [paymentMethodMain, setPaymentMethodMain] = useState('E-Wallet');
-  const [orderTypeMain, setOrderTypeMain] = useState('Pick Up'); 
 
-  const [formData, setFormData] = useState({
-    firstName: '',
-    middleName: '',
-    lastName: '',
-    address: '',
-    landmark: '',
-    contact: '',
-    email: '',
-  });
+  // Logic Helpers
+  const getTotalProductQuantity = (productId, excludeCartItemId = null) => {
+    return cartItems.reduce((total, item) => {
+      if (item.product_id === productId && item.cart_item_id !== excludeCartItemId) {
+        const qty = localQuantities[item.cart_item_id] ?? item.quantity;
+        const parsedQty = typeof qty === 'string' ? parseInt(qty, 10) || 0 : qty;
+        return total + parsedQty;
+      }
+      return total;
+    }, 0);
+  };
 
-  const [errors, setErrors] = useState({});
+  const calculateTotal = (item) => {
+    const basePrice = item.price || 0;
+    const addonsTotal = (item.addons || []).reduce((sum, ao) => sum + (ao.price || 0), 0);
+    return (basePrice + addonsTotal) * item.quantity;
+  };
 
   const handleCheckboxChange = (item, checked) => {
     if (checked) {
@@ -276,49 +308,44 @@ const Cart = () => {
     }
   };
 
+  // Handle Increment (RESTORED MAX CHECK)
   const handleIncrement = async (item) => {
     const isMerchandise = item.product_type === "Merchandise";
     const maxQty = maxQuantities[item.product_id]?.maxQuantity ?? (isMerchandise ? 0 : 999);
     const status = maxQuantities[item.product_id]?.status;
 
-    const isUnavailable = maxQty === 0 || status === "Not Available";
-    if (isUnavailable) {
+    if (maxQty === 0 || status === "Not Available") {
       toast.error("Item is unavailable.");
       return;
     }
 
-    if (item.quantity + 1 > maxQty) {
-      toast.error(`Max quantity is ${maxQty}`);
+    const totalInCart = getTotalProductQuantity(item.product_id, item.cart_item_id);
+    const currentQty = localQuantities[item.cart_item_id] ?? item.quantity;
+    const newTotal = totalInCart + currentQty + 1;
+
+    if (newTotal > maxQty) {
+      const remaining = maxQty - totalInCart - currentQty;
+      if (remaining > 0) {
+        toast.error(`Only ${remaining} available.`);
+      } else {
+        toast.error(`Maximum quantity reached.`);
+      }
       return;
     }
 
     const newQuantity = item.quantity + 1;
+    setSelectedCartItems((prev) => prev.map((s) => s.cart_item_id === item.cart_item_id ? { ...s, quantity: newQuantity } : s));
 
-    // Optimistic update - update selected items immediately
-    setSelectedCartItems((prevSelected) =>
-      prevSelected.map((selectedItem) =>
-        selectedItem.cart_item_id === item.cart_item_id
-          ? { ...selectedItem, quantity: newQuantity }
-          : selectedItem
-      )
-    );
-
-    // Debounce backend update - clear existing timeout and set new one
-    if (updateTimeouts[item.cart_item_id]) {
-      clearTimeout(updateTimeouts[item.cart_item_id]);
-    }
+    if (updateTimeouts[item.cart_item_id]) clearTimeout(updateTimeouts[item.cart_item_id]);
 
     const timeoutId = setTimeout(() => {
-      updateQuantity(item.cart_item_id, newQuantity).catch(err => {
-        console.error("Failed to update quantity:", err);
-        toast.error("Failed to update quantity");
-      });
+      updateQuantity(item.cart_item_id, newQuantity).catch(err => console.error(err));
       setUpdateTimeouts(prev => {
         const newTimeouts = { ...prev };
         delete newTimeouts[item.cart_item_id];
         return newTimeouts;
       });
-    }, 500); // Wait 500ms after last click
+    }, 500);
 
     setUpdateTimeouts(prev => ({ ...prev, [item.cart_item_id]: timeoutId }));
   };
@@ -326,416 +353,103 @@ const Cart = () => {
   const handleDecrement = async (item) => {
     if (item.quantity > 1) {
       const newQuantity = item.quantity - 1;
+      setSelectedCartItems(prev => prev.map(s => s.cart_item_id === item.cart_item_id ? { ...s, quantity: newQuantity } : s));
 
-      // Optimistic update - update selected items immediately
-      setSelectedCartItems(prevSelected => {
-        return prevSelected.map(selectedItem => {
-          if (selectedItem.cart_item_id === item.cart_item_id) {
-            return { ...selectedItem, quantity: newQuantity };
-          }
-          return selectedItem;
-        });
-      });
-
-      // Debounce backend update - clear existing timeout and set new one
-      if (updateTimeouts[item.cart_item_id]) {
-        clearTimeout(updateTimeouts[item.cart_item_id]);
-      }
+      if (updateTimeouts[item.cart_item_id]) clearTimeout(updateTimeouts[item.cart_item_id]);
 
       const timeoutId = setTimeout(() => {
-        updateQuantity(item.cart_item_id, newQuantity).catch(err => {
-          console.error("Failed to update quantity:", err);
-          toast.error("Failed to update quantity");
-        });
+        updateQuantity(item.cart_item_id, newQuantity).catch(err => console.error(err));
         setUpdateTimeouts(prev => {
           const newTimeouts = { ...prev };
           delete newTimeouts[item.cart_item_id];
           return newTimeouts;
         });
-      }, 500); // Wait 500ms after last click
+      }, 500);
 
       setUpdateTimeouts(prev => ({ ...prev, [item.cart_item_id]: timeoutId }));
     }
   };
 
+  const handleQuantityInput = (item, value) => {
+    if (value === '') {
+      setLocalQuantities(prev => ({ ...prev, [item.cart_item_id]: '' }));
+      return;
+    }
+    const numValue = parseInt(value, 10);
+    if (isNaN(numValue)) return;
+    setLocalQuantities(prev => ({ ...prev, [item.cart_item_id]: value }));
+  };
+
+  const handleQuantityBlur = async (item) => {
+    const value = localQuantities[item.cart_item_id];
+    if (value === '' || parseInt(value, 10) < 1) {
+      setLocalQuantities(prev => ({ ...prev, [item.cart_item_id]: 1 }));
+      if (item.quantity !== 1) await updateQuantity(item.cart_item_id, 1);
+      return;
+    }
+    const numValue = parseInt(value, 10);
+    const isMerchandise = item.product_type === "Merchandise";
+    const maxQty = maxQuantities[item.product_id]?.maxQuantity ?? (isMerchandise ? 0 : 999);
+    
+    const totalInCart = getTotalProductQuantity(item.product_id, item.cart_item_id);
+    const newTotal = totalInCart + numValue;
+    
+    let finalQuantity = numValue;
+    if (newTotal > maxQty) {
+      const remaining = maxQty - totalInCart;
+      finalQuantity = remaining > 0 ? remaining : item.quantity;
+      toast.error(`Max quantity reached.`);
+      setLocalQuantities(prev => ({ ...prev, [item.cart_item_id]: finalQuantity }));
+    }
+
+    if (finalQuantity !== item.quantity) {
+      try {
+        await updateQuantity(item.cart_item_id, finalQuantity);
+      } catch (err) {
+        setLocalQuantities(prev => ({ ...prev, [item.cart_item_id]: item.quantity }));
+      }
+    }
+  };
+
+  const handleQuantityKeyPress = (e, item) => {
+    if (e.key === 'Enter') e.target.blur();
+  };
+
   const handleRemove = (index) => {
     const item = cartItems[index];
     removeFromCart(item.cart_item_id);
-    setSelectedCartItems(prev => prev.filter(selectedItem => selectedItem.cart_item_id !== item.cart_item_id));
+    setSelectedCartItems(prev => prev.filter(s => s.cart_item_id !== item.cart_item_id));
   };
-
-  const calculateTotal = (item) => {
-    const basePrice = item.price || 0;
-    const addonsTotal = (item.addons || []).reduce((sum, ao) => sum + (ao.price || 0), 0);
-    return (basePrice + addonsTotal) * item.quantity;
-  };
-
-  const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
-    const R = 6371; 
-    const dLat = (lat2 - lat1) * (Math.PI / 180);
-    const dLon = (lon2 - lon1) * (Math.PI / 180);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const d = R * c; 
-    return d;
-  };
-
-  // --- REVISED LOCATION ALERT WITH CLEAR COST BREAKDOWN ---
-  const showLocationCheckAlert = () => {
-    // 1. Calculate Subtotal first (from selected items)
-    const itemsSubtotal = selectedCartItems.reduce((acc, item) => {
-        const basePrice = item.price || 0;
-        const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || 0), 0);
-        return acc + (basePrice + addonsTotal) * item.quantity;
-    }, 0);
-
-    Swal.fire({
-      title: 'Verifying Location',
-      // Customized styling for the container
-      customClass: {
-          popup: 'location-verify-modal',
-          title: 'location-verify-title',
-          content: 'location-verify-content',
-          confirmButton: 'location-verify-confirm',
-          cancelButton: 'location-verify-cancel'
-      },
-      html: `
-        <div style="border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 15px;">
-            <div id="map-container" style="height: 300px; width: 100%;"></div>
-        </div>
-        <div id="swal-map-msg" style="font-size: 1rem; color: #555;">
-             <div class="spinner-border text-primary spinner-border-sm me-2" role="status"></div>
-             Locating you...
-        </div>
-      `,
-      showConfirmButton: true, 
-      showCancelButton: true,  
-      confirmButtonText: 'Loading...', 
-      cancelButtonText: 'Cancel',      
-      allowOutsideClick: false,
-      didOpen: () => {
-        Swal.showLoading();
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            const { latitude, longitude } = position.coords;
-            Swal.getConfirmButton().disabled = true;
-            Swal.getCancelButton().disabled = true;
-
-            const userLat = latitude;
-            const userLng = longitude;
-
-            const distance = getDistanceFromLatLonInKm(
-              latitude,
-              longitude,
-              STORE_LOCATION.lat,
-              STORE_LOCATION.lng
-            );
-
-            const maxRadiusKm = deliverySettings.MaxRadiusKm || 8.0;
-            const isWithinRange = distance <= maxRadiusKm;
-
-            // Calculate delivery fee
-            let calculatedFee = 0;
-            if (deliverySettings.BaseFee && deliverySettings.BaseDistanceKm && deliverySettings.ExtraFeePerKm) {
-              calculatedFee = deliverySettings.BaseFee;
-              if (distance > deliverySettings.BaseDistanceKm) {
-                const extraDistance = distance - deliverySettings.BaseDistanceKm;
-                calculatedFee += extraDistance * deliverySettings.ExtraFeePerKm;
-              }
-              if (deliverySettings.IsSurgePricingActive) {
-                calculatedFee += deliverySettings.SurgeFlatFee || 20; 
-              }
-            } else {
-              calculatedFee = 50; 
-            }
-            setDeliveryFee(calculatedFee);
-
-            // Calculate Grand Total
-            const grandTotal = itemsSubtotal + calculatedFee;
-
-            Swal.getTitle().innerText = 'Location Verified';
-            Swal.hideLoading(); 
-
-            // Create Map (GeoJSON) logic remains the same...
-            const createGeoJSONCircle = (center, radiusInMeters, points = 64) => { 
-              const coords = [];
-              const [cx, cy] = center;
-              for (let i = 0; i < points; i++) {
-                const theta = (i / points) * (2 * Math.PI);
-                const dx = radiusInMeters * Math.cos(theta);
-                const dy = radiusInMeters * Math.sin(theta);
-                const lng = cx + (dx / (111320 * Math.cos(cy * (Math.PI / 180))));
-                const lat = cy + (dy / 110540);
-                coords.push([lng, lat]);
-              }
-              coords.push(coords[0]);
-              return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [coords] } };
-            };
-
-            const maxRadiusMeters = (deliverySettings.MaxRadiusKm || 8.0) * 1000;
-            const baseRadiusMeters = (deliverySettings.BaseDistanceKm || 3.0) * 1000;
-
-            if (![STORE_LOCATION.lng, STORE_LOCATION.lat, userLng, userLat].every(v => Number.isFinite(v))) {
-              const msgEl = document.getElementById('swal-map-msg');
-              if (msgEl) msgEl.innerText = 'Could not determine coordinates. Please try again.';
-              return;
-            }
-
-            if (!mapboxgl.accessToken) {
-              const msgEl = document.getElementById('swal-map-msg');
-              if (msgEl) msgEl.innerText = 'Map configuration error.';
-              return;
-            }
-
-            let map; 
-            try {
-              map = new mapboxgl.Map({
-                container: 'map-container', 
-                style: 'mapbox://styles/mapbox/streets-v11',
-                center: [STORE_LOCATION.lng, STORE_LOCATION.lat],
-                zoom: 13
-              });
-              map.addControl(new mapboxgl.NavigationControl());
-            } catch (mapInitError) {
-              const msgEl = document.getElementById('swal-map-msg');
-              if (msgEl) msgEl.innerText = 'Failed to initialize map.';
-              return;
-            }
-
-            map.on('load', async () => {
-              try {
-                new mapboxgl.Marker({ color: 'red' }).setLngLat([STORE_LOCATION.lng, STORE_LOCATION.lat]).setPopup(new mapboxgl.Popup().setText('Store Location')).addTo(map);
-                new mapboxgl.Marker({ color: 'blue' }).setLngLat([userLng, userLat]).setPopup(new mapboxgl.Popup().setText('Your Location')).addTo(map);
-
-                // Base distance circle (green)
-                const baseCircleFeature = createGeoJSONCircle([STORE_LOCATION.lng, STORE_LOCATION.lat], baseRadiusMeters);
-                if (!map.getSource('base-radius')) {
-                  map.addSource('base-radius', { type: 'geojson', data: baseCircleFeature });
-                  map.addLayer({ id: 'base-radius-fill', type: 'fill', source: 'base-radius', paint: { 'fill-color': '#2ecc71', 'fill-opacity': 0.2 } });
-                  map.addLayer({ id: 'base-radius-line', type: 'line', source: 'base-radius', paint: { 'line-color': '#27ae60', 'line-width': 2, 'line-dasharray': [2, 2] } });
-                }
-
-                // Max distance circle (red)
-                const maxCircleFeature = createGeoJSONCircle([STORE_LOCATION.lng, STORE_LOCATION.lat], maxRadiusMeters);
-                if (!map.getSource('max-radius')) {
-                  map.addSource('max-radius', { type: 'geojson', data: maxCircleFeature });
-                  map.addLayer({ id: 'max-radius-fill', type: 'fill', source: 'max-radius', paint: { 'fill-color': '#e74c3c', 'fill-opacity': 0.15 } });
-                  map.addLayer({ id: 'max-radius-line', type: 'line', source: 'max-radius', paint: { 'line-color': '#c0392b', 'line-width': 2, 'line-dasharray': [4, 4] } });
-                }
-
-                const bounds = new mapboxgl.LngLatBounds();
-                bounds.extend([STORE_LOCATION.lng, STORE_LOCATION.lat]);
-                bounds.extend([userLng, userLat]);
-                map.fitBounds(bounds, { padding: 40, maxZoom: 15 });
-                setTimeout(() => map.resize(), 200);
-
-                const dirRes = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${STORE_LOCATION.lng},${STORE_LOCATION.lat};${userLng},${userLat}?geometries=geojson&access_token=${MAPBOX_ACCESS_TOKEN}`);
-                if (dirRes.ok) {
-                  const dirData = await dirRes.json();
-                  if (dirData.routes && dirData.routes[0]) {
-                    const route = dirData.routes[0].geometry;
-                    if (map.getSource('route')) {
-                      map.getSource('route').setData({ type: 'Feature', geometry: route });
-                    } else {
-                      map.addSource('route', { type: 'geojson', data: { type: 'Feature', geometry: route } });
-                      map.addLayer({ id: 'route-line', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#3b82f6', 'line-width': 4 } });
-                    }
-
-                    const distanceKm = (dirData.routes[0].distance / 1000).toFixed(2);
-                    const maxRadiusKm = deliverySettings.MaxRadiusKm || 8.0;
-                    const exceedsMaxRadius = distance > maxRadiusKm;
-
-                    // --- UPDATED HTML FOR CLARITY ---
-                    const msgElWithWarning = document.getElementById('swal-map-msg');
-                    if (msgElWithWarning) {
-                      msgElWithWarning.innerHTML = `
-                        <div style="text-align: left; background: #fff; padding: 10px 0;">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.95rem;">
-                                <span class="text-muted">Distance:</span>
-                                <strong>${distanceKm} km</strong>
-                            </div>
-                            <hr style="margin: 5px 0; border-color: #eee;">
-                            
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.95rem;">
-                                <span class="text-muted">Order Subtotal:</span>
-                                <span>₱${itemsSubtotal.toFixed(2)}</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.95rem; color: #d35400;">
-                                <span>+ Delivery Fee:</span>
-                                <strong>₱${calculatedFee.toFixed(2)}</strong>
-                            </div>
-                            <hr style="margin: 5px 0; border-color: #ddd;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 1.2rem;">
-                                <strong>Total to Pay:</strong>
-                                <strong style="color: #4B929D;">₱${grandTotal.toFixed(2)}</strong>
-                            </div>
-                        </div>
-                        
-                        ${exceedsMaxRadius ? `
-                            <div class="alert alert-warning d-flex align-items-center mt-3 mb-0" role="alert" style="font-size: 0.85em; text-align: left; border-left: 4px solid #ffc107;">
-                                <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
-                                <div>
-                                    <strong>Extended Range Warning</strong><br/>
-                                    This delivery distance exceeds our maximum radius of ${maxRadiusKm}km radius. Food quality may be affected due to extended travel time.
-                                </div>
-                            </div>` : ''
-                        }
-                      `;
-                    }
-                    Swal.showValidationMessage('');
-                    Swal.getActions().style.display = 'flex';
-
-                    Swal.getConfirmButton().disabled = false;
-                    Swal.getCancelButton().disabled = false;
-                    Swal.getConfirmButton().innerText = 'Yes, Proceed to Checkout';
-                    Swal.getConfirmButton().style.backgroundColor = '#4b929d';
-                    Swal.getCancelButton().innerText = 'Cancel';
-                    Swal.getCancelButton().style.backgroundColor = '#6c757d';
-
-                    const confirmButton = Swal.getConfirmButton();
-                    confirmButton.onclick = () => {
-                      Swal.close();
-                      navigate('/checkout', { state: { cartItems: selectedCartItems, orderType: orderTypeMain, paymentMethod: paymentMethodMain, deliveryFee: calculatedFee } });
-                    };
-
-                    const cancelButton = Swal.getCancelButton();
-                    cancelButton.onclick = () => {
-                      Swal.close();
-                    };
-                  }
-                }
-              } catch (err) {
-                console.error('Mapbox render error', err);
-              }
-            });
-          },
-          (error) => {
-            let title = 'Location Access Denied';
-            let text = 'We need your location to check for delivery eligibility. Please allow location access and try again.';
-            if (error.code === error.PERMISSION_DENIED) {
-                title = 'Location Permission Blocked';
-                text = `
-                    <div class="text-start">
-                        It looks like you've previously blocked location access for this site. 
-                        <br/><br/> 
-                        To proceed with delivery, please go to your browser's site settings and change the location permission to <strong>"Allow"</strong> or <strong>"Ask"</strong>.
-                    </div>
-                `;
-            }
-            Swal.fire({
-                icon: 'error',
-                title: title,
-                html: text,
-                confirmButtonColor: '#dc3545'
-            });
-          }
-        );
-      }
-    });
-  };
-
 
   const handleCheckoutClick = async (e) => {
     e.preventDefault();
     if (!checkStoreStatus()) {
-      toast.error("Store is closed. Cannot proceed to checkout.");
+      toast.error("Store is closed.");
       return;
     }
     if (selectedCartItems.length === 0) {
-      toast.error("Please select items to checkout.");
+      toast.error("Please select items.");
       return;
     }
-<<<<<<< HEAD
-
-    // Clear selected items after checkout to prevent them from staying selected
-    setSelectedCartItems([]);
-
-    // This logic now applies to both mobile and desktop checkout flows
-=======
-    const token = localStorage.getItem("authToken");
   
->>>>>>> 6ef80c46a0a2d49786c61f9283dee6416da45324
     if (orderTypeMain === 'Delivery') {
       if (!window.isSecureContext) {
         Swal.fire({
           icon: 'warning',
           title: 'Insecure Connection',
-          html: "Location services require a secure (HTTPS) connection. Please access this site via <b>localhost</b> or a secure domain.",
+          html: "Location services require HTTPS.",
         });
         return;
       }
-      setShowOrderModal(false); // Close the summary modal
-      setIsCheckingLocation(true); // Show the location verification modal
+      setShowOrderModal(false);
+      // FIXED: Removed manual overlay handling here to prevent stuck loading screen
+      setIsCheckingLocation(true); 
     } else {
       setShowOrderModal(false);
       navigate('/checkout', { state: { cartItems: selectedCartItems, orderType: orderTypeMain, paymentMethod: paymentMethodMain, deliveryFee: 0 } });
     }
   };
-  
-  const handleFileChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setReceiptFile(e.target.files[0]);
-    }
-  };
 
-  const handleDrag = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
-    }
-  }, []);
-
-  const handleDrop = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setReceiptFile(e.dataTransfer.files[0]);
-    }
-  }, []);
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const validate = () => {
-    const newErrors = {};
-    if (!formData.firstName.trim()) newErrors.firstName = 'First name is required';
-    if (!formData.lastName.trim()) newErrors.lastName = 'Last name is required';
-    if (!formData.address.trim()) newErrors.address = 'Address is required';
-    if (!formData.landmark.trim()) newErrors.landmark = 'Landmark is required';
-    if (!formData.contact.trim()) {
-      newErrors.contact = 'Contact number is required';
-    } else if (!/^\d{11}$/.test(formData.contact)) {
-      newErrors.contact = 'Contact number must be 11 digits';
-    }
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Invalid email address';
-    }
-    return newErrors;
-  };
-
-  const handleConfirmOrder = () => {
-    toast.success('Order confirmed! Redirecting...');
-    setSelectedCartItems([]);
-    setTimeout(() => {
-      window.location.href = '/profile/orderhistory';
-    }, 2000);
-  };
-
-  // Calculate total for the floating button preview
   const subtotalForButton = selectedCartItems.reduce((acc, item) => {
     const basePrice = item.price || 0;
     const addonsTotal = (item.addons || []).reduce((sum, addon) => sum + (addon.price || addon.Price || 0), 0);
@@ -745,366 +459,432 @@ const Cart = () => {
 
   return (
     <>
-    <section className="container-fluid py-3 px-2 px-md-5 mt-5 pt-5" style={{ backgroundColor: '#eaf4f6', minHeight: '100vh' }}>
-      {isCheckingLocation && (
-        <div className="location-loader-overlay">
-            <div className="spinner-border text-primary" role="status">
-                <span className="visually-hidden">Loading...</span>
-            </div>
-            <p className="mt-2">Checking your location for delivery...</p>
-        </div>)}
-      <div className="row">
-        {/* Cart Section (Always visible) */}
+    <section className="container-fluid py-4 px-2 px-md-5 mt-5" style={{ backgroundColor: '#f0f8fa', minHeight: '100vh' }}>
+      
+      {/* FIXED: Removed the stuck location-loader-overlay div here */}
+      
+      <div className="row g-4 pt-4">
+        {/* Left: Cart Items */}
         <div className="col-lg-8 mb-4">
-          <div className="bg-white p-4 shadow-sm" style={{ borderRadius: '20px' }}>
-            <div className="d-flex justify-content-between align-items-center mb-3">
-              <h3 className="fw-bold" style={{ color: '#4B929D' }}>Cart</h3>
-              <span className="fw-semibold">{cartItems.length} Items</span>
+          <div className="bg-white p-4 shadow-sm border-0" style={{ borderRadius: '16px' }}>
+            <div className="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
+              <h3 className="fw-bold m-0" style={{ color: '#4B929D' }}>My Cart</h3>
+              <span className="badge bg-light text-dark fs-6 px-3 py-2 rounded-pill border">{cartItems.length} Items</span>
             </div>
 
-            {/* Desktop/Large Screen Cart Table (d-none d-lg-block to hide on mobile) */}
-            <div className="table-responsive d-none d-lg-block">
-              <table className="table align-middle" style={{ tableLayout: 'fixed' }}>
+            {/* Desktop Table */}
+            <div className="table-responsive d-none d-lg-block custom-scrollbar">
+              <table className="table align-middle table-hover" style={{ tableLayout: 'fixed' }}>
                 <colgroup>
-                  <col style={{ width: '30px' }} /> 
-                  <col style={{ width: '18%' }} /> 
-                  <col style={{ width: '14%' }} /> 
-                  <col style={{ width: '14%' }} /> 
+                  <col style={{ width: '40px' }} /> 
+                  <col style={{ width: '30%' }} /> 
+                  <col style={{ width: '15%' }} /> 
+                  <col style={{ width: '15%' }} /> 
+                  <col style={{ width: '15%' }} /> 
                   <col style={{ width: '10%' }} /> 
                   <col style={{ width: '10%' }} /> 
-                  <col style={{ width: '10%' }} /> 
-                  <col style={{ width: '10%' }} /> 
+                  <col style={{ width: '5%' }} /> 
                 </colgroup>
-                <thead>
-                  <tr style={{ color: '#4B929D', verticalAlign: 'middle' }}>
-                    <th style={{ textAlign: 'center' }}>
+                <thead className="bg-light">
+                  <tr style={{ color: '#666', fontSize: '0.9rem', textTransform: 'uppercase' }}>
+                    <th style={{ textAlign: 'center', borderRadius: '10px 0 0 10px' }}>
                       <input
                         type="checkbox"
-                        style={{ margin: 0 }}
+                        className="form-check-input"
                         onChange={(e) => handleSelectAllChange(e.target.checked)}
                         checked={selectedCartItems.length === cartItems.length && cartItems.length > 0}
                       />
                     </th>
                     <th>Product</th>
-                    <th>Product Type</th>
-                    <th>Product Category</th>
+                    <th>Type</th>
+                    <th>Category</th>
                     <th style={{ textAlign: 'center' }}>Qty</th>
                     <th style={{ textAlign: 'right' }}>Price</th>
                     <th style={{ textAlign: 'right' }}>Total</th>
-                    <th></th>
+                    <th style={{ borderRadius: '0 10px 10px 0' }}></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {cartItems.map((item, i) => (
-                    <tr key={i}>
+                  {cartItems.map((item, i) => {
+                    const itemPromos = getPromosForCartItem(item);
+                    return (
+                    <tr key={i} className="cart-row">
                       <td style={{ textAlign: 'center' }}>
                         <input
                           type="checkbox"
+                          className="form-check-input"
                           onChange={(e) => handleCheckboxChange(item, e.target.checked)}
                           checked={selectedCartItems.some(ci => ci.cart_item_id === item.cart_item_id)}
                         />
                       </td>
                       <td>
-                        <div className="d-flex align-items-center">
+                        <div className="d-flex align-items-center py-2">
                           <img
                             src={getImageUrl(item.product_image)}
                             alt={item.product_name}
-                            className="img-fluid me-2 rounded"
-                            style={{ height: '60px', width: '60px', objectFit: 'cover' }}
+                            className="img-fluid me-3 rounded-3 shadow-sm"
+                            style={{ height: '70px', width: '70px', objectFit: 'cover' }}
                           />
                           <div>
-                            <div className="fw-semibold">{item.product_name}</div>
+                            <div className="fw-bold text-dark mb-1">{item.product_name}</div>
+                            {item.is_bogo_selected && (
+                              <span className="badge bg-success mb-2" style={{ fontSize: '0.7rem' }}>
+                                🎉 BOGO Activated
+                              </span>
+                            )}
                             {item.addons && item.addons.length > 0 && (
-                              <ul className="cart-addons mb-0 ps-3">
+                              <ul className="cart-addons mb-0 ps-3 list-unstyled">
                                 {item.addons.map((addon, idx) => (
-                                  <li key={idx} style={{ fontSize: "0.85em", color: addon.status === 'Unavailable' ? '#999' : '#666', fontStyle: addon.status === 'Unavailable' ? 'italic' : 'normal' }}>
+                                  <li key={idx} className="small text-muted fst-italic">
                                     + {addon.addon_name || addon.AddOnName || addon.name} (₱{addon.price || addon.Price || 0})
                                   </li>
                                 ))}
                               </ul>
                             )}
+                            {itemPromos.length > 0 && (
+                              <div className="cart-promo-preview mt-2">
+                                <small className="promo-hint text-success fw-bold">
+                                  🎉 {itemPromos.length} promo{itemPromos.length > 1 ? "s" : ""} available
+                                </small>
+                                <div className="promo-preview-badges mt-1">
+                                  {itemPromos.map((promo, idx) => (
+                                    <span key={idx} className="promo-badge-mini me-1">
+                                      {promo.promotionType === "fixed" && `₱${promo.promotionValue} OFF`}
+                                      {promo.promotionType === "percentage" && `${promo.promotionValue}% OFF`}
+                                      {promo.promotionType === "bogo" && `BUY ${promo.buyQuantity} GET ${promo.getQuantity}`}
+                                    </span>
+                                  ))}
+                                </div>
+                                <small className="promo-note text-muted fst-italic">
+                                  Best promo will be applied at checkout
+                                </small>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
-                      <td style={{ verticalAlign: 'middle' }}>{item.product_type || '-'}</td>
-                      <td style={{ verticalAlign: 'middle' }}>{item.product_category || '-'}</td>
+                      <td className="text-secondary">{item.product_type || '-'}</td>
+                      <td className="text-secondary">{item.product_category || '-'}</td>
                       <td style={{ textAlign: 'center' }}>
-                        <div className="quantity-control">
-                          <button className="btn btn-sm rounded-circle" onClick={() => handleDecrement(item)}>-</button>
-                          <span className="mx-2">{item.quantity}</span>
-                          <button
-                            className="btn btn-sm rounded-circle"
-                            onClick={() => handleIncrement(item)}
-                            disabled={
-                              item.product_type === "Merchandise"
-                                ? item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 0)
-                                : item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 999)
-                            }
-                          >
-                            +
-                          </button>
-                          {(() => {
+                        {item.is_bogo_selected ? (
+                          <div className="text-center">
+                            <div className="fw-bold" style={{ color: '#28a745', fontSize: '1.1rem' }}>{item.quantity}</div>
+                            <small className="text-muted" style={{ fontSize: '0.7rem' }}>BOGO Fixed</small>
+                          </div>
+                        ) : (
+                          <div className="quantity-control d-flex align-items-center justify-content-center bg-light rounded-pill p-1 border">
+                            <button className="btn btn-sm btn-icon rounded-circle" onClick={() => handleDecrement(item)}><i className="bi bi-dash"></i></button>
+                            <input
+                              type="text"
+                              className="quantity-input mx-1 bg-transparent border-0 text-center fw-bold"
+                              value={localQuantities[item.cart_item_id] ?? item.quantity}
+                              onChange={(e) => handleQuantityInput(item, e.target.value)}
+                              onBlur={() => handleQuantityBlur(item)}
+                              onKeyPress={(e) => handleQuantityKeyPress(e, item)}
+                              style={{ width: '40px' }}
+                            />
+                            <button
+                              className="btn btn-sm btn-icon rounded-circle"
+                              onClick={() => handleIncrement(item)}
+                              disabled={
+                                item.product_type === "Merchandise"
+                                  ? item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 0)
+                                  : item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 999)
+                              }
+                            >
+                              <i className="bi bi-plus"></i>
+                            </button>
+                          </div>
+                        )}
+                        {/* RESTORED MAX QUANTITY DISPLAY */}
+                        {(() => {
                             const isMerchandise = item.MerchandiseQuantity !== undefined;
                             const maxQty = isMerchandise ? item.MerchandiseQuantity : (maxQuantities[item.product_id]?.maxQuantity ?? 999);
                             const isUnavailable = isMerchandise && (maxQty === 0 || item.Status === "Not Available");
                             const showMax = isMerchandise || (!isMerchandise && maxQty !== 999);
+                            
                             if (showMax) {
+                              const totalInCart = getTotalProductQuantity(item.product_id, item.cart_item_id);
+                              const currentQty = localQuantities[item.cart_item_id] ?? item.quantity;
+                              const remaining = maxQty - totalInCart - (typeof currentQty === 'string' ? parseInt(currentQty, 10) || 0 : currentQty);
+                              
                               return (
-                                <div className="max-info text-warning small">
-                                  Max: {maxQty}
+                                <div className="max-info text-warning small mt-1">
+                                  Max: {maxQty} {totalInCart > 0 && `(${remaining} left)`}
                                   {isUnavailable && <span className="text-danger ms-1"> (Unavailable)</span>}
                                 </div>
                               );
                             }
                             return null;
                           })()}
-                        </div>
                       </td>
-                      <td style={{ textAlign: 'right' }}>
+                      <td style={{ textAlign: 'right' }} className="fw-semibold text-secondary">
                         ₱{(item.price + (item.addons?.reduce((sum, a) => sum + (a.price || 0), 0) || 0)).toFixed(2)}
                       </td>
-                      <td style={{ textAlign: 'right' }}>₱{calculateTotal(item).toFixed(2)}</td>
+                      <td style={{ textAlign: 'right' }} className="fw-bold text-dark">₱{calculateTotal(item).toFixed(2)}</td>
                       <td style={{ textAlign: 'center' }}>
-                        <button className="btn btn-link text-danger p-0" onClick={() => handleRemove(i)}>
-                          <i className="bi bi-trash" style={{ fontSize: '1.2rem' }}></i>
+                        <button className="btn btn-link text-danger p-0 trash-icon-hover" onClick={() => handleRemove(i)}>
+                          <i className="bi bi-trash3-fill" style={{ fontSize: '1.2rem' }}></i>
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
 
-            {/* Mobile/Small Screen Cart List/Cards (d-lg-none to hide on desktop) */}
+            {/* Mobile Cart List (Hidden on Desktop) */}
             <div className="d-lg-none">
-              <div className="mb-3 d-flex align-items-center">
+              <div className="mb-3 d-flex align-items-center bg-light p-2 rounded">
                 <input
                   type="checkbox"
-                  className="me-2"
+                  className="form-check-input me-2"
                   onChange={(e) => handleSelectAllChange(e.target.checked)}
                   checked={selectedCartItems.length === cartItems.length && cartItems.length > 0}
                 />
-                <label className="form-check-label fw-semibold">Select All</label>
+                <label className="form-check-label fw-bold text-secondary">Select All Items</label>
               </div>
-              {cartItems.map((item, i) => (
-                <div key={i} className="card mb-3 p-3 cart-item-mobile">
-                  {/* Outer flex container for checkbox, image, and details/total */}
+              {cartItems.map((item, i) => {
+                const itemPromos = getPromosForCartItem(item);
+                return (
+                <div key={i} className="card mb-3 p-3 cart-item-mobile shadow-sm border-0">
                   <div className="d-flex align-items-start flex-nowrap"> 
                     <input
                       type="checkbox"
-                      className="me-3 mt-1"
+                      className="form-check-input me-3 mt-1"
                       onChange={(e) => handleCheckboxChange(item, e.target.checked)}
                       checked={selectedCartItems.some(ci => ci.cart_item_id === item.cart_item_id)}
                     />
                     <img
                       src={getImageUrl(item.product_image)}
                       alt={item.product_name}
-                      className="img-fluid me-3 rounded"
-                      style={{ height: '70px', width: '70px', objectFit: 'cover' }}
+                      className="img-fluid me-3 rounded-3"
+                      style={{ height: '80px', width: '80px', objectFit: 'cover' }}
                     />
-                    {/* Inner container for product details and price (aligned vertically with image) */}
                     <div className="flex-grow-1 product-details-mobile w-100">
-                      <div className="fw-bold mb-1 product-name-mobile">{item.product_name}</div>
-                      <div className="text-muted small mobile-detail-text">Type: {item.product_type || '-'} | Category: {item.product_category || '-'}</div>
+                      <div className="d-flex justify-content-between align-items-start">
+                         <div>
+                           <div className="fw-bold mb-1 product-name-mobile text-dark">{item.product_name}</div>
+                           {item.is_bogo_selected && (
+                             <span className="badge bg-success" style={{ fontSize: '0.65rem' }}>
+                               🎉 BOGO Activated
+                             </span>
+                           )}
+                         </div>
+                         <button className="btn btn-link text-danger p-0 remove-btn-mobile ms-2" onClick={() => handleRemove(i)}>
+                            <i className="bi bi-trash3" style={{ fontSize: '1.1rem' }}></i>
+                         </button>
+                      </div>
+                      
+                      <div className="text-muted small mobile-detail-text mb-1">
+                        {item.product_type} | {item.product_category}
+                      </div>
+                      
                       {item.addons && item.addons.length > 0 && (
-                        <ul className="cart-addons mb-1 ps-3">
+                        <ul className="cart-addons mb-2 ps-0 list-unstyled">
                           {item.addons.map((addon, idx) => (
-                            <li key={idx} className="mobile-addon-text" style={{ color: addon.status === 'Unavailable' ? '#999' : '#666', fontStyle: addon.status === 'Unavailable' ? 'italic' : 'normal' }}>
+                            <li key={idx} className="mobile-addon-text small text-secondary">
                               + {addon.addon_name || addon.AddOnName || addon.name} (₱{addon.price || addon.Price || 0})
                             </li>
                           ))}
                         </ul>
                       )}
                       
-                      {/* MOVED TOTAL PRICE HERE (Vertically aligned with image/details) */}
-                      <div className="text-end fw-bold total-price-mobile mt-2">
-                        <span className='total-label-mobile'>Total:</span>
-                        <span className='total-value-mobile'>₱{calculateTotal(item).toFixed(2)}</span>
+                      {itemPromos.length > 0 && (
+                        <div className="cart-promo-preview mb-2">
+                          <small className="promo-hint text-success fw-bold" style={{ fontSize: '0.75rem' }}>
+                            🎉 {itemPromos.length} promo{itemPromos.length > 1 ? "s" : ""} available
+                          </small>
+                          <div className="promo-preview-badges mt-1">
+                            {itemPromos.map((promo, idx) => (
+                              <span key={idx} className="promo-badge-mini me-1" style={{ fontSize: '0.7rem' }}>
+                                {promo.promotionType === "fixed" && `₱${promo.promotionValue} OFF`}
+                                {promo.promotionType === "percentage" && `${promo.promotionValue}% OFF`}
+                                {promo.promotionType === "bogo" && `BUY ${promo.buyQuantity} GET ${promo.getQuantity}`}
+                              </span>
+                            ))}
+                          </div>
+                          <small className="promo-note text-muted fst-italic" style={{ fontSize: '0.65rem' }}>
+                            Best promo will be applied at checkout
+                          </small>
+                        </div>
+                      )}
+                      
+                      <div className="d-flex justify-content-between align-items-center mt-3">
+                        {item.is_bogo_selected ? (
+                          <div className="text-center">
+                            <div className="fw-bold" style={{ color: '#28a745', fontSize: '1rem' }}>{item.quantity}</div>
+                            <small className="text-muted" style={{ fontSize: '0.65rem' }}>BOGO Fixed</small>
+                          </div>
+                        ) : (
+                          <div className="quantity-control d-flex align-items-center bg-light rounded-pill px-2 py-1 border">
+                            <button className="btn btn-sm btn-icon p-0" onClick={() => handleDecrement(item)} style={{ width: '24px', height: '24px' }}>-</button>
+                            <input
+                              type="text"
+                              className="quantity-input mx-1 bg-transparent border-0 text-center fw-bold"
+                              value={localQuantities[item.cart_item_id] ?? item.quantity}
+                              onChange={(e) => handleQuantityInput(item, e.target.value)}
+                              onBlur={() => handleQuantityBlur(item)}
+                              style={{ width: '30px', fontSize: '0.9rem' }}
+                            />
+                            <button 
+                              className="btn btn-sm btn-icon p-0" 
+                              onClick={() => handleIncrement(item)} 
+                              style={{ width: '24px', height: '24px' }}
+                              disabled={
+                                item.product_type === "Merchandise"
+                                  ? item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 0)
+                                  : item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 999)
+                              }
+                            >
+                              +
+                            </button>
+                          </div>
+                        )}
+                        <div className="text-end fw-bold total-price-mobile" style={{ color: '#4B929D', fontSize: '1.1rem' }}>
+                          ₱{calculateTotal(item).toFixed(2)}
+                        </div>
                       </div>
-                    </div>
-                  </div>
-
-                  {/* New row for Quantity Control and Actions */}
-                  <div className="d-flex justify-content-end align-items-center pt-2 mt-2 cart-actions-row">
-                    
-                    {/* Quantity Control (Moved out of the main flex block) */}
-                    <div className="quantity-control me-3">
-                      <button className="btn btn-sm rounded-circle" onClick={() => handleDecrement(item)}>-</button>
-                      <span className="mx-2">{item.quantity}</span>
-                      <button
-                        className="btn btn-sm rounded-circle"
-                        onClick={() => handleIncrement(item)}
-                        disabled={
-                          item.product_type === "Merchandise"
-                            ? item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 0)
-                            : item.quantity >= (maxQuantities[item.product_id]?.maxQuantity ?? 999)
-                        }
-                      >
-                        +
-                      </button>
-                      {/* Max Info */}
+                      
+                      {/* RESTORED MAX QUANTITY DISPLAY MOBILE */}
                       {(() => {
-                        const isMerchandise = item.MerchandiseQuantity !== undefined;
-                        const maxQty = isMerchandise ? item.MerchandiseQuantity : (maxQuantities[item.product_id]?.maxQuantity ?? 999);
-                        const isUnavailable = isMerchandise && (maxQty === 0 || item.Status === "Not Available");
-                        const showMax = isMerchandise || (!isMerchandise && maxQty !== 999);
-                        if (showMax) {
-                          return (
-                            <div className="max-info text-warning small text-center">
-                              Max: {maxQty}
-                              {isUnavailable && <span className="text-danger ms-1"> (Unavailable)</span>}
-                            </div>
-                          );
-                        }
-                        return null;
-                      })()}
+                          const isMerchandise = item.MerchandiseQuantity !== undefined;
+                          const maxQty = isMerchandise ? item.MerchandiseQuantity : (maxQuantities[item.product_id]?.maxQuantity ?? 999);
+                          const isUnavailable = isMerchandise && (maxQty === 0 || item.Status === "Not Available");
+                          const showMax = isMerchandise || (!isMerchandise && maxQty !== 999);
+                          
+                          if (showMax) {
+                            const totalInCart = getTotalProductQuantity(item.product_id, item.cart_item_id);
+                            const currentQty = localQuantities[item.cart_item_id] ?? item.quantity;
+                            const remaining = maxQty - totalInCart - (typeof currentQty === 'string' ? parseInt(currentQty, 10) || 0 : currentQty);
+                            
+                            return (
+                              <div className="max-info text-warning small mt-1" style={{ fontSize: '0.75rem' }}>
+                                Max: {maxQty} {totalInCart > 0 && `(${remaining} left)`}
+                                {isUnavailable && <span className="text-danger ms-1"> (Unavailable)</span>}
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+                        
                     </div>
-                    
-                    {/* Trash Button (Action) */}
-                    <button className="btn btn-link text-danger p-0 remove-btn-mobile" onClick={() => handleRemove(i)}>
-                      <i className="bi bi-trash" style={{ fontSize: '1.2rem' }}></i>
-                    </button>
                   </div>
-                  
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
 
-
-        {/* Desktop Order Details Section (d-none d-lg-block) */}
+        {/* Right: Order Summary (Desktop) */}
         <div className="col-lg-4 d-none d-lg-block">
-          <div className="bg-white p-4 shadow-sm" style={{ borderRadius: '20px' }}>
-            <h5 className="fw-bold mb-3 text-center">Order Details</h5>
-            <div className="d-flex justify-content-center">
-              <div className="btn-group-toggle btn-group-toggle-center" role="group" aria-label="Order Type Toggle">
+          <div className="bg-white p-4 shadow-sm border-0 sticky-top" style={{ borderRadius: '16px', top: '100px' }}>
+            <h5 className="fw-bold mb-4 text-center text-dark">Order Summary</h5>
+            
+            <div className="d-flex justify-content-center mb-4">
+              <div className="btn-group w-100 shadow-sm rounded-3 overflow-hidden" role="group">
                 <button
                   type="button"
-                  className={`${orderTypeMain === 'Pick Up' ? 'btn-active-custom' : ''}`}
-                  style={{ minWidth: '120px', justifyContent: 'center', display: 'flex', alignItems: 'center' }}
+                  className={`btn py-2 ${orderTypeMain === 'Pick Up' ? 'btn-active-custom' : 'btn-light bg-white border'}`}
+                  style={{ width: '50%' }}
                   onClick={() => setOrderTypeMain('Pick Up')}
                 >
-                  <i className="bi bi-bag-fill"></i>
-                  Pick Up
+                  <i className="bi bi-bag-fill me-2"></i> Pick Up
                 </button>
                 <button
                   type="button"
-                  className={`${orderTypeMain === 'Delivery' ? 'btn-active-custom' : ''}`}
-                  style={{ minWidth: '120px', justifyContent: 'center', display: 'flex', alignItems: 'center' }}
+                  className={`btn py-2 ${orderTypeMain === 'Delivery' ? 'btn-active-custom' : 'btn-light bg-white border'}`}
+                  style={{ width: '50%' }}
                   onClick={() => setOrderTypeMain('Delivery')}
                 >
-                  <i className="bi bi-truck"></i>
-                  Delivery
+                  <i className="bi bi-truck me-2"></i> Delivery
                 </button>
               </div>
             </div>
-            <div className="mt-4" style={{ backgroundColor: '#eaf4f6' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white' }}>
-                <thead>
-                  <tr>
-                    <th style={{ textAlign: 'left', padding: '8px' }}>Product</th>
-                    <th style={{ textAlign: 'center', padding: '8px' }}>Quantity</th>
-                    <th style={{ textAlign: 'right', padding: '8px' }}>Price</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedCartItems.map((item, i) => (
-                    <tr key={i}>
-                      <td style={{ textAlign: 'left', padding: '8px' }}>
-                        <div className="fw-semibold">{item.product_name}</div>
-                        {item.addons && item.addons.length > 0 && (
-                          <ul className="cart-addons mb-0 ps-3">
-                            {item.addons.map((addon, idx) => (
-                              <li key={idx} style={{ fontSize: "0.8em", color: addon.status === 'Unavailable' ? '#999' : '#666', fontStyle: addon.status === 'Unavailable' ? 'italic' : 'normal' }}>
-                                + {addon.addon_name || addon.AddOnName || addon.name} (₱{addon.price || addon.Price || 0})
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </td>
-                      <td style={{ textAlign: 'center', padding: '8px' }}>{item.quantity}</td>
-                      <td style={{ textAlign: 'right', padding: '8px' }}>₱{item.price.toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="subtotal-row">
-                    <td style={{ padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>Subtotal</td>
-                    <td></td>
-                    <td style={{ textAlign: 'right', padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>
-                      ₱{subtotalForButton.toFixed(2)}
-                    </td>
-                  </tr>
-                  {orderTypeMain === 'Delivery' && (
-                    <tr className="delivery-fee-row subtotal-row">
-                      <td style={{ padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>Delivery Fee</td>
-                      <td></td>
-                      <td style={{ textAlign: 'right', padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>
-                        ₱{deliveryFee.toFixed(2)}
-                      </td>
-                    </tr>
-                  )}
-                  <tr className="total-row">
-                    <td style={{ padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>Total</td>
-                    <td></td>
-                    <td style={{ textAlign: 'right', padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>
-                      ₱{totalForButton}
-                    </td>
-                  </tr>
-                  <tr className="payment-method-row">
-                    <td colSpan="3" style={{ padding: '8px', fontWeight: 'bold', verticalAlign: 'middle' }}>Payment Method</td>
-                  </tr>
-                  <tr>
-                    <td colSpan="3" style={{ padding: '8px', verticalAlign: 'middle', textAlign: 'center' }}>
-                      <div className="btn-group-toggle mt-2" style={{ margin: '0 auto' }}>
-                        <button
-                          type="button"
-                          className="d-flex align-items-center justify-content-center btn-active-custom"
-                          style={{ minWidth: '120px' }}
-                        >
-                          <i className="bi bi-wallet2"></i>
-                          E-Wallet
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td colSpan="3" style={{ padding: '8px', verticalAlign: 'middle' }}>
-                      <div className="d-flex justify-content-center mt-3">
-                        <button
-                          type="button"
-                          className="btn"
-                          style={{ minWidth: '200px', backgroundColor: isStoreOpen ? '#4B929D' : '#6c757d', color: 'white' }}
-                          onClick={isStoreOpen ? handleCheckoutClick : null}
-                          disabled={!isStoreOpen}
-                        >
-                          <i className="bi bi-cart-check me-2"></i>
-                          {isStoreOpen ? 'Checkout' : 'Store Closed'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+
+            <div className="p-3 rounded-3 mb-4" style={{ backgroundColor: '#f8f9fa' }}>
+              <div className="table-responsive" style={{maxHeight: '300px', overflowY: 'auto'}}>
+                <table style={{ width: '100%' }}>
+                  <tbody>
+                    {selectedCartItems.map((item, i) => (
+                      <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
+                        <td style={{ padding: '8px 0' }}>
+                          <div className="fw-bold text-dark">{item.product_name}</div>
+                          {/* ADDONS DISPLAY IN DESKTOP SUMMARY */}
+                          {item.addons && item.addons.length > 0 && (
+                            <div className="small text-muted fst-italic mt-1">
+                              {item.addons.map((a, idx) => (
+                                <div key={idx}>+ {a.addon_name || a.name} (₱{a.price || a.Price})</div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ textAlign: 'center', verticalAlign: 'top', padding: '8px' }}>x{item.quantity}</td>
+                        <td style={{ textAlign: 'right', verticalAlign: 'top', padding: '8px' }}>₱{calculateTotal(item).toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <hr className="my-3" />
+              <div className="d-flex justify-content-between mb-2">
+                <span className="text-secondary">Subtotal</span>
+                <span className="fw-bold">₱{subtotalForButton.toFixed(2)}</span>
+              </div>
+              {orderTypeMain === 'Delivery' && (
+                <div className="d-flex justify-content-between mb-2 text-success">
+                  <span>Delivery Fee</span>
+                  <span>+ ₱{deliveryFee.toFixed(2)}</span>
+                </div>
+              )}
+              <hr className="my-2" />
+              <div className="d-flex justify-content-between align-items-center">
+                <span className="h5 fw-bold text-dark m-0">Total</span>
+                <span className="h4 fw-bold m-0" style={{ color: '#4B929D' }}>₱{totalForButton}</span>
+              </div>
             </div>
+
+            <div className="mb-4">
+               <label className="fw-bold text-secondary mb-2 d-block small text-uppercase ls-1">Payment Method</label>
+               <div className="border rounded-3 p-3 bg-light d-flex align-items-center justify-content-center text-primary fw-bold" style={{ borderColor: '#4B929D', backgroundColor: '#eafcfd' }}>
+                  <i className="bi bi-wallet2 me-2"></i> E-Wallet
+               </div>
+            </div>
+
+            <button
+              type="button"
+              className="btn w-100 py-3 fw-bold shadow-sm checkout-btn-hover"
+              style={{ backgroundColor: '#4B929D', color: 'white', borderRadius: '12px', border: 'none', fontSize: '1.1rem' }}
+              onClick={isStoreOpen ? handleCheckoutClick : null}
+              disabled={!isStoreOpen}
+            >
+              {isStoreOpen ? (
+                <>Checkout <i className="bi bi-arrow-right ms-2"></i></>
+              ) : (
+                <>Store Closed <i className="bi bi-clock-history ms-2"></i></>
+              )}
+            </button>
           </div>
         </div>
       </div>
       <ToastContainer position="bottom-right" autoClose={3000} hideProgressBar={false} />
 
-      {/* FLOATING CHECKOUT BUTTON FOR MOBILE VIEW */}
+      {/* Floating Button Mobile */}
       <div className="d-lg-none d-block floating-checkout-container">
         <button
-          className="btn floating-checkout-button w-100"
+          className="btn floating-checkout-button w-100 shadow-lg"
           onClick={() => setShowOrderModal(true)}
           disabled={selectedCartItems.length === 0}
         >
-          View Order Summary (₱{totalForButton})
+          <div className="d-flex justify-content-between align-items-center">
+             <span>{selectedCartItems.length} Items</span>
+             <span className="fw-bold">View Order • ₱{totalForButton}</span>
+          </div>
         </button>
       </div>
       
-      {/* ORDER DETAILS MODAL (MOBILE ONLY) */}
       <OrderDetailsModal
         show={showOrderModal}
         onClose={() => setShowOrderModal(false)}
@@ -1113,10 +893,11 @@ const Cart = () => {
         orderTypeMain={orderTypeMain}
         handleCheckoutClick={handleCheckoutClick}
         setOrderTypeMain={setOrderTypeMain} 
-        deliveryFee={deliveryFee} // Pass deliveryFee
+        deliveryFee={deliveryFee}
         isStoreOpen={isStoreOpen}
       />
     </section>
+    
     {isCheckingLocation && (
       <LocationVerifyModal
         show={isCheckingLocation}

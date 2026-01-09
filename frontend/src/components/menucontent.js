@@ -35,11 +35,15 @@ const MenuContent = () => {
   const [isCheckingLocation, setIsCheckingLocation] = useState(false); // New state for modal visibility
   const [deliverySettings, setDeliverySettings] = useState({}); // New state for delivery settings
   const [isLoading, setIsLoading] = useState(true);
+  const [promos, setPromos] = useState([]);
+  const [isFromPromotionCategory, setIsFromPromotionCategory] = useState(false); // Track if item is from Promotion category
 
   // State to hold the item and its options temporarily for LocationVerifyModal
   const [itemForLocationCheck, setItemForLocationCheck] = useState(null);
   const [notesForLocationCheck, setNotesForLocationCheck] = useState('');
   const [addOnsForLocationCheck, setAddOnsForLocationCheck] = useState([]);
+  const [isBogoForLocationCheck, setIsBogoForLocationCheck] = useState(false);
+  const [bogoQuantityForLocationCheck, setBogoQuantityForLocationCheck] = useState(1);
 
   const { cartItems, addToCart: addToContextCart } = useContext(CartContext);
   const navigate = useNavigate();
@@ -53,6 +57,30 @@ const MenuContent = () => {
       localStorage.setItem('authToken', token);
       localStorage.setItem('username', username);
     }
+  }, []);
+
+  // Fetch promotions first
+  useEffect(() => {
+    const fetchPromos = async () => {
+      try {
+        const token = localStorage.getItem("authToken");
+        if (!token) return;
+
+        const res = await fetch("http://localhost:7004/debug/promos", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await res.json();
+        console.log('✅ [AUTH] Fetched promos:', data.promos);
+        setPromos(data.promos || []);
+      } catch (err) {
+        console.error("Failed to fetch promos", err);
+      }
+    };
+
+    fetchPromos();
   }, []);
 
   useEffect(() => {
@@ -150,8 +178,11 @@ const MenuContent = () => {
             }
           });
 
-          setProducts(orderedGrouped);
-          console.log("Grouped products:", orderedGrouped);
+          // After fetching promos, create Promotion category with BOGO items
+          const finalGrouped = createPromotionCategory(orderedGrouped, promos);
+          setProducts(finalGrouped);
+
+          console.log("Grouped products:", finalGrouped);
 
           if (grouped["Drinks"]) {
             const firstSubcat = Object.keys(grouped["Drinks"])[0];
@@ -217,10 +248,12 @@ const MenuContent = () => {
             }
           });
 
-          setProducts(orderedGrouped);
+          // Create Promotion category with BOGO items
+          const finalGrouped = createPromotionCategory(orderedGrouped, promos);
+          setProducts(finalGrouped);
 
-          if (orderedGrouped["Drinks"]) {
-            const firstSubcat = Object.keys(orderedGrouped["Drinks"])[0];
+          if (finalGrouped["Drinks"]) {
+            const firstSubcat = Object.keys(finalGrouped["Drinks"])[0];
             setSelectedSubcategory(firstSubcat || "");
           } else {
             setSelectedSubcategory("");
@@ -235,7 +268,7 @@ const MenuContent = () => {
     };
 
     fetchAllData();
-  }, []);
+  }, [promos]); // Re-run when promos are loaded
 
   // Fetch delivery settings, similar to cart.js
   useEffect(() => {
@@ -258,6 +291,104 @@ const MenuContent = () => {
     };
     fetchDeliverySettings();
   }, []);
+
+  // Helper function to create Promotion category with BOGO items
+  const createPromotionCategory = (orderedGrouped, promosData) => {
+    console.log('createPromotionCategory called with promos:', promosData);
+    const bogoPromos = promosData.filter(p => p.promotionType === 'bogo');
+    console.log('BOGO promos found:', bogoPromos);
+    if (bogoPromos.length === 0) {
+      console.log('No BOGO promos, returning original grouped');
+      return orderedGrouped;
+    }
+    
+    const promotionItems = [];
+    
+    // Collect all products that match BOGO promotions
+    Object.keys(orderedGrouped).forEach(categoryKey => {
+      Object.keys(orderedGrouped[categoryKey]).forEach(subcatKey => {
+        orderedGrouped[categoryKey][subcatKey].forEach(product => {
+          const hasBogoPromo = bogoPromos.some(promo => {
+            if (promo.applicationType === 'all_products') return true;
+            if (promo.applicationType === 'specific_products' && promo.selectedProducts.includes(product.ProductName)) return true;
+            if (promo.applicationType === 'specific_categories' && promo.selectedCategories.includes(product.ProductCategory)) return true;
+            return false;
+          });
+          
+          if (hasBogoPromo && product.Status === 'Available') {
+            // Add product with BOGO flag
+            promotionItems.push({
+              ...product,
+              isBogoPromotion: true
+            });
+          }
+        });
+      });
+    });
+    
+    // Add Promotion category at the end
+    if (promotionItems.length > 0) {
+      console.log('Adding Promotion category with items:', promotionItems);
+      return {
+        ...orderedGrouped,
+        'Promotion': {
+          'BOGO Deals': promotionItems
+        }
+      };
+    }
+    
+    console.log('No promotion items found, returning original grouped');
+    return orderedGrouped;
+  };
+
+  // Fetch promotions first
+  useEffect(() => {
+    const fetchPromos = async () => {
+      try {
+        const token = localStorage.getItem("authToken");
+        if (!token) return;
+
+        const res = await fetch("http://localhost:7004/debug/promos", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await res.json();
+        setPromos(data.promos || []);
+      } catch (err) {
+        console.error("Failed to fetch promos", err);
+      }
+    };
+
+    fetchPromos();
+  }, []);
+
+  const getPromoForProduct = (product) => {
+    if (!promos.length) return [];
+
+    return promos.filter((promo) => {
+      if (promo.applicationType === "all_products") {
+        return true;
+      }
+
+      if (
+        promo.applicationType === "specific_products" &&
+        promo.selectedProducts.includes(product.product_name)
+      ) {
+        return true;
+      }
+
+      if (
+        promo.applicationType === "specific_categories" &&
+        promo.selectedCategories.includes(product.product_category)
+      ) {
+        return true;
+      }
+
+      return false;
+    });
+  };
 
   const subcategories = products[selectedCategory] ? Object.keys(products[selectedCategory]) : [];
 
@@ -312,6 +443,7 @@ const MenuContent = () => {
     setSelectedCategory(category);
     setSelectedSubcategory(subcategory);
     setSelectedItem(null);
+    setIsFromPromotionCategory(category === 'Promotion'); // Track if user clicked on Promotion category
   };
 
   const handleItemClick = (item) => {
@@ -319,11 +451,18 @@ const MenuContent = () => {
     // Reset add-ons and notes before showing the modal
     setSelectedAddOns([]);
     setAddOnsTotal(0);
-    setOrderNotes(''); 
-    showSweetAlertItemDetails(item);
+    setOrderNotes('');
+    
+    // Check if this is a BOGO item from Promotion category
+    const shouldAutoApplyBogo = isFromPromotionCategory && item.isBogoPromotion;
+    console.log('[BOGO FRONTEND 1] Item clicked:', item.ProductName);
+    console.log('[BOGO FRONTEND 1] isFromPromotionCategory:', isFromPromotionCategory);
+    console.log('[BOGO FRONTEND 1] item.isBogoPromotion:', item.isBogoPromotion);
+    console.log('[BOGO FRONTEND 1] shouldAutoApplyBogo:', shouldAutoApplyBogo);
+    showSweetAlertItemDetails(item, shouldAutoApplyBogo);
   };
 
-  const handleAddToCart = async (item, notes, addOns, addOnsTotal) => {
+  const handleAddToCart = async (item, notes, addOns, addOnsTotal, isBogoItem = false, bogoQuantity = 1) => {
     if (!item) return;
 
     if (!checkStoreStatus()) {
@@ -342,6 +481,9 @@ const MenuContent = () => {
       toast.error(`${item.ProductName} is currently unavailable.`);
       return;
     }
+
+    // Determine quantity based on BOGO or default (1)
+    const quantity = isBogoItem ? bogoQuantity : 1;
 
     // Normalize addOns for comparison
     const normalizedAddOns = (addOns || []).map(a => ({ addon_name: a.name, price: a.price })).sort((a, b) => a.addon_name.localeCompare(b.addon_name));
@@ -379,11 +521,12 @@ const MenuContent = () => {
       }
     }
 
-    if (currentQty + 1 > maxQty) {
+    if (currentQty + quantity > maxQty) {
       toast.error(`Cannot add more. Max quantity is ${maxQty}.`);
       return;
     }
 
+    console.log('[BOGO FRONTEND 2] Adding to cart - isBogoItem:', isBogoItem);
     await addToContextCart(
       {
         product_id: item.ProductID ?? 0,
@@ -394,7 +537,9 @@ const MenuContent = () => {
         product_image: item.ProductImage ?? null,
         max_quantity: maxQty,
       },
-      addOns
+      addOns,
+      quantity,
+      isBogoItem
     );
 
     // Clear temporary states after adding to cart
@@ -403,11 +548,45 @@ const MenuContent = () => {
     setAddOnsTotal(0);
   };
 
-  const showSweetAlertItemDetails = (item) => {
+  const showSweetAlertItemDetails = (item, shouldAutoApplyBogo = false) => {
     if (!item) return;
     setSelectedItem(item);
 
     const isStoreOpen = checkStoreStatus();
+
+    // Get BOGO promo details if applicable
+    let bogoPromo = null;
+    let bogoQuantity = 1;
+    let buyQty = 1;
+    let getQty = 1;
+    let isSameProductBogo = false;
+    if (shouldAutoApplyBogo) {
+      const applicablePromos = getPromoForProduct({
+        product_name: item.ProductName,
+        product_category: item.ProductCategory
+      });
+      bogoPromo = applicablePromos.find(p => p.promotionType === 'bogo');
+      if (bogoPromo) {
+        console.log('BOGO Promo details:', bogoPromo);
+        buyQty = parseInt(bogoPromo.buyQuantity) || 1;
+        getQty = parseInt(bogoPromo.getQuantity) || 1;
+        
+        // Determine if it's same-product or cross-product BOGO
+        // Same-product: Only 1 specific product OR all_products OR specific category
+        // Cross-product: Multiple specific products listed
+        if (bogoPromo.applicationType === 'specific_products' && 
+            bogoPromo.selectedProducts && 
+            bogoPromo.selectedProducts.length > 1) {
+          // Cross-product BOGO: Multiple products involved
+          isSameProductBogo = false;
+          bogoQuantity = 1; // Add each product separately with qty 1
+        } else {
+          // Same-product BOGO: Buy X of this product, Get Y of this product
+          isSameProductBogo = true;
+          bogoQuantity = buyQty + getQty; // Add with combined quantity
+        }
+      }
+    }
 
     const imageUrl = item.ProductImage
       ? item.ProductImage.startsWith('http')
@@ -433,11 +612,32 @@ const MenuContent = () => {
       </div>
     `).join('');
 
+    // BOGO banner HTML
+    const bogoHtml = bogoPromo ? `
+      <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                  color: white; 
+                  padding: 12px; 
+                  border-radius: 8px; 
+                  margin-bottom: 15px; 
+                  text-align: center;
+                  font-weight: bold;
+                  box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        🎉 ${isSameProductBogo 
+          ? `BUY ${buyQty} GET ${getQty} FREE!` 
+          : `${bogoPromo.promotionName || 'BOGO PROMOTION'}`} 🎉
+        <div style="font-size: 0.9em; margin-top: 5px; opacity: 0.95;">
+          ${isSameProductBogo 
+            ? `Quantity set to ${bogoQuantity} items` 
+            : `Required items: ${bogoPromo.selectedProducts ? bogoPromo.selectedProducts.filter(p => p !== item.ProductName).join(', ') : 'Multiple products'}`}
+        </div>
+      </div>
+    ` : '';
 
     Swal.fire({
       title: item.ProductName,
       html: `
         <div class="container-fluid" style="text-align: left; padding: 0;">
+          ${bogoHtml}
           <div class="row">
             <div class="col-md-6 mb-3">
               <div class="modal-image-placeholder">
@@ -521,7 +721,7 @@ const MenuContent = () => {
         setOrderNotes(notes);
         setSelectedAddOns(addOns);
         setAddOnsTotal(total);
-        return { action: 'add-to-cart', notes, addOns, addOnsTotal: total };
+        return { action: 'add-to-cart', notes, addOns, addOnsTotal: total, isBogoItem: shouldAutoApplyBogo, bogoQuantity };
       },
       preDeny: () => {
         // Handle 'Buy Now'
@@ -536,13 +736,13 @@ const MenuContent = () => {
         setOrderNotes(notes);
         setSelectedAddOns(addOns);
         setAddOnsTotal(total);
-        return { action: 'buy-now', notes, addOns, addOnsTotal: total };
+        return { action: 'buy-now', notes, addOns, addOnsTotal: total, isBogoItem: shouldAutoApplyBogo, bogoQuantity };
       }
     }).then((result) => {
       if (result.isConfirmed) {
-        handleAddToCart(item, result.value.notes, result.value.addOns, result.value.addOnsTotal);
+        handleAddToCart(item, result.value.notes, result.value.addOns, result.value.addOnsTotal, result.value.isBogoItem, result.value.bogoQuantity);
       } else if (result.isDenied) {
-        handleBuyNow(item, result.value.notes, result.value.addOns, result.value.addOnsTotal);
+        handleBuyNow(item, result.value.notes, result.value.addOns, result.value.addOnsTotal, result.value.isBogoItem, result.value.bogoQuantity);
       }
       // Reset temporary states if the modal is closed without confirmation (cancel/close)
       if (result.isDismissed) {
@@ -554,7 +754,7 @@ const MenuContent = () => {
   };
 
 
-  const handleBuyNow = (item, notes, addOns, addOnsTotal) => {
+  const handleBuyNow = (item, notes, addOns, addOnsTotal, isBogoItem = false, bogoQuantity = 1) => {
     if (!checkStoreStatus()) {
       toast.error("Store is closed. Cannot place orders.");
       return;
@@ -564,18 +764,18 @@ const MenuContent = () => {
       toast.error("You must be logged in to buy now.");
       return;
     }
-    showSweetAlertBuyNow(item, notes, addOns, addOnsTotal);
+    showSweetAlertBuyNow(item, notes, addOns, addOnsTotal, isBogoItem, bogoQuantity);
   }; 
 
   // Helper to construct the single item array for LocationVerifyModal
-  const createSingleItemArray = (item, notes, addOns, addOnsTotal) => [{
+  const createSingleItemArray = (item, notes, addOns, addOnsTotal, isBogoItem = false, bogoQuantity = 1) => [{
     product_id: item.ProductID,
     product_name: item.ProductName,
     price: item.ProductPrice,
     product_image: item.ProductImage,
     product_type: item.ProductTypeName,
     product_category: item.ProductCategory,
-    quantity: 1,
+    quantity: isBogoItem ? bogoQuantity : 1,
     orderNotes: notes,
     addons: addOns,
     MerchandiseQuantity: item.MerchandiseQuantity,
@@ -584,7 +784,7 @@ const MenuContent = () => {
     total: (item.ProductPrice ?? 0) + addOnsTotal
   }];
 
-  const showSweetAlertBuyNow = (item, notes, addOns, addOnsTotal) => {
+  const showSweetAlertBuyNow = (item, notes, addOns, addOnsTotal, isBogoItem = false, bogoQuantity = 1) => {
     if (!item) return;
 
     // Use current state for delivery/payment methods as initial values
@@ -662,6 +862,8 @@ const MenuContent = () => {
           setItemForLocationCheck(item);
           setNotesForLocationCheck(notes);
           setAddOnsForLocationCheck(addOns);
+          setIsBogoForLocationCheck(isBogoItem);
+          setBogoQuantityForLocationCheck(bogoQuantity);
           setDeliveryMethod('Delivery'); // Update delivery method state
           setPaymentMethod(result.value.payment); // Update payment method state
           setIsCheckingLocation(true);
@@ -669,14 +871,14 @@ const MenuContent = () => {
           // For Pick-up, proceed directly to checkout
           setDeliveryMethod(result.value.delivery);
           setPaymentMethod(result.value.payment);
-          handleConfirmBuyNow(item, notes, addOns, addOnsTotal, result.value.delivery, result.value.payment);
+          handleConfirmBuyNow(item, notes, addOns, addOnsTotal, result.value.delivery, result.value.payment, isBogoItem, bogoQuantity);
         }
       }
     });
   };
 
   // Updated handler to accept add-ons details
-  const handleConfirmBuyNow = (item, notes, addOns, addOnsTotal, delivery, payment) => {
+  const handleConfirmBuyNow = (item, notes, addOns, addOnsTotal, delivery, payment, isBogoItem = false, bogoQuantity = 1) => {
     if (item) {
       // No need for an 'if (item)' check here, as the function is only called when item exists.
       // Check availability for Buy Now as well
@@ -685,7 +887,7 @@ const MenuContent = () => {
         return;
       }
 
-      const singleItemForCheckout = createSingleItemArray(item, notes, addOns, addOnsTotal);
+      const singleItemForCheckout = createSingleItemArray(item, notes, addOns, addOnsTotal, isBogoItem, bogoQuantity);
 
       navigate('/checkout', {
         state: {
@@ -753,6 +955,16 @@ const MenuContent = () => {
           <div className="items-grid">
             {filteredItems.map((item) => {
               const isAvailable = item.Status === 'Available' && (item.ProductTypeName !== 'Merchandise' || item.MerchandiseQuantity > 0);
+              const applicablePromos = getPromoForProduct({
+                product_name: item.ProductName,
+                product_category: item.ProductCategory
+              });
+
+              // Filter badges based on category
+              const displayPromos = isFromPromotionCategory 
+                ? applicablePromos.filter(p => p.promotionType === 'bogo')
+                : applicablePromos.filter(p => p.promotionType !== 'bogo');
+
               return (
                 <div
                   className={`item-card ${!isAvailable ? 'unavailable' : ''}`}
@@ -760,6 +972,17 @@ const MenuContent = () => {
                   onClick={() => isAvailable && handleItemClick(item)}
                   style={{ cursor: isAvailable ? 'pointer' : 'not-allowed' }}
                 >
+                  {displayPromos.length > 0 && (
+                    <div className="promo-badges-container">
+                      {displayPromos.map((promo, idx) => (
+                        <div key={idx} className="promo-badge">
+                          {promo.promotionType === "fixed" && `₱${promo.promotionValue} OFF`}
+                          {promo.promotionType === "percentage" && `${promo.promotionValue}% OFF`}
+                          {promo.promotionType === "bogo" && "BUY 1 GET 1"}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="item-image-placeholder">
                     {item.ProductImage ?
                       <img src={item.ProductImage.startsWith('http') ? item.ProductImage : `http://localhost:8001${item.ProductImage}`} alt={item.ProductName} />
@@ -787,7 +1010,7 @@ const MenuContent = () => {
             show={isCheckingLocation}
             onClose={() => setIsCheckingLocation(false)}
             deliverySettings={deliverySettings} // Pass deliverySettings here
-            selectedCartItems={createSingleItemArray(itemForLocationCheck, notesForLocationCheck, addOnsForLocationCheck, addOnsTotal)}
+            selectedCartItems={createSingleItemArray(itemForLocationCheck, notesForLocationCheck, addOnsForLocationCheck, addOnsTotal, isBogoForLocationCheck, bogoQuantityForLocationCheck)}
             orderTypeMain="Delivery"
             paymentMethodMain={paymentMethod}
           />
