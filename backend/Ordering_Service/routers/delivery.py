@@ -480,12 +480,24 @@ async def get_rider_orders(rider_id: int, token: str = Depends(oauth2_scheme)):
     conn = await get_db_connection()
     cursor = await conn.cursor()
     try:
+        # Ensure DeliveryImage column exists
+        try:
+            await cursor.execute("""
+                IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Orders') AND name = 'DeliveryImage')
+                BEGIN
+                    ALTER TABLE Orders ADD DeliveryImage NVARCHAR(512) NULL
+                END
+            """)
+            await conn.commit()
+        except Exception as e:
+            logger.warning(f"Failed to create DeliveryImage column: {e}")
+        
         await cursor.execute("""
             SELECT
                 o.OrderID, o.UserName, o.OrderDate, o.Status, o.PaymentMethod,
                 o.TotalAmount, di.FirstName, di.MiddleName, di.LastName,
                 di.PhoneNumber, di.Address, di.City, di.Province, di.Notes, di.Landmark,
-                o.ReferenceNumber, o.TotalDiscount, o.DeliveryFee
+                o.ReferenceNumber, o.TotalDiscount, o.DeliveryFee, o.DeliveryImage
             FROM Orders o
             LEFT JOIN DeliveryInfo di ON o.OrderID = di.OrderID
             WHERE o.AssignedRiderID = ?
@@ -565,7 +577,8 @@ async def get_rider_orders(rider_id: int, token: str = Depends(oauth2_scheme)):
                 "notes": row[13],
                 "items": item_list,
                 "discount": float(row[16]) if row[16] else 0,
-                "deliveryFee": float(row[17]) if row[17] else 0
+                "deliveryFee": float(row[17]) if row[17] else 0,
+                "deliveryImage": row[18] if len(row) > 18 and row[18] else None
             })
 
         return orders
@@ -583,13 +596,25 @@ async def get_delivery_orders(token: str = Depends(oauth2_scheme)):
     cursor = await conn.cursor()
 
     try:
+        # Ensure DeliveryImage column exists
+        try:
+            await cursor.execute("""
+                IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Orders') AND name = 'DeliveryImage')
+                BEGIN
+                    ALTER TABLE Orders ADD DeliveryImage NVARCHAR(512) NULL
+                END
+            """)
+            await conn.commit()
+        except Exception as e:
+            logger.warning(f"Failed to create DeliveryImage column: {e}")
+        
         # Step 1: Fetch all orders
         await cursor.execute("""
             SELECT
                 o.OrderID, o.UserName, o.OrderDate, o.Status, o.PaymentMethod,
                 o.TotalAmount, di.FirstName, di.MiddleName, di.LastName,
                 di.PhoneNumber, di.Address, di.City, di.Province, di.Notes, di.Landmark,
-                o.AssignedRiderID, o.TotalDiscount, o.DeliveryFee
+                o.AssignedRiderID, o.TotalDiscount, o.DeliveryFee, o.DeliveryImage
             FROM Orders o
             LEFT JOIN DeliveryInfo di ON o.OrderID = di.OrderID
             WHERE o.OrderType = 'Delivery'
@@ -721,7 +746,8 @@ async def get_delivery_orders(token: str = Depends(oauth2_scheme)):
                 "items": item_list,
                 "assignedRider": str(assigned_rider_id) if assigned_rider_id else None,
                 "discount": float(row[16]) if row[16] else 0,
-                "deliveryFee": float(row[17]) if row[17] else 0
+                "deliveryFee": float(row[17]) if row[17] else 0,
+                "deliveryImage": row[18] if len(row) > 18 and row[18] else None
             })
 
         return orders

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from typing import List, Optional
@@ -9,6 +9,9 @@ from services.promo_service import fetch_active_promos
 import httpx
 import asyncio
 import logging
+import os
+import aiofiles
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -410,13 +413,19 @@ async def get_user_orders(token: str = Depends(oauth2_scheme)):
                 ALTER TABLE OrderItems ADD PromoName NVARCHAR(255) NULL
             END
         """)
+        await cursor.execute("""
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Orders') AND name = 'DeliveryImage')
+            BEGIN
+                ALTER TABLE Orders ADD DeliveryImage NVARCHAR(512) NULL
+            END
+        """)
         await conn.commit()
     except Exception as e:
         logger.warning(f"Failed to create promo columns: {e}")
 
     # Step 1: Fetch all orders for user
     await cursor.execute("""
-        SELECT o.OrderID, o.OrderDate, o.OrderType, o.Status, o.DeliveryFee, o.TotalAmount, o.TotalDiscount
+        SELECT o.OrderID, o.OrderDate, o.OrderType, o.Status, o.DeliveryFee, o.TotalAmount, o.TotalDiscount, o.DeliveryImage
         FROM Orders o
         WHERE o.UserName = ?
         ORDER BY o.OrderDate DESC
@@ -530,6 +539,7 @@ async def get_user_orders(token: str = Depends(oauth2_scheme)):
             "deliveryFee": float(order_row[4]) if order_row[4] is not None else 0.0,
             "totalAmount": float(order_row[5]) if order_row[5] is not None else 0.0,
             "discount": float(order_row[6]) if order_row[6] is not None else 0.0,
+            "deliveryImage": order_row[7] if len(order_row) > 7 and order_row[7] else None,
             "products": products,
         })
 
@@ -1546,3 +1556,72 @@ async def auto_cancel_expired_oos_orders():
         
         # Check every 5 minutes
         await asyncio.sleep(300)
+
+
+@router.post("/rider/orders/{order_id}/delivery-image", status_code=status.HTTP_200_OK)
+async def upload_delivery_image(
+    order_id: int,
+    image: UploadFile = File(...),
+    token: str = Depends(oauth2_scheme)
+):
+    """
+    Upload proof of delivery image for an order.
+    Called by rider when marking order as delivered.
+    """
+    user_data = await validate_token_and_roles(token, ["rider"])
+    rider_id = user_data.get("id") or user_data.get("userId")
+    
+    conn = await get_db_connection()
+    cursor = await conn.cursor()
+    
+    try:
+        # Verify the order exists and is assigned to this rider
+        await cursor.execute(
+            "SELECT OrderID FROM Orders WHERE OrderID = ? AND AssignedRiderID = ?",
+            (order_id, rider_id)
+        )
+        order = await cursor.fetchone()
+        if not order:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Order not found or not assigned to you"
+            )
+        
+        # Create uploads directory if it doesn't exist
+        upload_dir = Path("uploads/delivery_images")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate unique filename
+        file_extension = os.path.splitext(image.filename)[1]
+        filename = f"delivery_{order_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{file_extension}"
+        file_path = upload_dir / filename
+        
+        # Save the file
+        async with aiofiles.open(file_path, 'wb') as f:
+            content = await image.read()
+            await f.write(content)
+        
+        # Update the database with the image path
+        image_url = f"/uploads/delivery_images/{filename}"
+        await cursor.execute(
+            "UPDATE Orders SET DeliveryImage = ? WHERE OrderID = ?",
+            (image_url, order_id)
+        )
+        await conn.commit()
+        
+        logger.info(f"Delivery image uploaded for order {order_id}: {image_url}")
+        return {
+            "message": "Delivery image uploaded successfully",
+            "image_url": image_url
+        }
+        
+    except Exception as e:
+        await conn.rollback()
+        logger.error(f"Error uploading delivery image for order {order_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload delivery image: {str(e)}"
+        )
+    finally:
+        await cursor.close()
+        await conn.close()

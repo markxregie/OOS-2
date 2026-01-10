@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Form, Button } from 'react-bootstrap';
-import { EyeFill, XCircle } from 'react-bootstrap-icons';
+import { EyeFill, XCircle, CameraFill } from 'react-bootstrap-icons';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import './OrderHistory.css';
@@ -110,6 +110,7 @@ const OrderHistory = () => {
             total,
             deliveryFee,
             discount,
+            deliveryImage: order.deliveryImage || null, // Include delivery image
           };
           
           if (isCompleted) {
@@ -175,8 +176,13 @@ const OrderHistory = () => {
           <p style="margin: 5px 0; color: #333;">#213 Don Fabian St., Quezon City</p>
           <p style="margin: 5px 0; color: #333;">Order #${order.id}</p>
           <p style="margin: 5px 0; font-size: 0.9em; color: #333;">${new Date(order.date).toLocaleString()}</p>
+        </div>        ${order.deliveryImage ? `
+        <div style="text-align: center; margin-bottom: 20px; padding: 15px; background-color: #e7f3ff; border-radius: 8px; border: 2px solid #4b929d;">
+          <p style="margin: 0 0 10px 0; font-weight: bold; color: #2c3e50; font-size: 0.95em;">📸 PROOF OF DELIVERY</p>
+          <img src="http://localhost:7004${order.deliveryImage}" alt="Delivery Proof" style="max-width: 100%; max-height: 200px; border-radius: 8px; cursor: pointer; border: 2px solid #4b929d;" onclick="window.open('http://localhost:7004${order.deliveryImage}', '_blank')"/>
+          <p style="margin: 8px 0 0 0; font-size: 0.8em; color: #666;">Click image to view full size</p>
         </div>
-        <div class="receipt-body">
+        ` : ''}        <div class="receipt-body">
           <div class="receipt-items-header" style="display: flex; justify-content: space-between; font-weight: bold; border-bottom: 1px dashed #999; padding-bottom: 5px; margin-bottom: 10px;">
             <span>ITEM</span>
             <span>TOTAL</span>
@@ -304,7 +310,12 @@ const OrderHistory = () => {
   const renderMobileOrderCard = (order) => (
     <div className="order-card" key={order.id} data-id={order.id}>
       <div className="card-header">
-        <span style={{ fontWeight: 'bold' }}>Order #{order.id}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontWeight: 'bold' }}>Order #{order.id}</span>
+          {order.deliveryImage && (
+            <CameraFill color="#28a745" size={16} title="Proof of delivery available" />
+          )}
+        </div>
         {getStatusBadge(order.status)}
       </div>
       <div className="card-body" style={{ textAlign: 'left' }}>
@@ -337,7 +348,12 @@ const OrderHistory = () => {
     <div className="order-card-desktop" key={order.id} onClick={() => handleRowClick(order)}>
       <div className="card-header-desktop">
         <div className="order-info">
-          <span className="order-id">Order #{order.id}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span className="order-id">Order #{order.id}</span>
+            {order.deliveryImage && (
+              <CameraFill color="#28a745" size={16} title="Proof of delivery available" />
+            )}
+          </div>
           <span className="order-type">{order.orderType}</span>
         </div>
         {getStatusBadge(order.status)}
