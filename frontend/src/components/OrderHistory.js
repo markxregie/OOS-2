@@ -242,9 +242,20 @@ const OrderHistory = () => {
   };
 
   const handleCancelClick = async (order) => {
+    const orderSummary = order.products
+      .map(p => `${p.quantity}x ${p.name}`)
+      .join(', ');
+
     const result = await Swal.fire({
       title: 'Confirm Cancel Order',
-      text: `Are you sure you want to cancel order #${order.id}? This action cannot be undone.`,
+      html: `
+        <div style="text-align: left; padding: 10px;">
+          <p><strong>Date:</strong> ${new Date(order.date).toLocaleDateString()}</p>
+          <p><strong>Items:</strong> ${orderSummary}</p>
+          <p><strong>Total:</strong> ₱${order.total.toFixed(2)}</p>
+          <p style="color: #d33; margin-top: 15px;"><strong>This action cannot be undone.</strong></p>
+        </div>
+      `,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#d33',
