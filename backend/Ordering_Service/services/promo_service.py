@@ -16,14 +16,15 @@ _PROMOS_TTL_SECONDS = 30.0
 _PROMOS_LOCK = asyncio.Lock()
 
 
-async def fetch_active_promos(token: str) -> List[Dict]:
+async def fetch_active_promos(token: Optional[str]) -> List[Dict]:
     """
     Fetch ACTIVE promotions from POS.
     This function MUST NOT apply any promo logic.
+    Token is optional - for unauthenticated users, pass None.
     """
     global _PROMOS_CACHE, _PROMOS_CACHE_AT
     
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
 
     # Check cache first
     now = time.time()

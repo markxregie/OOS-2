@@ -34,6 +34,13 @@ const CheckoutPage = () => {
 
   // Cleanup temporary cart item when user navigates away without completing order
   useEffect(() => {
+    console.log('📄 CHECKOUT PAGE LOADED');
+    console.log('📄 Cart Items:', cartItems);
+    console.log('📄 Order Type:', orderType);
+    console.log('📄 Payment Method:', paymentMethod);
+    console.log('📄 Delivery Fee:', deliveryFee);
+    console.log('📄 Is Temporary Cart:', isTemporaryCart);
+    
     // Cleanup function that runs when component unmounts
     return () => {
       if (isTemporaryCart && tempCartId && !orderCompletedRef.current) {
@@ -144,26 +151,45 @@ const CheckoutPage = () => {
       try {
         // Pass cart item IDs and orderType to backend
         const cartItemIds = cartItems.map(item => item.cart_item_id).join(',');
-        const response = await fetch(`http://localhost:7004/cart/calculate-promos?username=${username}&cart_item_ids=${cartItemIds}&order_type=${encodeURIComponent(orderType)}`, {
+        const apiUrl = `http://localhost:7004/cart/calculate-promos?username=${username}&cart_item_ids=${cartItemIds}&order_type=${encodeURIComponent(orderType)}`;
+        
+        console.log('🎯 PROMO CALCULATION DEBUG:');
+        console.log('  - Username:', username);
+        console.log('  - Cart Items Count:', cartItems.length);
+        console.log('  - Cart Item IDs:', cartItemIds);
+        console.log('  - Order Type:', orderType);
+        console.log('  - Full API URL:', apiUrl);
+        console.log('  - Individual Cart Items:', cartItems.map(item => ({
+          cart_item_id: item.cart_item_id,
+          product_name: item.product_name,
+          quantity: item.quantity,
+          price: item.price
+        })));
+        
+        const response = await fetch(apiUrl, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`
           }
         });
 
+        console.log('  - API Response Status:', response.status);
+
         if (response.ok) {
           const data = await response.json();
           setPromoData(data);
           setPromoCalculated(true); // Mark as calculated
-          console.log('Promos calculated:', data);
-          console.log('Items with discounts:', data.items);
-          console.log('Subtotal discount:', data.subtotal_discount);
-          console.log('Final subtotal:', data.final_subtotal);
+          console.log('✅ Promos calculated successfully:', data);
+          console.log('  - Items with discounts:', data.items);
+          console.log('  - Subtotal discount:', data.subtotal_discount);
+          console.log('  - Final subtotal:', data.final_subtotal);
         } else {
-          console.error('Failed to calculate promos');
+          console.error('❌ Failed to calculate promos. Status:', response.status);
+          const errorText = await response.text();
+          console.error('  - Error response:', errorText);
         }
       } catch (error) {
-        console.error('Error calculating promos:', error);
+        console.error('❌ Error calculating promos:', error);
       } finally {
         setIsLoadingPromos(false);
       }

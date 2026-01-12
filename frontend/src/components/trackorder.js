@@ -154,19 +154,33 @@ const TrackOrder = () => {
     const [riderLastUpdated, setRiderLastUpdated] = useState(null);
     const [scriptLoaded, setScriptLoaded] = useState(!!(window.google && window.google.maps));
     const [estimatedDeliveryMinutes, setEstimatedDeliveryMinutes] = useState(null);
+    const scriptLoadAttemptedRef = useRef(false);
 
-    // Load Google Maps API script if not already loaded
+    // Load Google Maps API script ONCE on mount (guard against multiple loads)
     useEffect(() => {
-        if (!scriptLoaded) {
-            const script = document.createElement('script');
-            script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}`;
-            script.async = true;
-            script.defer = true;
-            script.onload = () => setScriptLoaded(true);
-            script.onerror = () => console.error('Failed to load Google Maps API');
-            document.head.appendChild(script);
+        // Check if already loaded globally
+        if (window.google && window.google.maps) {
+            setScriptLoaded(true);
+            return;
         }
-    }, [scriptLoaded]);
+
+        // Check if we've already tried to load it (prevent duplicate appends)
+        if (scriptLoadAttemptedRef.current) {
+            return;
+        }
+
+        scriptLoadAttemptedRef.current = true;
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}`;
+        script.async = true;
+        script.defer = true;
+        script.onload = () => setScriptLoaded(true);
+        script.onerror = () => {
+            console.error('Failed to load Google Maps API');
+            scriptLoadAttemptedRef.current = false; // Reset to allow retry
+        };
+        document.head.appendChild(script);
+    }, []); // Empty dependency array - run ONCE on mount only
 
     const orderStatusSteps = ['pending', 'processing', 'waiting for pickup', 'picked up', 'delivering', 'completed'];
     const pickupStatusSteps = ['pending', 'processing', 'waiting for pickup', 'picked up', 'completed'];
@@ -318,7 +332,7 @@ const TrackOrder = () => {
                         const profileData = await profileRes.json();
                         const { region, province, city, streetName, barangay, postalCode, lat, lng } = profileData;
 
-                        const geocodeAddress = () => {
+                        const processProfileLocation = async () => {
                             // First, set to stored lat/lng if available (priority)
                             if (lat && lng && Number.isFinite(parseFloat(lat)) && Number.isFinite(parseFloat(lng))) {
                                 if (mounted) {
@@ -332,28 +346,26 @@ const TrackOrder = () => {
                             if (region && province && city && streetName && barangay && window.google && window.google.maps) {
                                 const address = `${streetName}, ${barangay}, ${city}, ${province}, ${region}, Philippines`;
 
-                                // Use the geocodeAddress utility function that has built-in caching
-                                geocodeAddress(address).then((result) => {
-                                    if (result && mounted) {
-                                        setUserLocation([result.lat, result.lng]);
-                                        console.log('TrackOrder: Updated to geocoded user profile location:', [result.lat, result.lng]);
-                                    }
-                                });
+                                // Call the GLOBAL geocodeAddress utility function (not shadowed)
+                                const result = await geocodeAddress(address);
+                                if (result && mounted) {
+                                    setUserLocation([result.lat, result.lng]);
+                                    console.log('TrackOrder: Updated to geocoded user profile location:', [result.lat, result.lng]);
+                                }
                             }
                         };
 
+                        // Wait for Google Maps to be available
                         if (window.google && window.google.maps) {
-                            geocodeAddress();
+                            processProfileLocation();
                         } else {
-                            // Load Google Maps API if not loaded
-                            const script = document.createElement('script');
-                            script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}`;
-                            script.async = true;
-                            script.defer = true;
-                            script.onload = () => {
-                                if (mounted) geocodeAddress();
-                            };
-                            document.head.appendChild(script);
+                            // Wait for scriptLoaded state to become true (maps already loading in main useEffect)
+                            const checkInterval = setInterval(() => {
+                                if (window.google && window.google.maps && mounted) {
+                                    clearInterval(checkInterval);
+                                    processProfileLocation();
+                                }
+                            }, 100);
                         }
                     }
                 }
@@ -543,7 +555,7 @@ const TrackOrder = () => {
             });
         }
 
-    }, [scriptLoaded, order, userLocation, riderLocationState, map, marker, riderMarker]);
+    }, [scriptLoaded, order?.id, userLocation, riderLocationState]); // Removed map, marker, riderMarker dependencies to prevent infinite re-renders
 
 
     if (loading) {
@@ -573,6 +585,18 @@ const TrackOrder = () => {
 
     const renderStepper = () => (
         <div className="stepper-wrapper">
+            <style>
+                {`
+                    @keyframes stepper-pulse {
+                        0% { box-shadow: 0 0 0 0 rgba(75, 146, 157, 0.7); }
+                        70% { box-shadow: 0 0 0 10px rgba(75, 146, 157, 0); }
+                        100% { box-shadow: 0 0 0 0 rgba(75, 146, 157, 0); }
+                    }
+                    .stepper-item.active .step-counter {
+                        animation: stepper-pulse 2s infinite;
+                    }
+                `}
+            </style>
             {steps.map((step, index) => {
                 const status = getStepStatus(index);
                 return (
@@ -588,8 +612,51 @@ const TrackOrder = () => {
     );
 
     const renderMap = () => (
-        <div className="map-container mb-5 mt-n3">
+        <div className="map-container mb-5 mt-n3" style={{ position: 'relative' }}>
             <div ref={mapRef} className="track-map-content" style={{ width: '100%', height: '450px', borderRadius: '8px', overflow: 'hidden' }} />
+            {order.status === 'waiting for pickup' && (
+                <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                    zIndex: 10,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    borderRadius: '8px',
+                    backdropFilter: 'blur(2px)'
+                }}>
+                    <style>
+                        {`
+                            @keyframes radar-pulse {
+                                0% { box-shadow: 0 0 0 0 rgba(75, 146, 157, 0.7); }
+                                70% { box-shadow: 0 0 0 30px rgba(75, 146, 157, 0); }
+                                100% { box-shadow: 0 0 0 0 rgba(75, 146, 157, 0); }
+                            }
+                        `}
+                    </style>
+                    <div style={{
+                        width: '80px',
+                        height: '80px',
+                        borderRadius: '50%',
+                        backgroundColor: '#fff',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        marginBottom: '20px',
+                        animation: 'radar-pulse 2s infinite',
+                        border: '2px solid #4B929D'
+                    }}>
+                        <img src={deliveryIcon} alt="Searching Rider" style={{ width: '50px', height: '50px', objectFit: 'contain' }} />
+                    </div>
+                    
+                    <p className="text-muted mb-0">Assigning a Rider Please Wait For a Moment...</p>
+                </div>
+            )}
         </div>
     );
 

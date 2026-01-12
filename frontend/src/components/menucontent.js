@@ -44,6 +44,7 @@ const MenuContent = () => {
   const [addOnsForLocationCheck, setAddOnsForLocationCheck] = useState([]);
   const [isBogoForLocationCheck, setIsBogoForLocationCheck] = useState(false);
   const [bogoQuantityForLocationCheck, setBogoQuantityForLocationCheck] = useState(1);
+  const [tempCartDataForLocationModal, setTempCartDataForLocationModal] = useState(null);  // Store temp cart with proper cart_item_id
 
   const { cartItems, addToCart: addToContextCart } = useContext(CartContext);
   const navigate = useNavigate();
@@ -174,21 +175,26 @@ const MenuContent = () => {
           }
         } else {
           // Public (no auth)
-          const [publicProductsRes, addOnsRes, merchRes] = await Promise.all([
+          const [publicProductsRes, addOnsRes, merchRes, promosRes] = await Promise.all([
             fetch(`${PRODUCTS_BASE_URL}/is_products/public/products/`, { signal }),
             fetch(`${PRODUCTS_BASE_URL}/is_products/public/products/all_addons`, { signal }),
-            fetch(`${MERCH_BASE_URL}/merchandise/public/menu`, { signal })
+            fetch(`${MERCH_BASE_URL}/merchandise/public/menu`, { signal }),
+            fetch(`http://localhost:7004/debug/promos`, { signal })
           ]);
 
-          if (!(publicProductsRes.ok && addOnsRes.ok && merchRes.ok)) {
+          if (!(publicProductsRes.ok && addOnsRes.ok && merchRes.ok && promosRes.ok)) {
             throw new Error('Failed to fetch public resources');
           }
 
-          const [publicProducts, allAddOnsMap, apiMerchandise] = await Promise.all([
+          const [publicProducts, allAddOnsMap, apiMerchandise, promosData] = await Promise.all([
             publicProductsRes.json(),
             addOnsRes.json(),
-            merchRes.json()
+            merchRes.json(),
+            promosRes.json()
           ]);
+
+          // Store promos
+          setPromos(promosData.promos || []);
 
           const grouped = {};
           for (const product of publicProducts) {
@@ -221,7 +227,7 @@ const MenuContent = () => {
           for (const cat of CATEGORY_ORDER) if (grouped[cat]) orderedGrouped[cat] = grouped[cat];
           for (const cat of Object.keys(grouped)) if (!CATEGORY_ORDER.includes(cat)) orderedGrouped[cat] = grouped[cat];
 
-          const finalGrouped = createPromotionCategory(orderedGrouped, []);
+          const finalGrouped = createPromotionCategory(orderedGrouped, promosData.promos || []);
           setProducts(finalGrouped);
           if (finalGrouped['Drinks']) {
             const firstSubcat = Object.keys(finalGrouped['Drinks'])[0];
@@ -996,15 +1002,11 @@ const MenuContent = () => {
       if (result.isConfirmed) {
         const finalQuantity = result.value.quantity;
         if (result.value.delivery === 'Delivery') {
-          // Store item details and trigger location check
-          setItemForLocationCheck(item);
-          setNotesForLocationCheck(notes);
-          setAddOnsForLocationCheck(addOns);
-          setIsBogoForLocationCheck(isBogoItem);
-          setBogoQuantityForLocationCheck(finalQuantity);
-          setDeliveryMethod('Delivery'); // Update delivery method state
-          setPaymentMethod(result.value.payment); // Update payment method state
-          setIsCheckingLocation(true);
+          // For Delivery: Create temporary cart FIRST, then show location verification
+          // This ensures the cart item has a proper cart_item_id for promo calculation
+          setDeliveryMethod(result.value.delivery);
+          setPaymentMethod(result.value.payment);
+          handleConfirmBuyNowWithDelivery(item, notes, addOns, addOnsTotal, result.value.delivery, result.value.payment, isBogoItem, finalQuantity);
         } else {
           // For Pick-up, proceed directly to checkout
           setDeliveryMethod(result.value.delivery);
@@ -1015,7 +1017,6 @@ const MenuContent = () => {
     });
   };
 
-  // Updated handler to accept add-ons details
   const handleConfirmBuyNow = async (item, notes, addOns, addOnsTotal, delivery, payment, isBogoItem = false, bogoQuantity = 1) => {
     if (item) {
       // Check availability for Buy Now as well
@@ -1070,9 +1071,22 @@ const MenuContent = () => {
         Swal.close();
 
         // Navigate to checkout with temporary cart item that has a proper cart_item_id
+        // Ensure cart item has all required fields for promo calculation
+        const cartItemForCheckout = {
+          ...tempCartData.cart_item,
+          cart_item_id: tempCartData.cart_item_id || tempCartData.cart_item?.cart_item_id,  // Ensure cart_item_id is set
+          quantity: bogoQuantity
+        };
+
+        console.log('🛒 BUY NOW - Temp Cart Response:', tempCartData);
+        console.log('🛒 BUY NOW - Cart Item for Checkout:', cartItemForCheckout);
+        console.log('🛒 BUY NOW - Cart Item ID:', cartItemForCheckout.cart_item_id);
+        console.log('🛒 BUY NOW - Order Type:', delivery);
+        console.log('🛒 BUY NOW - Payment Method:', payment);
+
         navigate('/checkout', {
           state: {
-            cartItems: [tempCartData.cart_item],  // Now has cart_item_id from server
+            cartItems: [cartItemForCheckout],  // Now has cart_item_id from server
             orderType: delivery,
             paymentMethod: payment,
             deliveryFee: 0,  // For Pick-up, delivery fee is 0; for Delivery, LocationVerifyModal will handle it
@@ -1087,6 +1101,94 @@ const MenuContent = () => {
         setAddOnsTotal(0);
         setDeliveryMethod('Pick-up');
         setPaymentMethod('E-Wallet');
+      } catch (error) {
+        console.error('Error creating temporary cart item:', error);
+        Swal.close();
+        toast.error('Failed to process Buy Now. Please try again.');
+      }
+    }
+  };
+
+  // NEW FUNCTION: For Buy Now with Delivery - creates temp cart then shows location verification
+  const handleConfirmBuyNowWithDelivery = async (item, notes, addOns, addOnsTotal, delivery, payment, isBogoItem = false, bogoQuantity = 1) => {
+    if (item) {
+      // Check availability
+      if (item.Status !== 'Available' || (item.ProductTypeName === 'Merchandise' && item.MerchandiseQuantity <= 0)) {
+        toast.error(`${item.ProductName} is currently unavailable.`);
+        return;
+      }
+
+      const token = localStorage.getItem("authToken");
+      if (!token) {
+        toast.error("You must be logged in to use Buy Now.");
+        return;
+      }
+
+      try {
+        // Show loading state
+        Swal.fire({
+          title: 'Processing...',
+          text: 'Creating temporary cart item...',
+          allowOutsideClick: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        // Create temporary server-side cart item
+        const tempCartResponse = await fetch('http://localhost:7004/usercart/temp-add', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            product_id: item.ProductID,
+            product_name: item.ProductName,
+            product_type: item.ProductTypeName,
+            product_category: item.ProductCategory,
+            price: item.ProductPrice,
+            product_image: item.ProductImage,
+            quantity: bogoQuantity,
+            addons: addOns,
+            orderNotes: notes,
+            is_bogo_selected: isBogoItem
+          })
+        });
+
+        if (!tempCartResponse.ok) {
+          throw new Error('Failed to create temporary cart item');
+        }
+
+        const tempCartData = await tempCartResponse.json();
+        Swal.close();
+
+        // Ensure cart item has all required fields for promo calculation
+        const cartItemForLocationModal = {
+          ...tempCartData.cart_item,
+          cart_item_id: tempCartData.cart_item_id || tempCartData.cart_item?.cart_item_id,  // Ensure cart_item_id is set
+          quantity: bogoQuantity
+        };
+
+        console.log('🛒 BUY NOW DELIVERY - Temp Cart Response:', tempCartData);
+        console.log('🛒 BUY NOW DELIVERY - Cart Item for Location Modal:', cartItemForLocationModal);
+        console.log('🛒 BUY NOW DELIVERY - Cart Item ID:', cartItemForLocationModal.cart_item_id);
+
+        // Store the cart item details for location verification modal
+        setItemForLocationCheck(item);
+        setNotesForLocationCheck(notes);
+        setAddOnsForLocationCheck(addOns);
+        setIsBogoForLocationCheck(isBogoItem);
+        setBogoQuantityForLocationCheck(bogoQuantity);
+        
+        // Store the temp cart data so LocationVerifyModal can use it with proper cart_item_id
+        setTempCartDataForLocationModal({
+          cart_item: cartItemForLocationModal,
+          cart_item_id: cartItemForLocationModal.cart_item_id,
+          tempCartId: cartItemForLocationModal.cart_item_id
+        });
+        
+        setIsCheckingLocation(true);
       } catch (error) {
         console.error('Error creating temporary cart item:', error);
         Swal.close();
@@ -1192,7 +1294,7 @@ const MenuContent = () => {
                       : 'Image'
                     }
                   </div>
-                  <div className="item-name-placeholder">{item.ProductName}</div>
+                  <div className="item-name-placeholder" title={item.ProductName}>{item.ProductName}</div>
                   <div className="item-price-placeholder">₱{item.ProductPrice?.toFixed(2)}</div>
                   {!isAvailable && (
                     <div className="unavailable-overlay">
@@ -1211,11 +1313,18 @@ const MenuContent = () => {
         {isCheckingLocation && itemForLocationCheck && (
           <LocationVerifyModal
             show={isCheckingLocation}
-            onClose={() => setIsCheckingLocation(false)}
-            deliverySettings={deliverySettings} // Pass deliverySettings here
-            selectedCartItems={createSingleItemArray(itemForLocationCheck, notesForLocationCheck, addOnsForLocationCheck, addOnsTotal, isBogoForLocationCheck, bogoQuantityForLocationCheck)}
+            onClose={() => {
+              setIsCheckingLocation(false);
+              setTempCartDataForLocationModal(null);
+            }}
+            deliverySettings={deliverySettings}
+            selectedCartItems={tempCartDataForLocationModal 
+              ? [tempCartDataForLocationModal.cart_item]  // Use temp cart with proper cart_item_id
+              : createSingleItemArray(itemForLocationCheck, notesForLocationCheck, addOnsForLocationCheck, addOnsTotal, isBogoForLocationCheck, bogoQuantityForLocationCheck)}
             orderTypeMain="Delivery"
             paymentMethodMain={paymentMethod}
+            tempCartId={tempCartDataForLocationModal?.tempCartId}
+            isTemporaryCart={!!tempCartDataForLocationModal}
           />
         )}
       </div>

@@ -101,6 +101,22 @@ async def create_checkout_session(payload: CheckoutRequest, token: str = Depends
         logger.info(f"[CHECKOUT] Item {idx}: {item.name} | Addons: {getattr(item, 'addons', None)}")
     await validate_token_and_roles(token, ["user", "admin", "staff"])
 
+    # Step 0: Calculate and validate minimum amount BEFORE any PayMongo API calls
+    subtotal = sum(item.price * item.quantity for item in payload.items)
+    discount = payload.discount or 0.0
+    final_total = subtotal - discount + payload.delivery_fee
+    
+    # Log detailed breakdown for debugging
+    logger.info(f"[CHECKOUT] Amount breakdown - Subtotal: ₱{subtotal:.2f}, Discount: ₱{discount:.2f}, Delivery: ₱{payload.delivery_fee:.2f}, Final: ₱{final_total:.2f}")
+    
+    # Sanity check: discount should never exceed subtotal
+    if discount > subtotal:
+        logger.error(f"[CHECKOUT] INVALID DISCOUNT: ₱{discount:.2f} exceeds subtotal ₱{subtotal:.2f}. Check frontend/promo engine.")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid discount amount (₱{discount:.2f}) exceeds order subtotal (₱{subtotal:.2f}). Please contact support."
+        )
+
     # Fetch user profile for customer info
     PROFILE_URL = "http://localhost:4000/users/profile"
     customer_id = None
@@ -145,15 +161,22 @@ async def create_checkout_session(payload: CheckoutRequest, token: str = Depends
                 customer_data = customer_response.json()
                 customer_id = customer_data["data"]["id"]
 
+        except httpx.HTTPStatusError as e:
+            # Distinguish between profile fetch and customer creation errors
+            if "customers" in str(e.request.url):
+                logger.error(f"PayMongo customer creation failed: {e.response.status_code} - {e.response.text}")
+            else:
+                logger.warning(f"Failed to fetch user profile from auth service: {e.response.status_code}")
+            customer_id = None
+        except httpx.RequestError as e:
+            logger.warning(f"Network error fetching profile or creating customer: {e}")
+            customer_id = None
         except Exception as e:
-            logger.warning(f"Failed to fetch profile or create customer: {e}")
+            logger.warning(f"Unexpected error during profile/customer setup: {e}")
             customer_id = None
 
     try:
-        # Calculate total amount from items and delivery fee, minus discount
-        subtotal = sum(item.price * item.quantity for item in payload.items)
-        discount = payload.discount or 0.0
-        
+        # Amount already validated in Step 0, just log it
         logger.info(f"[CHECKOUT] Subtotal: ₱{subtotal}, Delivery: ₱{payload.delivery_fee}, Discount: ₱{discount}")
 
         # Create line items for each cart item
