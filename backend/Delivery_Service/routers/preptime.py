@@ -80,24 +80,7 @@ async def save_preparation_times(request: PrepTimesRequest):
         raise HTTPException(status_code=500, detail=f"Error saving preparation times: {str(e)}")
 
 
-@router.get("/prep-times", response_model=dict)
-async def get_all_preparation_times():
-    """
-    Get all preparation times for all products.
-    Returns a dictionary mapping productId -> prepTimeMinutes
-    """
-    conn = await get_db_connection()
-    try:
-        async with conn.cursor() as cursor:
-            query = "SELECT [ProductID], [PrepTimeMinutes] FROM [dbo].[ProductPrepTimes]"
-            await cursor.execute(query)
-            rows = await cursor.fetchall()
-            
-            # Convert to dictionary format: {productId: prepTimeMinutes}
-            prep_times = {row[0]: row[1] for row in rows}
-            return prep_times
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving preparation times: {str(e)}")
+
     finally:
         await conn.close()
 

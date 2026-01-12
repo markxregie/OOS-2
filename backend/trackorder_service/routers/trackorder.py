@@ -23,6 +23,7 @@ async def get_order_status(order_id: int, conn: aioodbc.Connection = Depends(get
                 o.ReferenceNumber AS ref_no,
                 o.AssignedRiderID AS rider_id,
                 o.TotalAmount AS total,
+                o.DeliveryFee AS delivery_fee,
                 (
                     SELECT 
                         oi.ProductName AS name,
@@ -60,6 +61,7 @@ async def get_order_status(order_id: int, conn: aioodbc.Connection = Depends(get
             "date": row.date.isoformat() if row.date else None,
             "rider_id": row.rider_id,
             "total": float(row.total) if row.total else 0.00,
+            "delivery_fee": float(row.delivery_fee) if row.delivery_fee else 0.00,
             "products": json.loads(row.products) if row.products else []
         }
 

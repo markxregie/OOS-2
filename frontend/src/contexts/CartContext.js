@@ -7,6 +7,7 @@ export const CartContext = createContext();
 export const CartProvider = ({ children }) => {
   const [cartItems, setCartItems] = useState([]);
   const [username, setUsername] = useState(null);
+  const [promos, setPromos] = useState([]);
 
   // --- Helper: Get token ---
   const getToken = () => {
@@ -23,6 +24,26 @@ export const CartProvider = ({ children }) => {
   const token = getToken();
   const CART_API_URL = "http://localhost:7004/usercart";
   const AUTH_API_URL = "http://localhost:4000/auth/users/me";
+  const PROMOS_API_URL = "http://localhost:7004/debug/promos";
+
+  // --- Fetch promotions on mount ---
+  useEffect(() => {
+    const fetchPromos = async () => {
+      if (!token) return;
+      try {
+        const res = await fetch(PROMOS_API_URL, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setPromos(data.promos || []);
+        }
+      } catch (err) {
+        console.error("Error fetching promos:", err);
+      }
+    };
+    fetchPromos();
+  }, [token]);
 
   // --- Normalize product data from PascalCase to snake_case ---
   const normalizeProductData = (product) => ({
@@ -104,7 +125,8 @@ export const CartProvider = ({ children }) => {
 
 
   // --- Add item to cart ---
-  const addToCart = async (product, addons = [], quantity = 1) => {
+  const addToCart = async (product, addons = [], quantity = 1, isBogoSelected = false) => {
+    console.log('[BOGO FRONTEND 3] CartContext.addToCart called - isBogoSelected:', isBogoSelected);
     if (!token) {
       toast.error("Please log in to add to cart");
       return;
@@ -130,10 +152,14 @@ export const CartProvider = ({ children }) => {
       return;
     }
 
-    // Find if the exact same product with same addons exists in cart
+    // Find if the exact same product with same addons AND same is_bogo_selected flag exists in cart
     const existingItem = cartItems.find(item => {
       if (item.product_id !== normalized.product_id) return false;
       if (item.addons?.length !== sortedAddons.length) return false;
+      
+      // Check if is_bogo_selected flag matches
+      const itemIsBogoSelected = item.is_bogo_selected || false;
+      if (itemIsBogoSelected !== isBogoSelected) return false;
 
       const itemAddons = [...(item.addons || [])].sort((a, b) => {
         const nameA = (a.addon_name || a.AddOnName || a.name || '').toLowerCase();
@@ -157,12 +183,14 @@ export const CartProvider = ({ children }) => {
       price: parseFloat(normalized.price),
       product_image: normalized.product_image,
       max_quantity: normalized.max_quantity,
+      is_bogo_selected: isBogoSelected,
       addons: sortedAddons.map((a) => ({
         addon_name: a.addon_name || a.AddOnName || a.name,
         price: parseFloat(a.price || a.Price || 0),
         addon_id: a.addon_id || a.AddOnID ? parseInt(a.addon_id || a.AddOnID, 10) : null,
       })),
     };
+    console.log('[BOGO FRONTEND 4] Sending payload to backend:', JSON.stringify({ is_bogo_selected: payload.is_bogo_selected, product_name: payload.product_name }));
 
     try {
       if (existingItem) {
@@ -324,6 +352,7 @@ export const CartProvider = ({ children }) => {
         removeFromCart,
         clearCart,
         reloadCart,
+        promos,
       }}
     >
       {children}
