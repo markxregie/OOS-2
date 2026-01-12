@@ -290,6 +290,19 @@ const OrderHistory = () => {
     }
   };
 
+  const handleShowDeliveryProof = (e, order) => {
+    e.stopPropagation();
+    if (order.deliveryImage) {
+      Swal.fire({
+        title: 'Proof of Delivery',
+        html: `<img src="http://localhost:7004${order.deliveryImage}" alt="Delivery Proof" style="max-width: 100%; max-height: 400px; border-radius: 8px; border: 2px solid #4b929d;" />`,
+        showConfirmButton: true,
+        confirmButtonText: 'Close',
+        width: '600px'
+      });
+    }
+  };
+
   const renderProductDetails = (products) => (
     <ul style={{ margin: 0, paddingLeft: '15px', fontSize: '1.1em', listStyle: 'none' }}>
       {products.map((p, idx) => (
@@ -313,7 +326,20 @@ const OrderHistory = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontWeight: 'bold' }}>Order #{order.id}</span>
           {order.deliveryImage && (
-            <CameraFill color="#28a745" size={16} title="Proof of delivery available" />
+            <button
+              onClick={(e) => handleShowDeliveryProof(e, order)}
+              style={{
+                background: 'none',
+                border: 'none',
+                padding: '0',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+              title="Click to view proof of delivery"
+            >
+              <CameraFill color="#28a745" size={16} />
+            </button>
           )}
         </div>
         {getStatusBadge(order.status)}
@@ -351,7 +377,20 @@ const OrderHistory = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span className="order-id">Order #{order.id}</span>
             {order.deliveryImage && (
-              <CameraFill color="#28a745" size={16} title="Proof of delivery available" />
+              <button
+                onClick={(e) => handleShowDeliveryProof(e, order)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: '0',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+                title="Click to view proof of delivery"
+              >
+                <CameraFill color="#28a745" size={16} />
+              </button>
             )}
           </div>
           <span className="order-type">{order.orderType}</span>

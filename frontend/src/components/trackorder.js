@@ -572,7 +572,9 @@ const TrackOrder = () => {
     const getStepStatus = (index) => {
         if (order.status === 'cancelled') return 'cancelled';
         if (index < currentStepIndex) return 'completed';
-        if (index === currentStepIndex) return 'active';
+        if (index === currentStepIndex) {
+            return order.status === 'completed' ? 'completed' : 'active';
+        }
         return 'pending';
     };
 
@@ -592,8 +594,28 @@ const TrackOrder = () => {
                         70% { box-shadow: 0 0 0 10px rgba(75, 146, 157, 0); }
                         100% { box-shadow: 0 0 0 0 rgba(75, 146, 157, 0); }
                     }
+                    @keyframes fill-bar {
+                        from { background-size: 0% 100%; }
+                        to   { background-size: 100% 100%; }
+                    }
                     .stepper-item.active .step-counter {
                         animation: stepper-pulse 2s infinite;
+                    }
+                    .stepper-item { position: relative; }
+                    .stepper-item.active:not(:first-child)::before {
+                        content: "";
+                        position: absolute;
+                        top: 20px;
+                        left: -50%;
+                        width: 100%;
+                        height: 6px;
+                        transform: translateY(-50%);
+                        z-index: -1;
+                        /* Loading bar effect */
+                        background-color: #e0e0e0; /* The "empty" track */
+                        background-image: linear-gradient(to right, #4B929D, #4B929D);
+                        background-repeat: no-repeat;
+                        animation: fill-bar 1.5s linear infinite;
                     }
                 `}
             </style>

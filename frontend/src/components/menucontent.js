@@ -25,7 +25,6 @@ const MenuContent = () => {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedSubcategory, setSelectedSubcategory] = useState('');
   const [selectedItem, setSelectedItem] = useState(null);
-  const [orderNotes, setOrderNotes] = useState('');
   const [deliveryMethod, setDeliveryMethod] = useState('Pick-up');
   const [paymentMethod, setPaymentMethod] = useState('E-Wallet');
   // 1. New state for selected add-ons and total
@@ -377,10 +376,9 @@ const MenuContent = () => {
 
   const handleItemClick = (item) => {
     setSelectedItem(item);
-    // Reset add-ons and notes before showing the modal
+    // Reset add-ons before showing the modal
     setSelectedAddOns([]);
     setAddOnsTotal(0);
-    setOrderNotes('');
     
     // Check if this is a BOGO item from Promotion category
     const shouldAutoApplyBogo = isFromPromotionCategory && item.isBogoPromotion;
@@ -416,7 +414,7 @@ const MenuContent = () => {
     // Find existing item in cart
     const existingItemIndex = cartItems.findIndex(ci => {
       const itemNormalizedAddOns = (ci.addons || []).sort((a, b) => a.addon_name.localeCompare(b.addon_name));
-      return ci.product_id === item.ProductID && JSON.stringify(normalizedAddOns) === JSON.stringify(itemNormalizedAddOns) && (ci.orderNotes || '') === (notes || '');
+      return ci.product_id === item.ProductID && JSON.stringify(normalizedAddOns) === JSON.stringify(itemNormalizedAddOns);
     });
 
     let currentQty = 0;
@@ -467,7 +465,6 @@ const MenuContent = () => {
     );
 
     // Clear temporary states after adding to cart
-    setOrderNotes('');
     setSelectedAddOns([]);
     setAddOnsTotal(0);
   };
@@ -711,10 +708,7 @@ const MenuContent = () => {
                 </div>
               </div>
 
-              <div class="mt-3">
-                <label for="order-notes" class="form-label">Add Notes:</label>
-                <textarea id="order-notes" class="form-control" rows="2" placeholder="You can request for less sugar here">${orderNotes}</textarea>
-              </div>
+
               <h5 class="mt-3" style="text-align: left;">Total: <span id="final-price-display">₱${(item.ProductPrice ?? 0).toFixed(2)}</span></h5>
             </div>
           </div>
@@ -765,7 +759,6 @@ const MenuContent = () => {
       buttonsStyling: false,
       preConfirm: () => {
         // Handle 'Add to cart'
-        const notes = document.getElementById('order-notes').value;
         const addOns = [];
         let total = 0;
         Swal.getPopup().querySelectorAll('.addon-checkbox:checked').forEach(cb => {
@@ -773,14 +766,12 @@ const MenuContent = () => {
           addOns.push({ name: cb.value, price: price });
           total += price;
         });
-        setOrderNotes(notes);
         setSelectedAddOns(addOns);
         setAddOnsTotal(total);
-        return { action: 'add-to-cart', notes, addOns, addOnsTotal: total, isBogoItem: shouldAutoApplyBogo, bogoQuantity };
+        return { action: 'add-to-cart', notes: '', addOns, addOnsTotal: total, isBogoItem: shouldAutoApplyBogo, bogoQuantity };
       },
       preDeny: () => {
         // Handle 'Buy Now'
-        const notes = document.getElementById('order-notes').value;
         const addOns = [];
         let total = 0;
         Swal.getPopup().querySelectorAll('.addon-checkbox:checked').forEach(cb => {
@@ -788,10 +779,9 @@ const MenuContent = () => {
           addOns.push({ name: cb.value, price: price });
           total += price;
         });
-        setOrderNotes(notes);
         setSelectedAddOns(addOns);
         setAddOnsTotal(total);
-        return { action: 'buy-now', notes, addOns, addOnsTotal: total, isBogoItem: shouldAutoApplyBogo, bogoQuantity };
+        return { action: 'buy-now', notes: '', addOns, addOnsTotal: total, isBogoItem: shouldAutoApplyBogo, bogoQuantity };
       }
     }).then((result) => {
       if (result.isConfirmed) {
@@ -801,7 +791,6 @@ const MenuContent = () => {
       }
       // Reset temporary states if the modal is closed without confirmation (cancel/close)
       if (result.isDismissed) {
-        setOrderNotes('');
         setSelectedAddOns([]);
         setAddOnsTotal(0);
       }
@@ -876,7 +865,6 @@ const MenuContent = () => {
     product_type: item.ProductTypeName,
     product_category: item.ProductCategory,
     quantity: isBogoItem ? bogoQuantity : 1,
-    orderNotes: notes,
     addons: addOns,
     MerchandiseQuantity: item.MerchandiseQuantity,
     // Add a temporary total for this item, including add-ons, for the modal's display
@@ -1058,7 +1046,6 @@ const MenuContent = () => {
             product_image: item.ProductImage,
             quantity: bogoQuantity,
             addons: addOns,
-            orderNotes: notes,
             is_bogo_selected: isBogoItem
           })
         });
@@ -1096,7 +1083,6 @@ const MenuContent = () => {
         });
 
         // Reset temporary states
-        setOrderNotes('');
         setSelectedAddOns([]);
         setAddOnsTotal(0);
         setDeliveryMethod('Pick-up');
@@ -1151,7 +1137,6 @@ const MenuContent = () => {
             product_image: item.ProductImage,
             quantity: bogoQuantity,
             addons: addOns,
-            orderNotes: notes,
             is_bogo_selected: isBogoItem
           })
         });
