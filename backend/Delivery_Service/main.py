@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware# router module
 from database import get_db_connection, init_delivery_settings, init_product_prep_times
-from routers import rider, fees, preptime, delivery_time # connection checker (optional)
+from routers import rider, fees, preptime, delivery_time, chat # connection checker (optional)
 
 app = FastAPI(title="Ordering Service")
 
@@ -36,6 +36,7 @@ app.include_router(rider.router, prefix="/delivery", tags=["riders"])
 app.include_router(fees.router, prefix="/delivery", tags=["fees"])
 app.include_router(preptime.router, prefix="/delivery", tags=["preparation_times"])
 app.include_router(delivery_time.router, prefix="/delivery", tags=["delivery_time"])
+app.include_router(chat.router, tags=["chat"])
 
 
 # Health check (optional)

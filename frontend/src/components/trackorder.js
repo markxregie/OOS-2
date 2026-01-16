@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Row, Col, Card } from 'react-bootstrap';
-import { ArrowLeft, Shop, HouseDoorFill, CheckCircleFill, XCircleFill, ArrowRightCircleFill } from 'react-bootstrap-icons';
+import { Row, Col, Card, Modal, Button, Form } from 'react-bootstrap';
+import { ArrowLeft, Shop, HouseDoorFill, CheckCircleFill, XCircleFill, ArrowRightCircleFill, ChatDotsFill, Send } from 'react-bootstrap-icons';
 import Swal from 'sweetalert2';
 import deliveryIcon from '../assets/delivery.png';
 import './TrackOrder.css';
@@ -155,6 +155,17 @@ const TrackOrder = () => {
     const [scriptLoaded, setScriptLoaded] = useState(!!(window.google && window.google.maps));
     const [estimatedDeliveryMinutes, setEstimatedDeliveryMinutes] = useState(null);
     const scriptLoadAttemptedRef = useRef(false);
+
+    // Chat states
+    const [showChatModal, setShowChatModal] = useState(false);
+    const [messages, setMessages] = useState([]);
+    const [newMessage, setNewMessage] = useState('');
+    const [chatLoading, setChatLoading] = useState(false);
+    const chatEndRef = useRef(null);
+    const chatPollIntervalRef = useRef(null);
+    const wsRef = useRef(null);
+    const [currentUserId, setCurrentUserId] = useState(null);
+    const [currentUsername, setCurrentUsername] = useState(null);
 
     // Load Google Maps API script ONCE on mount (guard against multiple loads)
     useEffect(() => {
@@ -330,6 +341,23 @@ const TrackOrder = () => {
                     });
                     if (profileRes.ok && mounted) {
                         const profileData = await profileRes.json();
+                        
+                        // Store user ID and username for chat
+                        const userId = profileData.UserID || profileData.userID;
+                        const username = profileData.username || profileData.Username;
+                        
+                        if (userId) {
+                            console.log('Setting currentUserId:', userId);
+                            setCurrentUserId(String(userId));
+                        }
+                        
+                        if (username) {
+                            console.log('Setting currentUsername:', username);
+                            setCurrentUsername(username);
+                        } else {
+                            console.log('Username not found in profile data:', profileData);
+                        }
+                        
                         const { region, province, city, streetName, barangay, postalCode, lat, lng } = profileData;
 
                         const processProfileLocation = async () => {
@@ -557,6 +585,198 @@ const TrackOrder = () => {
 
     }, [scriptLoaded, order?.id, userLocation, riderLocationState]); // Removed map, marker, riderMarker dependencies to prevent infinite re-renders
 
+    // Chat WebSocket connection management
+    const connectWebSocket = () => {
+        if (!orderId || !order?.rider_id) return;
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
+        
+        try {
+            const ws = new WebSocket(`ws://localhost:7001/chat/ws/${orderId}`);
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected for order', orderId);
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    console.log('Received WebSocket message:', message);
+                    
+                    // If it's an error, show alert
+                    if (message.error) {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Chat Error',
+                            text: message.error
+                        });
+                        return;
+                    }
+                    
+                    // Add new message to the list
+                    setMessages(prevMessages => {
+                        // Check if message already exists (avoid duplicates)
+                        const exists = prevMessages.some(m => m.id === message.id);
+                        if (exists) return prevMessages;
+                        
+                        return [...prevMessages, message];
+                    });
+                    
+                    // Scroll to bottom
+                    setTimeout(() => {
+                        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                    }, 100);
+                } catch (error) {
+                    console.error('Error parsing WebSocket message:', error);
+                }
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                // Try to reconnect after 3 seconds if chat is still open
+                if (showChatModal) {
+                    setTimeout(() => {
+                        if (showChatModal) connectWebSocket();
+                    }, 3000);
+                }
+            };
+            
+            wsRef.current = ws;
+        } catch (error) {
+            console.error('Error connecting WebSocket:', error);
+        }
+    };
+    
+    const disconnectWebSocket = () => {
+        if (wsRef.current) {
+            wsRef.current.close();
+            wsRef.current = null;
+        }
+    };
+
+    // Fetch initial messages (HTTP fallback for history)
+    const fetchMessages = async () => {
+        if (!orderId || !order?.rider_id) return;
+        
+        try {
+            const token = localStorage.getItem('authToken');
+            const response = await fetch(`http://localhost:7001/chat/messages/${orderId}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                setMessages(data.messages || []);
+                // Scroll to bottom
+                setTimeout(() => {
+                    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+            }
+        } catch (error) {
+            console.error('Error fetching messages:', error);
+        }
+    };
+
+    const sendMessage = async () => {
+        if (!newMessage.trim() || !orderId || !order?.rider_id) return;
+        
+        console.log('Attempting to send message, currentUsername:', currentUsername);
+        
+        setChatLoading(true);
+        try {
+            // Use the username from profile fetch (database stores username not user ID)
+            const senderId = currentUsername;
+            
+            if (!senderId) {
+                console.error('No username available. currentUsername:', currentUsername);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Unable to identify user. Please try refreshing the page.'
+                });
+                setChatLoading(false);
+                return;
+            }
+            
+            console.log('Sending message with username:', senderId);
+            
+            // Send via WebSocket if connected
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                wsRef.current.send(JSON.stringify({
+                    order_id: parseInt(orderId),
+                    sender_id: senderId,
+                    sender_type: 'customer',
+                    message: newMessage.trim()
+                }));
+                setNewMessage('');
+            } else {
+                // Fallback to HTTP if WebSocket not available
+                const token = localStorage.getItem('authToken');
+                const response = await fetch('http://localhost:7001/chat/send', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        order_id: parseInt(orderId),
+                        sender_id: senderId,
+                        sender_type: 'customer',
+                        message: newMessage.trim()
+                    })
+                });
+                
+                if (response.ok) {
+                    setNewMessage('');
+                    await fetchMessages();
+                } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    console.error('Failed to send message:', errorData);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Failed to send message',
+                        text: errorData.detail || 'Please try again'
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Error sending message:', error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'Failed to send message'
+            });
+        } finally {
+            setChatLoading(false);
+        }
+    };
+
+    const handleKeyPress = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    };
+
+    // Connect WebSocket and fetch messages when chat opens
+    useEffect(() => {
+        if (showChatModal) {
+            fetchMessages(); // Load message history
+            connectWebSocket(); // Connect for real-time updates
+        } else {
+            disconnectWebSocket();
+        }
+        
+        return () => {
+            disconnectWebSocket();
+        };
+    }, [showChatModal, orderId, order?.rider_id]);
+
 
     if (loading) {
         return <div className="text-center my-5">Loading order details...</div>;
@@ -783,6 +1003,16 @@ const TrackOrder = () => {
                                     <div className="rider-info-item">
                                         <strong>Plate Number:</strong> <span>{order.rider_plate || 'N/A'}</span>
                                     </div>
+                                    <div className="mt-3">
+                                        <Button 
+                                            variant="primary" 
+                                            onClick={() => setShowChatModal(true)}
+                                            className="d-flex align-items-center gap-2"
+                                            style={{ backgroundColor: '#4B929D', borderColor: '#4B929D' }}
+                                        >
+                                            <ChatDotsFill /> Chat with Rider
+                                        </Button>
+                                    </div>
                                 </div>
                             </>
                         )}
@@ -790,6 +1020,89 @@ const TrackOrder = () => {
                     </Card.Body>
                 </Card>
             </div>
+
+            {/* Chat Modal */}
+            <Modal show={showChatModal} onHide={() => setShowChatModal(false)} centered size="lg">
+                <Modal.Header closeButton style={{ backgroundColor: '#4B929D', color: 'white' }}>
+                    <Modal.Title className="d-flex align-items-center gap-2">
+                        <ChatDotsFill /> Chat with {order?.rider_name || 'Rider'}
+                    </Modal.Title>
+                </Modal.Header>
+                <Modal.Body style={{ maxHeight: '500px', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ 
+                        flex: 1, 
+                        overflowY: 'auto', 
+                        padding: '15px',
+                        backgroundColor: '#f8f9fa',
+                        borderRadius: '8px',
+                        marginBottom: '15px',
+                        minHeight: '350px'
+                    }}>
+                        {messages.length === 0 ? (
+                            <div className="text-center text-muted mt-5">
+                                <ChatDotsFill size={40} className="mb-3" />
+                                <p>No messages yet. Start a conversation!</p>
+                            </div>
+                        ) : (
+                            messages.map((msg, idx) => (
+                                <div 
+                                    key={idx} 
+                                    className={`mb-3 ${msg.sender_type === 'customer' ? 'text-end' : 'text-start'}`}
+                                >
+                                    <div 
+                                        style={{
+                                            display: 'inline-block',
+                                            maxWidth: '70%',
+                                            padding: '10px 15px',
+                                            borderRadius: '15px',
+                                            backgroundColor: msg.sender_type === 'customer' ? '#4B929D' : '#ffffff',
+                                            color: msg.sender_type === 'customer' ? 'white' : 'black',
+                                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                            textAlign: 'left',
+                                            wordBreak: 'break-word'
+                                        }}
+                                    >
+                                        <div style={{ fontSize: '0.75rem', opacity: 0.8, marginBottom: '5px' }}>
+                                            {msg.sender_type === 'customer' ? 'You' : order?.rider_name || 'Rider'}
+                                        </div>
+                                        <div>{msg.message}</div>
+                                        <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '5px' }}>
+                                            {new Date(msg.timestamp).toLocaleTimeString()}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                        <div ref={chatEndRef} />
+                    </div>
+                    
+                    <div className="d-flex gap-2">
+                        <Form.Control
+                            as="textarea"
+                            rows={2}
+                            placeholder="Type your message..."
+                            value={newMessage}
+                            onChange={(e) => setNewMessage(e.target.value)}
+                            onKeyPress={handleKeyPress}
+                            disabled={chatLoading}
+                            style={{ resize: 'none' }}
+                        />
+                        <Button 
+                            variant="primary" 
+                            onClick={sendMessage}
+                            disabled={chatLoading || !newMessage.trim()}
+                            style={{ 
+                                backgroundColor: '#4B929D', 
+                                borderColor: '#4B929D',
+                                minWidth: '60px',
+                                height: '60px'
+                            }}
+                        >
+                            <Send size={20} />
+                        </Button>
+                    </div>
+                </Modal.Body>
+            </Modal>
         </div>
     );
 };

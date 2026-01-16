@@ -10,7 +10,6 @@ import {
   FaUndo,
   FaTimesCircle,
   FaExchangeAlt,
-
   FaCog,
   FaCreditCard,
   FaUserTie,
@@ -18,9 +17,10 @@ import {
   FaChevronRight,
   FaChevronUp,
   FaCheckCircle,
-  FaBoxOpen
+  FaBoxOpen,
+  FaComments
 } from "react-icons/fa";
-import { Container, Card, Button, Modal } from "react-bootstrap";
+import { Container, Card, Button, Modal, Form } from "react-bootstrap";
 import riderImage from "../../assets/rider.jpg";
 import logoImage from "../../assets/logo.png";
 import "./riderhome.css";
@@ -132,6 +132,17 @@ import Swal from 'sweetalert2';
     const [riderName, setRiderName] = useState(localStorage.getItem("riderName") || "");
     const [riderPhone, setRiderPhone] = useState(localStorage.getItem("riderPhone") || "");
     const [userLoading, setUserLoading] = useState(true);
+
+    // Chat states
+    const [showChatModal, setShowChatModal] = useState(false);
+    const [chatOrderId, setChatOrderId] = useState(null);
+    const [chatCustomerName, setChatCustomerName] = useState('');
+    const [messages, setMessages] = useState([]);
+    const [newMessage, setNewMessage] = useState('');
+    const [chatLoading, setChatLoading] = useState(false);
+    const chatEndRef = useRef(null);
+    const chatPollIntervalRef = useRef(null);
+    const wsRef = useRef(null);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -769,6 +780,186 @@ import Swal from 'sweetalert2';
       });
     };
 
+    // Chat functions
+    const openChatModal = (order) => {
+      setChatOrderId(order.id);
+      setChatCustomerName(order.customerName);
+      setShowChatModal(true);
+    };
+
+    // WebSocket connection management
+    const connectWebSocket = () => {
+      if (!chatOrderId) return;
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
+      
+      try {
+        const ws = new WebSocket(`ws://localhost:7001/chat/ws/${chatOrderId}`);
+        
+        ws.onopen = () => {
+          console.log('WebSocket connected for order', chatOrderId);
+        };
+        
+        ws.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+            console.log('Received WebSocket message:', message);
+            
+            // If it's an error, show alert
+            if (message.error) {
+              Swal.fire({
+                icon: 'error',
+                title: 'Chat Error',
+                text: message.error
+              });
+              return;
+            }
+            
+            // Add new message to the list
+            setMessages(prevMessages => {
+              // Check if message already exists (avoid duplicates)
+              const exists = prevMessages.some(m => m.id === message.id);
+              if (exists) return prevMessages;
+              
+              return [...prevMessages, message];
+            });
+            
+            // Scroll to bottom
+            setTimeout(() => {
+              chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, 100);
+          } catch (error) {
+            console.error('Error parsing WebSocket message:', error);
+          }
+        };
+        
+        ws.onerror = (error) => {
+          console.error('WebSocket error:', error);
+        };
+        
+        ws.onclose = () => {
+          console.log('WebSocket disconnected');
+          // Try to reconnect after 3 seconds if chat is still open
+          if (showChatModal) {
+            setTimeout(() => {
+              if (showChatModal) connectWebSocket();
+            }, 3000);
+          }
+        };
+        
+        wsRef.current = ws;
+      } catch (error) {
+        console.error('Error connecting WebSocket:', error);
+      }
+    };
+    
+    const disconnectWebSocket = () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+
+    const fetchMessages = async () => {
+      if (!chatOrderId) return;
+      
+      try {
+        const response = await fetch(`http://localhost:7001/chat/messages/${chatOrderId}`, {
+          headers: {
+            'Authorization': `Bearer ${authToken}`
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setMessages(data.messages || []);
+          setTimeout(() => {
+            chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }, 100);
+        }
+      } catch (error) {
+        console.error('Error fetching messages:', error);
+      }
+    };
+
+    const sendMessage = async () => {
+      if (!newMessage.trim() || !chatOrderId) return;
+      
+      console.log('Sending message with riderId:', riderId);
+      
+      setChatLoading(true);
+      try {
+        // Send via WebSocket if connected
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({
+            order_id: parseInt(chatOrderId),
+            sender_id: String(riderId),
+            sender_type: 'rider',
+            message: newMessage.trim()
+          }));
+          setNewMessage('');
+        } else {
+          // Fallback to HTTP if WebSocket not available
+          const response = await fetch('http://localhost:7001/chat/send', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({
+              order_id: parseInt(chatOrderId),
+              sender_id: String(riderId),
+              sender_type: 'rider',
+              message: newMessage.trim()
+            })
+          });
+          
+          if (response.ok) {
+            setNewMessage('');
+            await fetchMessages();
+          } else {
+            const errorData = await response.json().catch(() => ({}));
+            console.error('Error response:', errorData);
+            Swal.fire({
+              icon: 'error',
+              title: 'Failed to send message',
+              text: errorData.detail || 'Please try again'
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error sending message:', error);
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Failed to send message'
+        });
+      } finally {
+        setChatLoading(false);
+      }
+    };
+
+    const handleKeyPress = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    };
+
+    // Connect WebSocket and fetch messages when chat opens
+    useEffect(() => {
+      if (showChatModal && chatOrderId) {
+        fetchMessages(); // Load message history
+        connectWebSocket(); // Connect for real-time updates
+      } else {
+        disconnectWebSocket();
+      }
+      
+      return () => {
+        disconnectWebSocket();
+      };
+    }, [showChatModal, chatOrderId]);
+
+
     const handleLogout = () => {
       setAuthToken(null);
       localStorage.removeItem("authToken");
@@ -956,13 +1147,23 @@ import Swal from 'sweetalert2';
                   {/* FIXED: Use the centralized action button container */}
                   <div className="order-actions">
                     {(order.currentStatus === 'pickedup' || order.currentStatus === 'delivering') && (
-                      <Button
-                        variant="success"
-                        className="navigate-route-button action-btn"
-                        onClick={() => navigateToRoute(order)}
-                      >
-                        <FaMapMarkedAlt className="me-2" /> Navigate Route
-                      </Button>
+                      <>
+                        <Button
+                          variant="success"
+                          className="navigate-route-button action-btn"
+                          onClick={() => navigateToRoute(order)}
+                        >
+                          <FaMapMarkedAlt className="me-2" /> Navigate Route
+                        </Button>
+                        <Button
+                          variant="info"
+                          className="chat-button action-btn"
+                          onClick={() => openChatModal(order)}
+                          style={{ backgroundColor: '#4B929D', borderColor: '#4B929D' }}
+                        >
+                          <FaComments className="me-2" /> Chat with Customer
+                        </Button>
+                      </>
                     )}
                     
                     {shouldRenderButton(order.currentStatus) && (
@@ -987,6 +1188,91 @@ import Swal from 'sweetalert2';
               </Modal.Header>
               <Modal.Body style={{ maxHeight: '200vh', overflowY: 'auto' }}>
                 <div ref={riderMapRef} style={{ height: '650px', width: '100%' }} />
+              </Modal.Body>
+            </Modal>
+          )}
+
+          {/* Chat Modal */}
+          {showChatModal && (
+            <Modal show={showChatModal} onHide={() => setShowChatModal(false)} centered size="lg">
+              <Modal.Header closeButton style={{ backgroundColor: '#4B929D', color: 'white' }}>
+                <Modal.Title className="d-flex align-items-center gap-2">
+                  <FaComments /> Chat with {(() => { const parts = chatCustomerName.split(' '); return parts.length > 0 && /\d/.test(parts[0]) ? parts.slice(1).join(' ') : chatCustomerName; })()}
+                </Modal.Title>
+              </Modal.Header>
+              <Modal.Body style={{ maxHeight: '500px', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ 
+                  flex: 1, 
+                  overflowY: 'auto', 
+                  padding: '15px',
+                  backgroundColor: '#f8f9fa',
+                  borderRadius: '8px',
+                  marginBottom: '15px',
+                  minHeight: '350px'
+                }}>
+                  {messages.length === 0 ? (
+                    <div className="text-center text-muted mt-5">
+                      <FaComments size={40} className="mb-3" />
+                      <p>No messages yet. Start a conversation!</p>
+                    </div>
+                  ) : (
+                    messages.map((msg, idx) => (
+                      <div 
+                        key={idx} 
+                        className={`mb-3 ${msg.sender_type === 'rider' ? 'text-end' : 'text-start'}`}
+                      >
+                        <div 
+                          style={{
+                            display: 'inline-block',
+                            maxWidth: '70%',
+                            padding: '10px 15px',
+                            borderRadius: '15px',
+                            backgroundColor: msg.sender_type === 'rider' ? '#4B929D' : '#ffffff',
+                            color: msg.sender_type === 'rider' ? 'white' : 'black',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                            textAlign: 'left',
+                            wordBreak: 'break-word'
+                          }}
+                        >
+                          <div style={{ fontSize: '0.75rem', opacity: 0.8, marginBottom: '5px' }}>
+                            {msg.sender_type === 'rider' ? 'You' : (() => { const parts = chatCustomerName.split(' '); return parts.length > 0 && /\d/.test(parts[0]) ? parts.slice(1).join(' ') : chatCustomerName; })()}
+                          </div>
+                          <div>{msg.message}</div>
+                          <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '5px' }}>
+                            {new Date(msg.timestamp).toLocaleTimeString()}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+                
+                <div className="d-flex gap-2">
+                  <Form.Control
+                    as="textarea"
+                    rows={2}
+                    placeholder="Type your message..."
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    disabled={chatLoading}
+                    style={{ resize: 'none' }}
+                  />
+                  <Button 
+                    variant="primary" 
+                    onClick={sendMessage}
+                    disabled={chatLoading || !newMessage.trim()}
+                    style={{ 
+                      backgroundColor: '#4B929D', 
+                      borderColor: '#4B929D',
+                      minWidth: '60px',
+                      height: '60px'
+                    }}
+                  >
+                    <FaComments size={20} />
+                  </Button>
+                </div>
               </Modal.Body>
             </Modal>
           )}
