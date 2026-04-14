@@ -18,23 +18,25 @@ This capstone thesis project is a secure and transparent online ordering platfor
 1. Clone the repository:
    ```bash
    git clone [https://github.com/yourusername/online-ordering-blockchain.git](https://github.com/yourusername/online-ordering-blockchain.git)
-Navigate to the project directory:
+   ```
 
-Bash
-cd online-ordering-blockchain
-Install frontend dependencies:
+2. Navigate to the project directory:
+   ```bash
+   cd online-ordering-blockchain
+   ```
 
-Bash
-npm install
-Start the development server:
+3. Install frontend dependencies:
+   ```bash
+   npm install
+   ```
 
-Bash
-npm start
-Project Team
-Project Manager & Frontend Developer: Mark Regie A. Magtangob
+4. Start the development server:
+   ```bash
+   npm start
+   ```
 
-Backend Developers: Dynar Tubigan and John Roodge Dela Cruz
-
-Quality Assurance: Cedric Mark Solano
-
-Document Analysis: JM De Guzman
+## Project Team
+* Project Manager & Frontend Developer: Mark Regie A. Magtangob
+* Backend Developers: Dynar Tubigan and John Roodge Dela Cruz
+* Quality Assurance: Cedric Mark Solano
+* Document Analysis: JM De Guzman
